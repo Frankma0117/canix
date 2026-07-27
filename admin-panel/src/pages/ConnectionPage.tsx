@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Smartphone } from 'lucide-react';
-import { useApi } from '../lib/api.ts';
+import { ApiError, useApi } from '../lib/api.ts';
 import { useAuth } from '../lib/auth.tsx';
 import { Card } from '../components/ui/Card.tsx';
 import { Badge } from '../components/ui/Badge.tsx';
@@ -20,6 +20,7 @@ export function ConnectionPage() {
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [reconnecting, setReconnecting] = useState(false);
   const [switchingNumber, setSwitchingNumber] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -60,12 +61,19 @@ export function ConnectionPage() {
 
   const started = status !== null && (status.connected || status.hasQr || status.connection !== 'close');
 
+  function describeError(err: unknown): string {
+    if (err instanceof ApiError) return `${err.message} (HTTP ${err.status})`;
+    if (err instanceof Error) return err.message;
+    return 'Error desconocido';
+  }
+
   async function handleReconnect() {
+    setActionError(null);
     setReconnecting(true);
     try {
       await api.post('/api/connection/reconnect');
-    } catch {
-      // silent: status polling will reflect whatever happens next
+    } catch (err) {
+      setActionError(describeError(err));
     } finally {
       setReconnecting(false);
     }
@@ -79,11 +87,12 @@ export function ConnectionPage() {
       )
     )
       return;
+    setActionError(null);
     setSwitchingNumber(true);
     try {
       await api.post('/api/connection/new-number');
-    } catch {
-      // silent: status polling will reflect whatever happens next
+    } catch (err) {
+      setActionError(describeError(err));
     } finally {
       setSwitchingNumber(false);
     }
@@ -151,6 +160,12 @@ export function ConnectionPage() {
               {switchingNumber ? 'Generando QR…' : 'Usar otro número'}
             </Button>
           </div>
+        )}
+
+        {actionError && (
+          <p className="max-w-xs text-sm text-error">
+            No se pudo completar la acción: {actionError}
+          </p>
         )}
       </Card>
     </div>

@@ -53,11 +53,30 @@ export class WaManager {
     this.handler = handler;
   }
 
+  /**
+   * fetchLatestBaileysVersion() hits a GitHub URL with no timeout of its own - on a flaky/blocked
+   * network it can hang far longer than anyone will wait for a QR, silently stalling start()
+   * (and therefore reconnect()/useNewNumber()). Race it against a timeout and fall back to
+   * Baileys' own bundled default version (used automatically when `version` is omitted).
+   */
+  private async resolveVersion(): Promise<[number, number, number] | undefined> {
+    try {
+      const { version } = await Promise.race([
+        fetchLatestBaileysVersion(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 10_000)),
+      ]);
+      return version as [number, number, number];
+    } catch {
+      console.log('[WA] No se pudo obtener la ultima version de Baileys a tiempo; uso la version incluida por defecto.');
+      return undefined;
+    }
+  }
+
   private async buildSocket() {
     const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
-    const { version } = await fetchLatestBaileysVersion();
+    const version = await this.resolveVersion();
     const sock = makeWASocket({
-      version,
+      ...(version ? { version } : {}),
       auth: state,
       logger: baileysLogger,
       printQRInTerminal: false,
@@ -200,10 +219,18 @@ export class WaManager {
   /** Logs the session out and deletes its stored credentials, so the next start() shows a fresh QR. */
   async logout(): Promise<void> {
     this.stopping = true;
-    try {
-      await this.sock?.logout();
-    } catch {
-      /* the socket may already be closed */
+    if (this.isConnected()) {
+      // Only worth telling WhatsApp's servers about the logout when the socket is actually live -
+      // sending it over a connection they already closed (e.g. after a 403) just waits on a
+      // request that can never get a reply, delaying everything behind it for no reason.
+      try {
+        await Promise.race([
+          this.sock?.logout(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8_000)),
+        ]);
+      } catch {
+        /* the socket may already be closed, or WhatsApp didn't answer in time - either way, proceed */
+      }
     }
     this.sock = undefined;
     this.qr = undefined;
