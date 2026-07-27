@@ -16,11 +16,11 @@ export const addContactTool: Tool = {
     additionalProperties: false,
   },
 
-  async execute(args) {
+  async execute(args, ctx) {
     const name = String(args.name ?? '').trim();
     const phone = String(args.phone ?? '').trim();
     if (!name || !phone) return 'Error: falta nombre o número.';
-    const contact = contactsRepo.upsert(name, phoneToJid(phone), args.notes ? String(args.notes) : null);
+    const contact = contactsRepo.upsert(ctx.userId, name, phoneToJid(phone), args.notes ? String(args.notes) : null);
     return `Contacto "${contact.name}" guardado (#${contact.id}).`;
   },
 };

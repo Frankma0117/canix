@@ -18,9 +18,9 @@ export const checkinRoutineTool: Tool = {
     additionalProperties: false,
   },
 
-  async execute(args) {
+  async execute(args, ctx) {
     const id = Number(args.id);
-    const todo = todosRepo.getById(id);
+    const todo = todosRepo.getById(ctx.userId, id);
     if (!todo || todo.scope !== 'routine') return `No encontré la rutina #${id}.`;
 
     const date = args.date ? String(args.date) : todayLocal();

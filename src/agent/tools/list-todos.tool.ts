@@ -17,15 +17,15 @@ export const listTodosTool: Tool = {
     additionalProperties: false,
   },
 
-  async execute(args) {
+  async execute(args, ctx) {
     let categoryId: number | undefined;
     if (args.category) {
-      const category = categoriesRepo.getByName(String(args.category));
+      const category = categoriesRepo.getByName(ctx.userId, String(args.category));
       if (!category) return `No existe la categoría "${args.category}".`;
       categoryId = category.id;
     }
 
-    const todos = todosRepo.list({
+    const todos = todosRepo.list(ctx.userId, {
       scope: args.scope as TodoScope | undefined,
       status: (args.status as TodoStatus | undefined) ?? 'pending',
       categoryId,
@@ -33,7 +33,11 @@ export const listTodosTool: Tool = {
 
     if (todos.length === 0) return 'No hay tareas que coincidan.';
     return todos
-      .map((t) => `#${t.id} ${t.title}${t.due_date ? ` (${t.due_date})` : ''} [${t.scope}]`)
+      .map(
+        (t) =>
+          `#${t.id} ${t.title}${t.due_date ? ` (${t.due_date})` : ''} [${t.scope}]` +
+          (t.scope === 'routine' && t.reminder_time ? ` ⏰${t.reminder_time} (${t.duration_minutes}min)` : ''),
+      )
       .join('\n');
   },
 };

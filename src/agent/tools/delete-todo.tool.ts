@@ -11,11 +11,11 @@ export const deleteTodoTool: Tool = {
     additionalProperties: false,
   },
 
-  async execute(args) {
+  async execute(args, ctx) {
     const id = Number(args.id);
-    const todo = todosRepo.getById(id);
+    const todo = todosRepo.getById(ctx.userId, id);
     if (!todo) return `No encontré la tarea #${id}.`;
-    todosRepo.remove(id);
+    todosRepo.remove(ctx.userId, id);
     return `Tarea #${id} "${todo.title}" eliminada.`;
   },
 };

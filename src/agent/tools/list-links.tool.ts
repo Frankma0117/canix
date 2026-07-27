@@ -20,17 +20,17 @@ export const listLinksTool: Tool = {
     additionalProperties: false,
   },
 
-  async execute(args) {
+  async execute(args, ctx) {
     let categoryId: number | undefined;
     if (args.category) {
-      const category = categoriesRepo.getByName(String(args.category));
+      const category = categoriesRepo.getByName(ctx.userId, String(args.category));
       if (!category) return `No existe la categoría "${args.category}".`;
       categoryId = category.id;
     }
 
     const links = args.search
-      ? linksRepo.search(String(args.search), categoryId)
-      : linksRepo.listByCategory(categoryId);
+      ? linksRepo.search(ctx.userId, String(args.search), categoryId)
+      : linksRepo.listByCategory(ctx.userId, categoryId);
 
     if (links.length === 0) return 'No hay links que coincidan.';
     return links.map(formatLink).join('\n');

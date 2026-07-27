@@ -26,6 +26,7 @@ export interface Contact {
 
 export type ReminderStatus = 'pending' | 'executed' | 'failed' | 'cancelled';
 export type RecurrenceFreq = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type ReminderKind = 'reminder' | 'important_date' | 'flexible' | 'routine_reminder' | 'routine_checkin';
 
 export interface Reminder {
   id: number;
@@ -36,6 +37,9 @@ export interface Reminder {
   recurrence_freq: RecurrenceFreq;
   recurrence_interval: number;
   status: ReminderStatus;
+  kind: ReminderKind;
+  window_start: string | null;
+  window_end: string | null;
   created_at: string;
 }
 
@@ -49,6 +53,8 @@ export interface Todo {
   scope: TodoScope;
   due_date: string | null;
   recurrence_freq: RecurrenceFreq | null;
+  reminder_time: string | null;
+  duration_minutes: number | null;
   status: TodoStatus;
   completed_at: string | null;
   created_at: string;
@@ -60,5 +66,17 @@ export interface HabitLog {
   log_date: string;
   done: number;
   note: string | null;
+  created_at: string;
+}
+
+export type RewardPunishmentType = 'reward' | 'punishment';
+
+export interface RewardPunishment {
+  id: number;
+  todo_id: number | null;
+  type: RewardPunishmentType;
+  description: string;
+  note: string | null;
+  date: string;
   created_at: string;
 }

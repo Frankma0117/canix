@@ -19,17 +19,17 @@ export const addTodoTool: Tool = {
     additionalProperties: false,
   },
 
-  async execute(args) {
+  async execute(args, ctx) {
     const title = String(args.title ?? '').trim();
     if (!title) return 'Error: falta el título de la tarea.';
     const scope = args.scope === 'later' ? 'later' : 'today';
 
     let categoryId: number | null = null;
-    if (args.category) categoryId = categoriesRepo.findOrCreate(String(args.category)).id;
+    if (args.category) categoryId = categoriesRepo.findOrCreate(ctx.userId, String(args.category)).id;
 
     const dueDate = args.due_date ? normalizeDate(String(args.due_date)).slice(0, 10) : scope === 'today' ? todayLocal() : null;
 
-    const id = todosRepo.create({ title, categoryId, scope, dueDate });
+    const id = todosRepo.create(ctx.userId, { title, categoryId, scope, dueDate });
     return `Tarea #${id} agregada (${scope === 'today' ? 'hoy' : 'para después'}).`;
   },
 };

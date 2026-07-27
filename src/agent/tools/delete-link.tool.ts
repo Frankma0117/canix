@@ -14,11 +14,11 @@ export const deleteLinkTool: Tool = {
     additionalProperties: false,
   },
 
-  async execute(args) {
+  async execute(args, ctx) {
     const id = Number(args.id);
-    const link = linksRepo.getById(id);
+    const link = linksRepo.getById(ctx.userId, id);
     if (!link) return `No encontré el link #${id}.`;
-    linksRepo.remove(id);
+    linksRepo.remove(ctx.userId, id);
     return `Link #${id} (${link.url}) eliminado.`;
   },
 };

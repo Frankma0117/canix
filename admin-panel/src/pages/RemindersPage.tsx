@@ -87,7 +87,11 @@ export function RemindersPage() {
               <div className="min-w-0 flex-1">
                 <p className="font-medium text-ink dark:text-white">{r.message}</p>
                 <p className="text-xs text-gray-dark">
-                  {r.run_at} · {RECURRENCE_LABEL[r.recurrence_freq]}
+                  {r.kind === 'flexible' && r.window_start && r.window_end
+                    ? `entre ${r.window_start} y ${r.window_end}`
+                    : r.run_at}{' '}
+                  · {RECURRENCE_LABEL[r.recurrence_freq]}
+                  {r.kind === 'important_date' && ' · 📅 importante'}
                   {categoryName(r.category_id) && ` · ${categoryName(r.category_id)}`}
                 </p>
               </div>

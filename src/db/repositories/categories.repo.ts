@@ -2,46 +2,51 @@ import { db } from '../pool.js';
 import type { Category } from '../../types/index.js';
 
 export const categoriesRepo = {
-  listAll(): Category[] {
-    return db.prepare('SELECT * FROM categories ORDER BY name COLLATE NOCASE').all() as Category[];
-  },
-
-  getById(id: number): Category | undefined {
-    return db.prepare('SELECT * FROM categories WHERE id = ?').get(id) as Category | undefined;
-  },
-
-  getByName(name: string): Category | undefined {
+  listAll(userId: number): Category[] {
     return db
-      .prepare('SELECT * FROM categories WHERE name = ? COLLATE NOCASE')
-      .get(name) as Category | undefined;
+      .prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY name COLLATE NOCASE')
+      .all(userId) as Category[];
   },
 
-  create(name: string, description: string | null = null): number {
+  getById(userId: number, id: number): Category | undefined {
+    return db
+      .prepare('SELECT * FROM categories WHERE id = ? AND user_id = ?')
+      .get(id, userId) as Category | undefined;
+  },
+
+  getByName(userId: number, name: string): Category | undefined {
+    return db
+      .prepare('SELECT * FROM categories WHERE user_id = ? AND name = ? COLLATE NOCASE')
+      .get(userId, name) as Category | undefined;
+  },
+
+  create(userId: number, name: string, description: string | null = null): number {
     const info = db
-      .prepare('INSERT INTO categories (name, description) VALUES (?, ?)')
-      .run(name.trim(), description);
+      .prepare('INSERT INTO categories (user_id, name, description) VALUES (?, ?, ?)')
+      .run(userId, name.trim(), description);
     return Number(info.lastInsertRowid);
   },
 
   /** Finds a category by (case-insensitive) name, creating it if missing. */
-  findOrCreate(name: string, description: string | null = null): Category {
-    const existing = this.getByName(name);
+  findOrCreate(userId: number, name: string, description: string | null = null): Category {
+    const existing = this.getByName(userId, name);
     if (existing) return existing;
-    const id = this.create(name, description);
-    return this.getById(id)!;
+    const id = this.create(userId, name, description);
+    return this.getById(userId, id)!;
   },
 
-  update(id: number, fields: { name?: string; description?: string | null }): void {
-    const current = this.getById(id);
+  update(userId: number, id: number, fields: { name?: string; description?: string | null }): void {
+    const current = this.getById(userId, id);
     if (!current) return;
-    db.prepare('UPDATE categories SET name = ?, description = ? WHERE id = ?').run(
+    db.prepare('UPDATE categories SET name = ?, description = ? WHERE id = ? AND user_id = ?').run(
       fields.name ?? current.name,
       fields.description === undefined ? current.description : fields.description,
       id,
+      userId,
     );
   },
 
-  remove(id: number): void {
-    db.prepare('DELETE FROM categories WHERE id = ?').run(id);
+  remove(userId: number, id: number): void {
+    db.prepare('DELETE FROM categories WHERE id = ? AND user_id = ?').run(id, userId);
   },
 };

@@ -19,19 +19,19 @@ export const listRemindersTool: Tool = {
     additionalProperties: false,
   },
 
-  async execute(args) {
+  async execute(args, ctx) {
     const status = (args.status as ReminderStatus) ?? 'pending';
 
     let categoryId: number | undefined;
     if (args.category) {
-      const category = categoriesRepo.getByName(String(args.category));
+      const category = categoriesRepo.getByName(ctx.userId, String(args.category));
       if (!category) return `No existe la categoría "${args.category}".`;
       categoryId = category.id;
     }
 
     const reminders = categoryId
-      ? remindersRepo.listByCategory(categoryId, status)
-      : remindersRepo.listAll(status);
+      ? remindersRepo.listByCategory(ctx.userId, categoryId, status)
+      : remindersRepo.listAll(ctx.userId, status);
 
     if (reminders.length === 0) return 'No hay recordatorios que coincidan.';
     return reminders.map((r) => `#${r.id} ${r.run_at} — ${r.message}`).join('\n');

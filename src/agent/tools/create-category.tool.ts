@@ -15,12 +15,12 @@ export const createCategoryTool: Tool = {
     additionalProperties: false,
   },
 
-  async execute(args) {
+  async execute(args, ctx) {
     const name = String(args.name ?? '').trim();
     if (!name) return 'Error: falta el nombre de la categoría.';
-    const existing = categoriesRepo.getByName(name);
+    const existing = categoriesRepo.getByName(ctx.userId, name);
     if (existing) return `La categoría "${existing.name}" ya existía (#${existing.id}).`;
-    const id = categoriesRepo.create(name, args.description ? String(args.description) : null);
+    const id = categoriesRepo.create(ctx.userId, name, args.description ? String(args.description) : null);
     return `Categoría "${name}" creada (#${id}).`;
   },
 };

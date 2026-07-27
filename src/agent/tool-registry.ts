@@ -3,8 +3,12 @@ import type { WaManager } from '../whatsapp/wa-manager.js';
 
 /** Context passed to tools when they execute. */
 export interface ToolContext {
-  /** JID of the owner's current conversation (used as the default reminder/message target). */
+  /** JID of the current conversation (used as the default reminder/message target). */
   ownerJid: string;
+  /** Internal id of the user sending this message - every per-user table is scoped to this. */
+  userId: number;
+  /** True if this user is the admin (can grant/revoke access - see user-management tools). */
+  isAdmin: boolean;
   /** WhatsApp access so a tool can send messages. */
   wa: WaManager;
 }

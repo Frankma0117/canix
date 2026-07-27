@@ -10,13 +10,29 @@ import { contactsRepo } from '../db/repositories/contacts.repo.js';
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { todosRepo } from '../db/repositories/todos.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
+import { rewardsRepo } from '../db/repositories/rewards.repo.js';
+import { usersRepo } from '../db/repositories/users.repo.js';
+import { createRoutineWithReminders } from '../agent/routine-setup.js';
 import { todayLocal } from '../util/datetime.js';
 import { phoneToJid } from '../util/jid.js';
 import { requireAdminToken, validateLogin } from './auth.js';
-import type { RecurrenceFreq, TodoScope, TodoStatus, ReminderStatus } from '../types/index.js';
+import type { RecurrenceFreq, TodoScope, TodoStatus, ReminderStatus, RewardPunishmentType } from '../types/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(here, '..', '..', 'public');
+
+/**
+ * The panel is admin-only (gated by ADMIN_TOKEN) and always operates on the admin's own data -
+ * other users only ever interact through WhatsApp chat, never the panel (see grant_access tool).
+ * Throws until the admin has bootstrapped (their first message to the bot) - caught by h() below.
+ */
+function getAdminId(): number {
+  const admin = usersRepo.getAdmin();
+  if (!admin) {
+    throw new Error('Aún no hay administrador registrado: escríbele al bot por WhatsApp primero.');
+  }
+  return admin.id;
+}
 
 /** Wraps a handler (sync or async) and forwards thrown/rejected errors to Express as a 500. */
 function h(fn: (req: Request, res: Response) => unknown) {
@@ -97,27 +113,27 @@ export function createServer(bot: BotManager): Express {
   );
 
   // ---------- Categories ----------
-  app.get('/api/categories', h((_req, res) => res.json(categoriesRepo.listAll())));
+  app.get('/api/categories', h((_req, res) => res.json(categoriesRepo.listAll(getAdminId()))));
   app.post(
     '/api/categories',
     h((req, res) => {
       const { name, description } = req.body ?? {};
       if (!name) return res.status(400).json({ error: 'name requerido' });
-      const id = categoriesRepo.create(name, description || null);
+      const id = categoriesRepo.create(getAdminId(), name, description || null);
       res.json({ id });
     }),
   );
   app.put(
     '/api/categories/:id',
     h((req, res) => {
-      categoriesRepo.update(Number(req.params.id), req.body ?? {});
+      categoriesRepo.update(getAdminId(), Number(req.params.id), req.body ?? {});
       res.json({ ok: true });
     }),
   );
   app.delete(
     '/api/categories/:id',
     h((req, res) => {
-      categoriesRepo.remove(Number(req.params.id));
+      categoriesRepo.remove(getAdminId(), Number(req.params.id));
       res.json({ ok: true });
     }),
   );
@@ -127,7 +143,7 @@ export function createServer(bot: BotManager): Express {
     '/api/links',
     h((req, res) => {
       const categoryId = req.query.categoryId ? Number(req.query.categoryId) : undefined;
-      res.json(linksRepo.listByCategory(categoryId));
+      res.json(linksRepo.listByCategory(getAdminId(), categoryId));
     }),
   );
   app.post(
@@ -135,7 +151,7 @@ export function createServer(bot: BotManager): Express {
     h((req, res) => {
       const { url, category_id, title, description } = req.body ?? {};
       if (!url) return res.status(400).json({ error: 'url requerida' });
-      const id = linksRepo.create({
+      const id = linksRepo.create(getAdminId(), {
         url,
         categoryId: category_id ?? null,
         title: title || null,
@@ -147,26 +163,26 @@ export function createServer(bot: BotManager): Express {
   app.delete(
     '/api/links/:id',
     h((req, res) => {
-      linksRepo.remove(Number(req.params.id));
+      linksRepo.remove(getAdminId(), Number(req.params.id));
       res.json({ ok: true });
     }),
   );
 
   // ---------- Contacts ----------
-  app.get('/api/contacts', h((_req, res) => res.json(contactsRepo.listAll())));
+  app.get('/api/contacts', h((_req, res) => res.json(contactsRepo.listAll(getAdminId()))));
   app.post(
     '/api/contacts',
     h((req, res) => {
       const { name, phone, notes } = req.body ?? {};
       if (!name || !phone) return res.status(400).json({ error: 'name y phone requeridos' });
-      const contact = contactsRepo.upsert(name, phoneToJid(phone), notes || null);
+      const contact = contactsRepo.upsert(getAdminId(), name, phoneToJid(phone), notes || null);
       res.json(contact);
     }),
   );
   app.delete(
     '/api/contacts/:id',
     h((req, res) => {
-      contactsRepo.remove(Number(req.params.id));
+      contactsRepo.remove(getAdminId(), Number(req.params.id));
       res.json({ ok: true });
     }),
   );
@@ -177,13 +193,21 @@ export function createServer(bot: BotManager): Express {
     h((req, res) => {
       const status = req.query.status as ReminderStatus | undefined;
       const categoryId = req.query.categoryId ? Number(req.query.categoryId) : undefined;
-      res.json(categoryId ? remindersRepo.listByCategory(categoryId, status) : remindersRepo.listAll(status));
+      const adminId = getAdminId();
+      res.json(categoryId ? remindersRepo.listByCategory(adminId, categoryId, status) : remindersRepo.listAll(adminId, status));
     }),
   );
   app.post(
     '/api/reminders/:id/cancel',
     h((req, res) => {
-      remindersRepo.cancel(Number(req.params.id));
+      remindersRepo.cancel(getAdminId(), Number(req.params.id));
+      res.json({ ok: true });
+    }),
+  );
+  app.delete(
+    '/api/reminders/:id',
+    h((req, res) => {
+      remindersRepo.remove(getAdminId(), Number(req.params.id));
       res.json({ ok: true });
     }),
   );
@@ -195,15 +219,33 @@ export function createServer(bot: BotManager): Express {
       const scope = req.query.scope as TodoScope | undefined;
       const status = req.query.status as TodoStatus | undefined;
       const categoryId = req.query.categoryId ? Number(req.query.categoryId) : undefined;
-      res.json(todosRepo.list({ scope, status, categoryId }));
+      res.json(todosRepo.list(getAdminId(), { scope, status, categoryId }));
     }),
   );
   app.post(
     '/api/todos',
     h((req, res) => {
-      const { title, category_id, scope, due_date, recurrence_freq } = req.body ?? {};
+      const { title, category_id, scope, due_date, recurrence_freq, reminder_time, duration_minutes } = req.body ?? {};
       if (!title) return res.status(400).json({ error: 'title requerido' });
-      const id = todosRepo.create({
+
+      const adminId = getAdminId();
+
+      if (scope === 'routine') {
+        if (!reminder_time || !duration_minutes) {
+          return res.status(400).json({ error: 'Las rutinas necesitan reminder_time y duration_minutes' });
+        }
+        const admin = usersRepo.getById(adminId)!;
+        const id = createRoutineWithReminders(adminId, admin.jid, {
+          title,
+          categoryId: category_id ?? null,
+          freq: recurrence_freq === 'weekly' ? 'weekly' : 'daily',
+          reminderTime: reminder_time,
+          durationMinutes: Number(duration_minutes),
+        });
+        return res.json({ id });
+      }
+
+      const id = todosRepo.create(adminId, {
         title,
         categoryId: category_id ?? null,
         scope: scope || 'today',
@@ -216,14 +258,14 @@ export function createServer(bot: BotManager): Express {
   app.post(
     '/api/todos/:id/complete',
     h((req, res) => {
-      todosRepo.complete(Number(req.params.id));
+      todosRepo.complete(getAdminId(), Number(req.params.id));
       res.json({ ok: true });
     }),
   );
   app.delete(
     '/api/todos/:id',
     h((req, res) => {
-      todosRepo.remove(Number(req.params.id));
+      todosRepo.remove(getAdminId(), Number(req.params.id));
       res.json({ ok: true });
     }),
   );
@@ -245,6 +287,40 @@ export function createServer(bot: BotManager): Express {
       const { date, done, note } = req.body ?? {};
       const logDate = date || todayLocal();
       habitLogsRepo.checkIn(Number(req.params.id), logDate, done !== false, note || null);
+      res.json({ ok: true });
+    }),
+  );
+
+  // ---------- Rewards & punishments ----------
+  app.get(
+    '/api/rewards',
+    h((req, res) => {
+      const type = req.query.type as RewardPunishmentType | undefined;
+      const todoId = req.query.todoId ? Number(req.query.todoId) : undefined;
+      const adminId = getAdminId();
+      res.json(todoId ? rewardsRepo.listByTodo(adminId, todoId) : rewardsRepo.listAll(adminId, type));
+    }),
+  );
+  app.post(
+    '/api/rewards',
+    h((req, res) => {
+      const { type, description, todo_id, note, date } = req.body ?? {};
+      if (type !== 'reward' && type !== 'punishment') return res.status(400).json({ error: 'type debe ser reward o punishment' });
+      if (!description) return res.status(400).json({ error: 'description requerida' });
+      const id = rewardsRepo.create(getAdminId(), {
+        type,
+        description,
+        todoId: todo_id ?? null,
+        note: note || null,
+        date: date || todayLocal(),
+      });
+      res.json({ id });
+    }),
+  );
+  app.delete(
+    '/api/rewards/:id',
+    h((req, res) => {
+      rewardsRepo.remove(getAdminId(), Number(req.params.id));
       res.json({ ok: true });
     }),
   );

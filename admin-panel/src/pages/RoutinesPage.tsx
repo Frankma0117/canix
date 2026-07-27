@@ -47,6 +47,7 @@ function RoutineRow({ routine, categoryName, onDeleted }: { routine: Todo; categ
         <p className="flex items-center gap-1 text-xs text-gray-dark">
           {categoryName && `${categoryName} · `}
           {routine.recurrence_freq === 'weekly' ? 'Semanal' : 'Diaria'}
+          {routine.reminder_time && ` · ⏰${routine.reminder_time} (${routine.duration_minutes}min)`}
           {streak !== null && (
             <span className="ml-1 inline-flex items-center gap-0.5 text-warning">
               <Flame size={12} /> {streak}
@@ -74,6 +75,8 @@ export function RoutinesPage() {
   const [title, setTitle] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [frequency, setFrequency] = useState<'daily' | 'weekly'>('daily');
+  const [reminderTime, setReminderTime] = useState('08:00');
+  const [durationMinutes, setDurationMinutes] = useState('30');
   const [saving, setSaving] = useState(false);
 
   async function load() {
@@ -94,8 +97,10 @@ export function RoutinesPage() {
     return categories.find((c) => c.id === id)?.name ?? '';
   }
 
+  const durationValid = Number(durationMinutes) > 0;
+
   async function handleCreate() {
-    if (!title.trim()) return;
+    if (!title.trim() || !reminderTime || !durationValid) return;
     setSaving(true);
     try {
       await api.post('/api/todos', {
@@ -103,9 +108,13 @@ export function RoutinesPage() {
         scope: 'routine',
         category_id: categoryId ? Number(categoryId) : null,
         recurrence_freq: frequency,
+        reminder_time: reminderTime,
+        duration_minutes: Number(durationMinutes),
       });
       setTitle('');
       setCategoryId('');
+      setReminderTime('08:00');
+      setDurationMinutes('30');
       setShowForm(false);
       await load();
     } finally {
@@ -170,7 +179,31 @@ export function RoutinesPage() {
                 <option value="weekly">Semanal</option>
               </Select>
             </div>
-            <Button className="w-full" onClick={handleCreate} disabled={saving || !title.trim()}>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="routine-time">Hora de aviso</Label>
+                <Input
+                  id="routine-time"
+                  type="time"
+                  value={reminderTime}
+                  onChange={(e) => setReminderTime(e.target.value)}
+                />
+              </div>
+              <div>
+                <Label htmlFor="routine-duration">Duración (min)</Label>
+                <Input
+                  id="routine-duration"
+                  type="number"
+                  min={1}
+                  value={durationMinutes}
+                  onChange={(e) => setDurationMinutes(e.target.value)}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-dark">
+              El bot avisa a la hora elegida y, al pasar la duración, pregunta si cumpliste.
+            </p>
+            <Button className="w-full" onClick={handleCreate} disabled={saving || !title.trim() || !reminderTime || !durationValid}>
               {saving ? 'Guardando…' : 'Crear rutina'}
             </Button>
           </div>

@@ -14,3 +14,7 @@ npm-debug.log*
 # Panel admin (React/Vite): build generado
 public/assets/
 public/index.html
+
+# Modelos/binarios de audio (se descargan aparte, ver README > Audio)
+models/
+bin/

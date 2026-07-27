@@ -1,10 +1,11 @@
 # canix 🗂️
 
 Asistente personal por WhatsApp: recordatorios, una biblioteca de links clasificados por
-categorías, tareas (de hoy, para después o rutinas) y seguimiento de hábitos. Es un proyecto
-**de un solo usuario** (tú), con la misma arquitectura que
-[estylia](../estylia) (Baileys + agente de IA con tools + scheduler), simplificada para uso
-personal: sin multi-negocio, con SQLite en vez de MySQL.
+categorías, tareas (de hoy, para después o rutinas) y seguimiento de hábitos. Es **multi-usuario**
+pero de acceso cerrado: tú eres el administrador (y también usuario), y le das acceso a quien
+quieras — cada persona tiene su propia configuración completamente separada, nada se comparte.
+Misma arquitectura que [estylia](../estylia) (Baileys + agente de IA con tools + scheduler),
+simplificada para uso personal: sin multi-negocio, con SQLite en vez de MySQL.
 
 ## Características
 
@@ -21,15 +22,37 @@ personal: sin multi-negocio, con SQLite en vez de MySQL.
   recurrentes con seguimiento diario/semanal y racha).
 - 💬 **Enviar mensajes**: "envíale un mensaje a Juan diciéndole que..." — busca el contacto
   guardado y lo envía por WhatsApp.
+- 📅 **Fechas importantes**: cumpleaños, aniversarios, reuniones que no puedes dejar pasar. A
+  diferencia de un recordatorio normal, además avisa unos días antes (`schedule_important_date`).
+- 🎲 **Recordatorios flexibles**: cosas sin hora fija ("pausa activa entre 3pm y 5pm", "Duolingo
+  en algún momento del día") — cada día elige una hora al azar dentro de la ventana que le des
+  (`schedule_flexible_reminder`), para que no se sienta mecánico.
+- 🏆 **Premios y castigos**: te los pones tú mismo ligados a tus rutinas ("si cumplo la semana me
+  premio con...") y quedan registrados, por chat o desde el panel.
+- 🎙️ **Notas de voz**: si le mandas un audio, lo transcribe localmente (Vosk, sin IA/tokens) y
+  te responde en texto y también con nota de voz (Piper, también local) — ver sección "Audio" más abajo.
+- 👥 **Multi-usuario**: le das acceso a alguien con `grant_access` ("dale acceso a 573001234567
+  como Juan") y desde ahí tiene su propio bot — sus recordatorios, rutinas, contactos, links,
+  categorías, todo separado del tuyo. Se lo quitas con `revoke_access`.
+- 🗑️ **Eliminar de todo**: rutinas, recordatorios (cancelar o borrar), contactos, categorías y
+  premios/castigos se pueden borrar por chat (`delete_routine`, `delete_reminder`,
+  `delete_contact`, `delete_category`, `delete_reward_punishment`) o desde el panel.
 - 📊 **Panel web** (`admin-panel/`): ver/editar categorías, links, tareas, rutinas (con racha),
-  recordatorios y contactos, además del estado de conexión de WhatsApp con su QR.
+  premios/castigos, recordatorios y contactos — siempre sobre tus propios datos como admin (el
+  panel es solo tuyo; el resto de usuarios interactúan solo por WhatsApp).
+
+El bot habla como un amigo cercano (no como un asistente formal) — ver `BASE_PROMPT` en
+`src/agent/ai-agent.ts` si quieres ajustar el tono a tu propia forma de hablar. Además, cada
+respuesta espera un poco antes de enviarse (simulando que está "escribiendo") para no parecer un
+bot automatizado respondiendo al instante — ver "Cómo evitar que WhatsApp bloquee/restrinja el
+número" más abajo.
 
 ## Diferencias importantes con estylia
 
 - **Un número dedicado para el bot** (no tu WhatsApp personal): vincula un número aparte (chip
-  extra, WhatsApp Business, etc.) y escríbele desde tu WhatsApp de siempre. La primera persona
-  que le escribe queda registrada como su **dueño** — solo esa persona puede usarlo; cualquier
-  otro número recibe una respuesta genérica.
+  extra, WhatsApp Business, etc.) y escríbele desde tu WhatsApp de siempre. La primera persona que
+  le escribe queda registrada como **administrador** (tú) — cualquier otro número recibe una
+  respuesta genérica hasta que el admin le dé acceso con `grant_access` (ver "Multi-usuario" abajo).
 - **SQLite en vez de MySQL**: todo vive en un solo archivo (`data/app.db`), no necesitas levantar
   ningún servidor de base de datos.
 - **Baileys necesita Node.js 20+** para instalarse (el paquete lo exige desde su script de
@@ -66,8 +89,8 @@ start.cmd
   *Dispositivos vinculados*.
 - El panel web queda en **http://localhost:3000** (token de acceso impreso en consola, o defínelo
   en `ADMIN_TOKEN`).
-- El **primer número que le escriba al bot** por WhatsApp queda registrado como su dueño. Solo
-  ese número puede usarlo de ahí en adelante.
+- El **primer número que le escriba al bot** por WhatsApp queda registrado como **administrador**.
+  Desde ahí puedes darle acceso a otras personas con `grant_access` — ver "Multi-usuario" abajo.
 
 ## Ejemplos de uso (por WhatsApp)
 
@@ -77,10 +100,90 @@ start.cmd
 - "Dame algo de la categoría películas"
 - "Elimina el link de [tema]"
 - "Agrega a mis pendientes de hoy: pagar el arriendo"
-- "Crea una rutina de ejercicio diaria"
+- "Crea una rutina de ejercicio diaria a las 7am, 30 minutos" (toda rutina necesita hora + duración)
 - "Ya hice ejercicio hoy" (marca el check-in del día)
 - "¿Qué tengo pendiente hoy?"
 - "Envíale un mensaje a Ana diciéndole que llego en 10 minutos"
+- "El cumpleaños de mi mamá es el 12 de marzo, avísame 3 días antes" (fecha importante)
+- "Recuérdame estirar en algún momento entre las 3pm y las 5pm todos los días" (recordatorio flexible)
+- "Si cumplo la rutina de ejercicio toda la semana me premio con salir a cine" (premio ligado a rutina)
+- "Borra la rutina de ejercicio" / "elimina el contacto de Ana" / "borra esa categoría" (eliminar)
+- "Dale acceso a 573001234567 como Juan" (solo el admin — ver "Multi-usuario")
+- Mándale una nota de voz — la transcribe y te responde en texto + audio.
+
+## Multi-usuario
+
+El bot admite varias personas con acceso, cada una con su información **completamente separada**
+(recordatorios, rutinas, contactos, links, categorías, premios/castigos, historial de chat) — nadie
+ve lo del otro, ni siquiera el administrador.
+
+- **Tú eres el administrador** (el primer número que le escribió al bot) y también usuario normal:
+  tienes tu propia configuración igual que cualquiera.
+- **Dar acceso**: pídeselo al bot por chat — *"dale acceso a 573001234567 como Juan"*
+  (`grant_access`, solo funciona si lo pide el admin).
+- **Quitar acceso**: *"quítale el acceso a Juan"* (`revoke_access`) — borra toda su información,
+  no se puede deshacer.
+- **Ver quién tiene acceso**: *"¿quién tiene acceso al bot?"* (`list_users`).
+- El panel web (`admin-panel/`) siempre muestra y edita **los datos del administrador** — el resto
+  de usuarios solo interactúan por WhatsApp, no tienen acceso al panel.
+
+**LID de WhatsApp**: además del número de teléfono, el bot guarda el `@lid` (el identificador
+"privado" que WhatsApp usa cada vez más en vez del número) de usuarios y contactos apenas lo
+aprende del tráfico (`sock.ev.on('lid-mapping.update', ...)` en `wa-manager.ts`). Al enviar un
+mensaje, si ya se conoce el lid de ese contacto se usa ese en vez del jid de teléfono — evita
+fallos al enviar a cuentas con la privacidad restringida. No requiere configuración.
+
+## Rutinas: aviso + chequeo
+
+Toda rutina necesita una **hora de recordatorio** y una **duración** — no son opcionales. El bot
+avisa a esa hora y, al terminar la duración, pregunta si se cumplió:
+
+> "leer a las 8, 30 minutos" → a las 8:00 avisa *"⏰ Hora de: Leer"*, a las 8:30 pregunta
+> *"✅ ¿Cumpliste con 'Leer'?"*
+
+Internamente esto crea la rutina más dos recordatorios ligados a ella (`kind: routine_reminder` /
+`routine_checkin`, ver `src/agent/routine-setup.ts`) — al borrar la rutina, ambos se borran
+también (`ON DELETE CASCADE`). Responder la pregunta de chequeo no marca nada automáticamente:
+dile al bot que sí/no cumpliste y él llama `checkin_routine` por ti.
+
+## Audio: transcripción y voz (100% local)
+
+Transcribir notas de voz y responder con audio corre **completamente local**, sin llamar a
+ninguna IA ni gastar tokens — son dos programas aparte que corren en tu propio servidor:
+
+- **Transcripción (Vosk)**: cuando mandas una nota de voz, se descarga, se convierte a PCM16
+  16kHz con `ffmpeg` (incluido vía `ffmpeg-static`, no hace falta instalarlo aparte) y se pasa a
+  un modelo de [Vosk](https://alphacephei.com/vosk/models) cargado localmente.
+- **Respuesta por voz (Piper)**: si te respondió a una nota de voz, además del texto intenta
+  generar una nota de voz con [Piper](https://github.com/rhasspy/piper) (voz neuronal offline,
+  bastante natural) y convertirla a ogg/opus para WhatsApp.
+
+Ambas son **opcionales y se degradan solas**: si no configuras el modelo/binario, esa función
+simplemente queda desactivada (el bot te pide texto en vez de transcribir; responde solo en texto
+en vez de mandar audio) — no rompe nada del resto del bot.
+
+### Instalación automática (servidor Ubuntu)
+
+```bash
+deploy/ubuntu-04-setup-audio.sh
+```
+
+Descarga el modelo de Vosk en español, el binario de Piper (última versión, linux x64) y una voz
+en español, todo en `/opt/canix/models` y `/opt/canix/bin` — al final imprime las 3 líneas que hay
+que agregar a `.env`. Seguro de re-correr (omite lo que ya esté descargado).
+
+### Instalación manual
+
+1. **Vosk**: descarga un modelo en español de https://alphacephei.com/vosk/models (recomendado
+   para empezar: `vosk-model-small-es-0.42`, ~40MB — hay uno más grande y preciso si tu servidor
+   aguanta más RAM/CPU), descomprímelo en `./models/vosk-es`, y define
+   `VOSK_MODEL_PATH=./models/vosk-es` en tu `.env` (o déjalo así, es el default).
+2. **Piper**: descarga el binario para tu plataforma de https://github.com/rhasspy/piper/releases
+   (en el servidor Linux, `piper_linux_x86_64.tar.gz`) y descomprímelo entero (trae sus `.so`
+   junto al ejecutable, no muevas solo el binario). Descarga una voz en español (par de archivos
+   `.onnx` + `.onnx.json`) de https://huggingface.co/rhasspy/piper-voices — por ejemplo
+   `es_ES-davefx-medium`. Define `PIPER_BIN_PATH` (ruta al ejecutable `piper` dentro de la carpeta
+   descomprimida) y `PIPER_VOICE_PATH` (ruta al `.onnx`) en tu `.env`.
 
 ## Cómo agregar una nueva tool
 
@@ -105,15 +208,21 @@ export const miTool: Tool = {
 ```
 src/
   config/        env.ts (variables de entorno)
-  db/            pool.ts (SQLite), init.ts (esquema), repositories/
-  whatsapp/      wa-manager.ts (sesión Baileys) + bot-manager.ts (resuelve dueño, enruta al agente)
-  agent/         provider.ts, ai-agent.ts, tool-registry.ts, tools/
-  scheduler/     task-scheduler.ts (recordatorios, con recurrencia)
-  server/        API Express + panel + auth
-  util/          fechas (datetime.ts), jid.ts
+  db/            pool.ts (SQLite), init.ts (esquema + migraciones), repositories/ (todas
+                 scopeadas por user_id excepto habit_logs, que hereda el scope de su todo)
+  whatsapp/      wa-manager.ts (sesión Baileys, captura de lid) + bot-manager.ts (resuelve
+                 usuario por jid/lid, controla acceso, enruta al agente)
+  agent/         provider.ts, ai-agent.ts, tool-registry.ts, routine-setup.ts (rutina + sus
+                 2 recordatorios), tools/
+  audio/         ffmpeg.ts (conversión), stt.ts (Vosk), tts.ts (Piper) - todo local, sin IA
+  scheduler/     task-scheduler.ts (recordatorios, con recurrencia, cruza todos los usuarios)
+  server/        API Express + panel + auth (panel siempre opera sobre el usuario admin)
+  util/          fechas (datetime.ts), jid.ts, human-delay.ts (pausa "escribiendo")
 admin-panel/     panel admin (React + Vite + Tailwind), compila a public/
 public/          estatico servido por Express (build del panel)
 data/            app.db (SQLite, no se sube al repo)
+models/          modelo de Vosk + voces de Piper (no se sube al repo, ver sección Audio)
+bin/             binario de Piper si lo instalaste con el script de deploy (no se sube al repo)
 ```
 
 ## Despliegue en servidor (Linux)
@@ -229,6 +338,10 @@ reducen mucho ese riesgo:
 9. **Si ves un 403 o el panel marca "Posible bloqueo"**, no lo reintentes en bucle manualmente:
    espera unos minutos/horas, revisa el estado en la app oficial del teléfono, y solo entonces
    pulsa "Reconectar" una vez.
+10. **El bot ya simula una pausa humana antes de responder** (`util/human-delay.ts`, usado en
+    `bot-manager.ts`): una pausa corta al "leer" tu mensaje, más un tiempo de "escribiendo…"
+    proporcional al largo de la respuesta. Contestar instantáneo a todo es una de las señales que
+    delatan un bot automatizado — no lo quites para "que responda más rápido".
 
 ## Variables de entorno
 
@@ -240,6 +353,9 @@ reducen mucho ese riesgo:
 | `DB_PATH` | Ruta del archivo SQLite | `./data/app.db` |
 | `WA_SESSION` | Nombre de la sesión de Baileys (carpeta en `auth_info/`) | `personal-agent` |
 | `ADMIN_TOKEN` | Token de acceso al panel. Vacío = se genera solo | — |
+| `VOSK_MODEL_PATH` | Carpeta del modelo de Vosk (transcripción de audios). Ver sección Audio | `./models/vosk-es` |
+| `PIPER_BIN_PATH` | Ruta al binario de Piper (respuesta por voz). Vacío = desactivado | — |
+| `PIPER_VOICE_PATH` | Ruta al modelo de voz `.onnx` de Piper | — |
 
 ## Roadmap (ideas para seguir creciendo)
 

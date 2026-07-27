@@ -34,6 +34,21 @@ export function addMinutes(s: string, minutes: number): string {
   return fmtWall(dt);
 }
 
+/** Adds N days (can be negative) to a local date/time string. */
+export function addDays(s: string, days: number): string {
+  return addMinutes(s, days * 24 * 60);
+}
+
+/** Picks a random 'HH:mm:ss' time within [windowStart, windowEnd] (both 'HH:mm') on the given date. */
+export function randomTimeOnDate(dateOnly: string, windowStart: string, windowEnd: string): string {
+  const [sh, sm] = windowStart.split(':').map(Number);
+  const [eh, em] = windowEnd.split(':').map(Number);
+  const startMin = (sh ?? 0) * 60 + (sm ?? 0);
+  const endMin = Math.max((eh ?? 0) * 60 + (em ?? 0), startMin); // guards against an inverted window
+  const pick = startMin + Math.floor(Math.random() * (endMin - startMin + 1));
+  return `${dateOnly} ${pad(Math.floor(pick / 60))}:${pad(pick % 60)}:00`;
+}
+
 /** Adds N whole months (keeping day-of-month; clamps to shorter months). */
 export function addMonths(s: string, months: number): string {
   const dt = parseWall(s);

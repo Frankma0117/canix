@@ -4,6 +4,7 @@ import { LockScreen } from './components/LockScreen.tsx';
 import { Sidebar } from './components/Sidebar.tsx';
 import { TodosPage } from './pages/TodosPage.tsx';
 import { RoutinesPage } from './pages/RoutinesPage.tsx';
+import { RewardsPage } from './pages/RewardsPage.tsx';
 import { RemindersPage } from './pages/RemindersPage.tsx';
 import { LinksPage } from './pages/LinksPage.tsx';
 import { CategoriesPage } from './pages/CategoriesPage.tsx';
@@ -14,6 +15,7 @@ export type SectionId =
   | 'today'
   | 'later'
   | 'routines'
+  | 'rewards'
   | 'reminders'
   | 'links'
   | 'categories'
@@ -44,6 +46,7 @@ function Shell() {
         {section === 'today' && <TodosPage scope="today" title="Pendientes de hoy" />}
         {section === 'later' && <TodosPage scope="later" title="Para después" />}
         {section === 'routines' && <RoutinesPage />}
+        {section === 'rewards' && <RewardsPage />}
         {section === 'reminders' && <RemindersPage />}
         {section === 'links' && <LinksPage />}
         {section === 'categories' && <CategoriesPage />}

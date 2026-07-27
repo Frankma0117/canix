@@ -46,3 +46,4 @@ mkdir -p data
 echo ""
 echo "== Deploy listo en $APP_DIR =="
 echo "Siguiente paso: deploy/ubuntu-03-setup-service.sh (para dejarlo como servicio systemd)"
+echo "Opcional: deploy/ubuntu-04-setup-audio.sh (transcripcion de audios + respuesta por voz)"

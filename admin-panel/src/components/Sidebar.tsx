@@ -1,4 +1,4 @@
-import { CalendarClock, CalendarDays, ListTodo, Repeat, Link2, Tags, Users, Smartphone, LogOut } from 'lucide-react';
+import { CalendarClock, CalendarDays, ListTodo, Repeat, Link2, Tags, Users, Smartphone, LogOut, Trophy } from 'lucide-react';
 import type { SectionId } from '../App.tsx';
 import { useAuth } from '../lib/auth.tsx';
 
@@ -6,6 +6,7 @@ const ITEMS: { id: SectionId; label: string; icon: typeof CalendarClock }[] = [
   { id: 'today', label: 'Hoy', icon: CalendarDays },
   { id: 'later', label: 'Para después', icon: ListTodo },
   { id: 'routines', label: 'Rutinas', icon: Repeat },
+  { id: 'rewards', label: 'Premios y castigos', icon: Trophy },
   { id: 'reminders', label: 'Recordatorios', icon: CalendarClock },
   { id: 'links', label: 'Links', icon: Link2 },
   { id: 'categories', label: 'Categorías', icon: Tags },

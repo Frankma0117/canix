@@ -16,9 +16,9 @@ export const routineProgressTool: Tool = {
     additionalProperties: false,
   },
 
-  async execute(args) {
+  async execute(args, ctx) {
     const id = Number(args.id);
-    const todo = todosRepo.getById(id);
+    const todo = todosRepo.getById(ctx.userId, id);
     if (!todo || todo.scope !== 'routine') return `No encontré la rutina #${id}.`;
 
     const days = Number(args.days) > 0 ? Number(args.days) : 7;

@@ -1,11 +1,19 @@
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
-import { nowLocal, addMinutes, addMonths } from '../util/datetime.js';
+import { nowLocal, addMinutes, addMonths, addDays, dateOnly, randomTimeOnDate } from '../util/datetime.js';
 import type { WaManager } from '../whatsapp/wa-manager.js';
 import type { Reminder } from '../types/index.js';
 
 /** Computes the next run_at for a recurring reminder. */
 function nextRunAt(reminder: Reminder): string | undefined {
-  const { recurrence_freq, recurrence_interval, run_at } = reminder;
+  const { recurrence_freq, recurrence_interval, run_at, kind, window_start, window_end } = reminder;
+
+  // Flexible reminders (e.g. "pausa activa entre 3pm y 5pm") don't repeat at the same clock time -
+  // each occurrence gets a fresh random time within its window, so it doesn't feel mechanical.
+  if (kind === 'flexible' && window_start && window_end && recurrence_freq === 'daily') {
+    const nextDate = dateOnly(addDays(run_at, recurrence_interval));
+    return randomTimeOnDate(nextDate, window_start, window_end);
+  }
+
   switch (recurrence_freq) {
     case 'daily':
       return addMinutes(run_at, 60 * 24 * recurrence_interval);
@@ -59,7 +67,11 @@ export class TaskScheduler {
       try {
         const target = reminder.target_jid;
         if (!target) continue;
-        await this.wa.sendText(target, `⏰ ${reminder.message}`);
+        // Plain reminders get a generic ⏰ prefix; every other kind already carries its own
+        // emoji/wording at creation time (important_date, flexible, routine_reminder/checkin -
+        // see schedule-important-date.tool.ts, schedule-flexible-reminder.tool.ts, routine-setup.ts).
+        const prefix = reminder.kind === 'reminder' ? '⏰ ' : '';
+        await this.wa.sendText(target, `${prefix}${reminder.message}`);
         console.log('[SCHEDULER] Recordatorio #%d enviado a %s.', reminder.id, target);
 
         const next = nextRunAt(reminder);

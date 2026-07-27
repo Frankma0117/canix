@@ -25,9 +25,9 @@ export const sendMessageTool: Tool = {
     if (isJid(to)) {
       targetJid = to;
     } else {
-      const matches = contactsRepo.findByName(to);
+      const matches = contactsRepo.findByName(ctx.userId, to);
       if (matches.length === 1) {
-        targetJid = matches[0].jid;
+        targetJid = contactsRepo.sendTarget(matches[0]);
       } else if (matches.length > 1) {
         return `Hay varios contactos que coinciden con "${to}": ${matches.map((m) => m.name).join(', ')}. Sé más específico.`;
       } else if (/^[\d\s()+-]{6,}$/.test(to)) {

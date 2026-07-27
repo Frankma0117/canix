@@ -11,11 +11,11 @@ export const cancelReminderTool: Tool = {
     additionalProperties: false,
   },
 
-  async execute(args) {
+  async execute(args, ctx) {
     const id = Number(args.id);
-    const reminder = remindersRepo.getById(id);
+    const reminder = remindersRepo.getById(ctx.userId, id);
     if (!reminder) return `No encontré el recordatorio #${id}.`;
-    remindersRepo.cancel(id);
+    remindersRepo.cancel(ctx.userId, id);
     return `Recordatorio #${id} cancelado.`;
   },
 };

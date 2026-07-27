@@ -18,6 +18,18 @@ import { deleteTodoTool } from './delete-todo.tool.js';
 import { createRoutineTool } from './create-routine.tool.js';
 import { checkinRoutineTool } from './checkin-routine.tool.js';
 import { routineProgressTool } from './routine-progress.tool.js';
+import { scheduleImportantDateTool } from './schedule-important-date.tool.js';
+import { scheduleFlexibleReminderTool } from './schedule-flexible-reminder.tool.js';
+import { registerRewardPunishmentTool } from './register-reward-punishment.tool.js';
+import { listRewardsPunishmentsTool } from './list-rewards-punishments.tool.js';
+import { deleteContactTool } from './delete-contact.tool.js';
+import { deleteRoutineTool } from './delete-routine.tool.js';
+import { deleteCategoryTool } from './delete-category.tool.js';
+import { deleteRewardPunishmentTool } from './delete-reward-punishment.tool.js';
+import { deleteReminderTool } from './delete-reminder.tool.js';
+import { grantAccessTool } from './grant-access.tool.js';
+import { revokeAccessTool } from './revoke-access.tool.js';
+import { listUsersTool } from './list-users.tool.js';
 
 /** Registers every tool the agent can use. Called once at boot. */
 export function registerTools(): void {
@@ -40,4 +52,16 @@ export function registerTools(): void {
   registry.register(createRoutineTool);
   registry.register(checkinRoutineTool);
   registry.register(routineProgressTool);
+  registry.register(scheduleImportantDateTool);
+  registry.register(scheduleFlexibleReminderTool);
+  registry.register(registerRewardPunishmentTool);
+  registry.register(listRewardsPunishmentsTool);
+  registry.register(deleteContactTool);
+  registry.register(deleteRoutineTool);
+  registry.register(deleteCategoryTool);
+  registry.register(deleteRewardPunishmentTool);
+  registry.register(deleteReminderTool);
+  registry.register(grantAccessTool);
+  registry.register(revokeAccessTool);
+  registry.register(listUsersTool);
 }

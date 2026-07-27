@@ -1,57 +1,77 @@
 import { db } from '../pool.js';
-import type { Reminder, RecurrenceFreq, ReminderStatus } from '../../types/index.js';
+import type { Reminder, RecurrenceFreq, ReminderStatus, ReminderKind } from '../../types/index.js';
 
 export const remindersRepo = {
-  listAll(status?: ReminderStatus): Reminder[] {
-    if (!status) return db.prepare('SELECT * FROM reminders ORDER BY run_at').all() as Reminder[];
-    return db
-      .prepare('SELECT * FROM reminders WHERE status = ? ORDER BY run_at')
-      .all(status) as Reminder[];
-  },
-
-  listByCategory(categoryId: number, status?: ReminderStatus): Reminder[] {
+  listAll(userId: number, status?: ReminderStatus): Reminder[] {
     if (!status) {
-      return db
-        .prepare('SELECT * FROM reminders WHERE category_id = ? ORDER BY run_at')
-        .all(categoryId) as Reminder[];
+      return db.prepare('SELECT * FROM reminders WHERE user_id = ? ORDER BY run_at').all(userId) as Reminder[];
     }
     return db
-      .prepare('SELECT * FROM reminders WHERE category_id = ? AND status = ? ORDER BY run_at')
-      .all(categoryId, status) as Reminder[];
+      .prepare('SELECT * FROM reminders WHERE user_id = ? AND status = ? ORDER BY run_at')
+      .all(userId, status) as Reminder[];
   },
 
-  getById(id: number): Reminder | undefined {
-    return db.prepare('SELECT * FROM reminders WHERE id = ?').get(id) as Reminder | undefined;
+  listByCategory(userId: number, categoryId: number, status?: ReminderStatus): Reminder[] {
+    if (!status) {
+      return db
+        .prepare('SELECT * FROM reminders WHERE user_id = ? AND category_id = ? ORDER BY run_at')
+        .all(userId, categoryId) as Reminder[];
+    }
+    return db
+      .prepare('SELECT * FROM reminders WHERE user_id = ? AND category_id = ? AND status = ? ORDER BY run_at')
+      .all(userId, categoryId, status) as Reminder[];
   },
 
-  /** Pending reminders whose run_at has already passed (or equals now). */
+  getById(userId: number, id: number): Reminder | undefined {
+    return db
+      .prepare('SELECT * FROM reminders WHERE id = ? AND user_id = ?')
+      .get(id, userId) as Reminder | undefined;
+  },
+
+  listByTodo(todoId: number): Reminder[] {
+    return db.prepare('SELECT * FROM reminders WHERE todo_id = ?').all(todoId) as Reminder[];
+  },
+
+  /** Pending reminders whose run_at has already passed (or equals now) - across all users, for the scheduler. */
   listDue(nowWall: string): Reminder[] {
     return db
       .prepare(`SELECT * FROM reminders WHERE status = 'pending' AND run_at <= ? ORDER BY run_at`)
       .all(nowWall) as Reminder[];
   },
 
-  create(fields: {
-    message: string;
-    runAt: string;
-    targetJid: string | null;
-    categoryId: number | null;
-    recurrenceFreq: RecurrenceFreq;
-    recurrenceInterval: number;
-  }): number {
+  create(
+    userId: number,
+    fields: {
+      message: string;
+      runAt: string;
+      targetJid: string | null;
+      categoryId: number | null;
+      recurrenceFreq: RecurrenceFreq;
+      recurrenceInterval: number;
+      kind?: ReminderKind;
+      windowStart?: string | null;
+      windowEnd?: string | null;
+      todoId?: number | null;
+    },
+  ): number {
     const info = db
       .prepare(
         `INSERT INTO reminders
-         (message, run_at, target_jid, category_id, recurrence_freq, recurrence_interval)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+         (user_id, message, run_at, target_jid, category_id, recurrence_freq, recurrence_interval, kind, window_start, window_end, todo_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
+        userId,
         fields.message,
         fields.runAt,
         fields.targetJid,
         fields.categoryId,
         fields.recurrenceFreq,
         fields.recurrenceInterval,
+        fields.kind ?? 'reminder',
+        fields.windowStart ?? null,
+        fields.windowEnd ?? null,
+        fields.todoId ?? null,
       );
     return Number(info.lastInsertRowid);
   },
@@ -68,7 +88,11 @@ export const remindersRepo = {
     db.prepare('UPDATE reminders SET status = ? WHERE id = ?').run(status, id);
   },
 
-  cancel(id: number): void {
-    this.markStatus(id, 'cancelled');
+  cancel(userId: number, id: number): void {
+    db.prepare("UPDATE reminders SET status = 'cancelled' WHERE id = ? AND user_id = ?").run(id, userId);
+  },
+
+  remove(userId: number, id: number): void {
+    db.prepare('DELETE FROM reminders WHERE id = ? AND user_id = ?').run(id, userId);
   },
 };

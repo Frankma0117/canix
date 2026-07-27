@@ -6,8 +6,8 @@ export const listCategoriesTool: Tool = {
   description: 'Lista todas las categorías existentes (para links, tareas y recordatorios).',
   parameters: { type: 'object', properties: {}, additionalProperties: false },
 
-  async execute() {
-    const categories = categoriesRepo.listAll();
+  async execute(_args, ctx) {
+    const categories = categoriesRepo.listAll(ctx.userId);
     if (categories.length === 0) return 'No hay categorías creadas todavía.';
     return categories
       .map((c) => `#${c.id} ${c.name}${c.description ? ` - ${c.description}` : ''}`)

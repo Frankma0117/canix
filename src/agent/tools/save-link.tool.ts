@@ -18,14 +18,14 @@ export const saveLinkTool: Tool = {
     additionalProperties: false,
   },
 
-  async execute(args) {
+  async execute(args, ctx) {
     const url = String(args.url ?? '').trim();
     if (!url) return 'Error: falta la URL.';
     const categoryName = String(args.category ?? '').trim();
     if (!categoryName) return 'Error: falta la categoría.';
 
-    const category = categoriesRepo.findOrCreate(categoryName);
-    const id = linksRepo.create({
+    const category = categoriesRepo.findOrCreate(ctx.userId, categoryName);
+    const id = linksRepo.create(ctx.userId, {
       url,
       categoryId: category.id,
       title: args.title ? String(args.title) : null,

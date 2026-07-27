@@ -51,8 +51,8 @@ export const scheduleReminderTool: Tool = {
       if (isJid(raw)) {
         targetJid = raw;
       } else {
-        const matches = contactsRepo.findByName(raw);
-        if (matches.length === 1) targetJid = matches[0].jid;
+        const matches = contactsRepo.findByName(ctx.userId, raw);
+        if (matches.length === 1) targetJid = contactsRepo.sendTarget(matches[0]);
         else if (/^[\d\s()+-]{6,}$/.test(raw)) targetJid = phoneToJid(raw);
         else if (matches.length > 1) return `Hay varios contactos que coinciden con "${raw}", sé más específico.`;
         else return `No encontré ningún contacto llamado "${raw}".`;
@@ -61,7 +61,7 @@ export const scheduleReminderTool: Tool = {
 
     let categoryId: number | null = null;
     if (args.category) {
-      categoryId = categoriesRepo.findOrCreate(String(args.category)).id;
+      categoryId = categoriesRepo.findOrCreate(ctx.userId, String(args.category)).id;
     }
 
     const freq = FREQS.includes(args.recurrence_freq as RecurrenceFreq)
@@ -69,7 +69,7 @@ export const scheduleReminderTool: Tool = {
       : 'none';
     const interval = Number(args.recurrence_interval) > 0 ? Number(args.recurrence_interval) : 1;
 
-    const id = remindersRepo.create({
+    const id = remindersRepo.create(ctx.userId, {
       message: String(args.message ?? ''),
       runAt,
       targetJid: targetJid ?? ctx.ownerJid,

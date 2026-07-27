@@ -3,13 +3,19 @@ import { rm } from 'node:fs/promises';
 import makeWASocket, {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
+  downloadMediaMessage,
   DisconnectReason,
   type WASocket,
   type ConnectionState,
+  type WAMessage,
 } from 'baileys';
 import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode-terminal';
 import { baileysLogger } from './logger.js';
+import { toPcm16Mono16k } from '../audio/ffmpeg.js';
+import { transcribePcm } from '../audio/stt.js';
+import { usersRepo } from '../db/repositories/users.repo.js';
+import { contactsRepo } from '../db/repositories/contacts.repo.js';
 
 /** After this many consecutive failed reconnects, stop retrying automatically (see start()). */
 const MAX_RECONNECT_ATTEMPTS = 6;
@@ -18,6 +24,8 @@ export type IncomingHandler = (msg: {
   jid: string;
   name?: string;
   text: string;
+  /** True when `text` came from transcribing a voice note rather than being typed. */
+  fromAudio?: boolean;
 }) => Promise<void>;
 
 /**
@@ -159,6 +167,14 @@ export class WaManager {
       }
     });
 
+    // WhatsApp's privacy-preserving id (@lid) for a contact/user is learned from traffic, not
+    // looked up on demand - persist every pairing as we learn it so sends/identity checks can
+    // use it later (see contactsRepo.sendTarget / bot-manager's user lookup).
+    sock.ev.on('lid-mapping.update', ({ pn, lid }) => {
+      usersRepo.setLid(pn, lid);
+      contactsRepo.setLidForPhoneJid(pn, lid);
+    });
+
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
       if (type !== 'notify') return;
       for (const m of messages) {
@@ -166,17 +182,30 @@ export class WaManager {
         if (!jid || jid === 'status@broadcast' || jid.endsWith('@g.us')) continue; // ignore groups/status
         if (m.key.fromMe) continue; // this bot uses a dedicated number, not a self-chat
 
-        const text =
+        let text =
           m.message?.conversation ??
           m.message?.extendedTextMessage?.text ??
           m.message?.imageMessage?.caption ??
           '';
+        let fromAudio = false;
+
+        if (!text.trim() && m.message?.audioMessage) {
+          const transcribed = await this.transcribeIncomingAudio(m);
+          if (transcribed) {
+            text = transcribed;
+            fromAudio = true;
+          } else {
+            await this.sendText(jid, 'No pude entender el audio 🙈 ¿me lo escribes o lo repites?').catch(() => {});
+            continue;
+          }
+        }
+
         if (!text.trim()) continue;
 
         const name = m.pushName || undefined;
 
         try {
-          await this.handler?.({ jid, name, text: text.trim() });
+          await this.handler?.({ jid, name, text: text.trim(), fromAudio });
         } catch (err) {
           console.error('[WA] Error procesando mensaje:', (err as Error).message);
         }
@@ -184,10 +213,28 @@ export class WaManager {
     });
   }
 
+  /** Downloads a voice note and transcribes it locally (Vosk). Returns null if unavailable/failed. */
+  private async transcribeIncomingAudio(m: WAMessage): Promise<string | null> {
+    try {
+      const buffer = await downloadMediaMessage(m, 'buffer', {});
+      const pcm = await toPcm16Mono16k(buffer);
+      return transcribePcm(pcm);
+    } catch (err) {
+      console.error('[WA] Error transcribiendo audio:', (err as Error).message);
+      return null;
+    }
+  }
+
   /** Sends a text message to a JID (e.g. 573001234567@s.whatsapp.net). */
   async sendText(jid: string, text: string): Promise<void> {
     if (!this.sock) throw new Error('WhatsApp no esta conectado');
     await this.sock.sendMessage(jid, { text });
+  }
+
+  /** Sends a WhatsApp voice note (ogg/opus, played inline like a recorded ptt message). */
+  async sendAudio(jid: string, audio: Buffer): Promise<void> {
+    if (!this.sock) throw new Error('WhatsApp no esta conectado');
+    await this.sock.sendMessage(jid, { audio, mimetype: 'audio/ogg; codecs=opus', ptt: true });
   }
 
   /** Briefly shows "typing..." (feedback to the user). */
@@ -201,6 +248,21 @@ export class WaManager {
 
   isConnected(): boolean {
     return this.connectionState === 'open';
+  }
+
+  /**
+   * Resolves a "@lid" jid to its underlying phone-number jid via Baileys' own PN<->LID mapping
+   * store, for the (rare) case a known user's very first message arrives via lid before the
+   * 'lid-mapping.update' event has had a chance to persist the pairing (see bot-manager.ts).
+   * Returns null if unconnected or the mapping isn't known yet.
+   */
+  async resolveLidToPhoneJid(lid: string): Promise<string | null> {
+    if (!this.sock) return null;
+    try {
+      return await this.sock.signalRepository.lidMapping.getPNForLID(lid);
+    } catch {
+      return null;
+    }
   }
 
   /**

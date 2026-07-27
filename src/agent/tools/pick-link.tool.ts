@@ -15,14 +15,14 @@ export const pickLinkTool: Tool = {
     additionalProperties: false,
   },
 
-  async execute(args) {
-    const category = categoriesRepo.getByName(String(args.category ?? ''));
+  async execute(args, ctx) {
+    const category = categoriesRepo.getByName(ctx.userId, String(args.category ?? ''));
     if (!category) return `No existe la categoría "${args.category}".`;
 
-    const link = linksRepo.pickRandom(category.id);
+    const link = linksRepo.pickRandom(ctx.userId, category.id);
     if (!link) return `No hay links guardados todavía en "${category.name}".`;
 
-    linksRepo.markUsed(link.id);
+    linksRepo.markUsed(ctx.userId, link.id);
     const label = link.title || link.description || '';
     return `De "${category.name}": ${label ? `${label} — ` : ''}${link.url} (#${link.id})`;
   },
