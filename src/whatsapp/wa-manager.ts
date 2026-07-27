@@ -225,16 +225,41 @@ export class WaManager {
     }
   }
 
+  /**
+   * Resolves a phone-number jid to its @lid if one is known or resolvable, so sending still
+   * works for people who've never written to the bot first. Sending straight to a phone jid can
+   * fail for accounts WhatsApp already routes by lid - Baileys can look that mapping up live via
+   * the USync protocol (the same thing `onWhatsApp` uses under the hood) when it isn't cached
+   * yet, instead of only learning it passively from incoming traffic (see 'lid-mapping.update').
+   * Returns the input unchanged for anything that isn't a plain phone jid, or if resolution fails.
+   */
+  private async resolveSendTarget(jid: string): Promise<string> {
+    if (!this.sock || !jid.endsWith('@s.whatsapp.net')) return jid;
+    try {
+      const lid = await this.sock.signalRepository.lidMapping.getLIDForPN(jid);
+      if (lid) {
+        usersRepo.setLid(jid, lid);
+        contactsRepo.setLidForPhoneJid(jid, lid);
+        return lid;
+      }
+    } catch (err) {
+      console.error('[WA] No se pudo resolver el lid de %s:', jid, (err as Error).message);
+    }
+    return jid;
+  }
+
   /** Sends a text message to a JID (e.g. 573001234567@s.whatsapp.net). */
   async sendText(jid: string, text: string): Promise<void> {
     if (!this.sock) throw new Error('WhatsApp no esta conectado');
-    await this.sock.sendMessage(jid, { text });
+    const target = await this.resolveSendTarget(jid);
+    await this.sock.sendMessage(target, { text });
   }
 
   /** Sends a WhatsApp voice note (ogg/opus, played inline like a recorded ptt message). */
   async sendAudio(jid: string, audio: Buffer): Promise<void> {
     if (!this.sock) throw new Error('WhatsApp no esta conectado');
-    await this.sock.sendMessage(jid, { audio, mimetype: 'audio/ogg; codecs=opus', ptt: true });
+    const target = await this.resolveSendTarget(jid);
+    await this.sock.sendMessage(target, { audio, mimetype: 'audio/ogg; codecs=opus', ptt: true });
   }
 
   /** Briefly shows "typing..." (feedback to the user). */

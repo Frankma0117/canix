@@ -35,6 +35,17 @@ function getModel(): InstanceType<typeof Model> | undefined {
 }
 
 /**
+ * vosk-koffi's types claim finalResult() always returns { alternatives: [...] }, but the native
+ * Vosk library only nests results under "alternatives" when setMaxAlternatives() was called -
+ * without it (our case), it returns a flat { text, result, confidence } instead. Read both shapes
+ * defensively rather than trusting the (inaccurate here) declared type.
+ */
+interface VoskFinalResult {
+  text?: string;
+  alternatives?: { text?: string }[];
+}
+
+/**
  * Transcribes raw 16kHz mono PCM16 audio (see audio/ffmpeg.ts) to text using a local Vosk model.
  * Returns null when the model isn't installed or nothing intelligible was recognized.
  */
@@ -45,8 +56,8 @@ export function transcribePcm(pcm: Buffer): string | null {
   const rec = new Recognizer({ model: m, sampleRate: SAMPLE_RATE });
   try {
     rec.acceptWaveform(pcm);
-    const { alternatives } = rec.finalResult();
-    const text = alternatives[0]?.text?.trim();
+    const result = rec.finalResult() as unknown as VoskFinalResult;
+    const text = (result.text ?? result.alternatives?.[0]?.text)?.trim();
     return text || null;
   } finally {
     rec.free();
