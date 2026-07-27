@@ -158,8 +158,8 @@ sudo journalctl -u canix -f   # logs en vivo (para escanear el QR la primera vez
 ### Notas para producción
 
 - **QR de WhatsApp**: la primera vez hay que escanearlo desde los logs (`pm2 logs canix` o
-  `journalctl -u canix -f`). Si ya vinculaste el bot en local, puedes copiar la carpeta
-  `auth_info/` completa al servidor para no tener que volver a escanear.
+  `journalctl -u canix -f`) o desde el panel (`Conexión`). Si ya vinculaste el bot en local,
+  puedes copiar la carpeta `auth_info/` completa al servidor para no tener que volver a escanear.
 - **No pierdas `data/` ni `auth_info/`** en cada deploy: son el estado persistente (base de
   datos SQLite y sesión de WhatsApp). No los borres ni los excluyas de tus backups.
 - **Panel web expuesto públicamente**: si vas a acceder a `http://tu-servidor:3000` desde
@@ -168,6 +168,60 @@ sudo journalctl -u canix -f   # logs en vivo (para escanear el QR la primera vez
 - **Actualizar código**: `git pull` (o subir los archivos nuevos), `npm install` si cambiaron
   dependencias, `cd admin-panel && npm install && npm run build && cd ..` si cambió el panel, y
   `pm2 restart canix` / `sudo systemctl restart canix`.
+
+## Reconexión de WhatsApp (sin reiniciar el servidor)
+
+La página **Conexión** del panel tiene un botón **"Reconectar"** que vuelve a intentar la
+conexión sin reiniciar el proceso de Node. Antes, la única forma de recuperar una sesión caída
+tras agotar los reintentos automáticos era reiniciar todo el servidor.
+
+- Si la conexión se cae por una razón transitoria (red, timeout del servidor de WhatsApp), el
+  bot reintenta solo unas pocas veces con backoff exponencial (`MAX_RECONNECT_ATTEMPTS` en
+  `src/whatsapp/wa-manager.ts`); si se agotan, queda esperando a que pulses "Reconectar".
+- Si WhatsApp responde **403 (forbidden)**, el bot **no reintenta automáticamente**: es la
+  misma señal que suele preceder a un bloqueo/restricción del número, y reintentar en bucle es
+  justo el patrón que empeora un bloqueo. El panel muestra un aviso ("Posible bloqueo") y las
+  credenciales se conservan (no se borra `auth_info/`, no hace falta un QR nuevo). Antes de
+  pulsar "Reconectar" en ese caso, abre WhatsApp en el teléfono y confirma que la cuenta no
+  aparece bloqueada o limitada.
+- El bot nunca abre dos sockets a la vez sobre la misma sesión (evita el escenario de dos
+  conexiones simultáneas peleando por el mismo número, otra causa común de bloqueos).
+
+## Cómo evitar que WhatsApp bloquee/restrinja el número
+
+Baileys es una librería no oficial (usa el protocolo de WhatsApp Web reimplementado), así que
+**siempre existe cierto riesgo** de que WhatsApp la detecte y limite el número. Estas prácticas
+reducen mucho ese riesgo:
+
+1. **No reintentes conexión de forma agresiva.** Ya está resuelto en el código (ver arriba),
+   pero si editas `wa-manager.ts` no bajes el backoff ni quites el freno del 403 solo para
+   "que reconecte más rápido" — es exactamente lo que causa bloqueos.
+2. **Nunca corras dos instancias del bot con la misma sesión** (`auth_info/<WA_SESSION>`) a la
+   vez, ni en dos máquinas ni con `pm2 start` duplicado. Dos sockets peleando por el mismo
+   número es una señal fuerte de comportamiento anómalo para WhatsApp.
+3. **No re-escanees el QR innecesariamente.** Cada escaneo nuevo reemplaza el "linked device"
+   anterior; hacerlo seguido (por ejemplo, borrando `auth_info/` cada vez que algo falla en vez
+   de dejar que reconecte) genera un patrón de churn que WhatsApp también vigila.
+4. **"Caliente" el número gradualmente si es nuevo.** No lo uses para mandar muchos mensajes o
+   a muchos contactos distintos el primer día. Empieza con tu propio número (dueño) y ve
+   aumentando el uso en días sucesivos.
+5. **Evita mensajes masivos o a números que no te tienen guardado.** Este bot solo responde a
+   su dueño y usa `send_message` para contactos que tú mismo guardaste — no lo uses para
+   reenviar el mismo mensaje a muchos contactos en poco tiempo ni para escribirle en frío a
+   gente que no te tiene agendado (eso es lo que suele generar reportes de spam).
+6. **Evita enlaces acortados o de dominios poco confiables** en los mensajes que el bot envía;
+   WhatsApp analiza URLs y los acortadores/dominios con mala reputación aumentan el riesgo de
+   marca de spam.
+7. **Mantén el teléfono con el WhatsApp vinculado activo** (con internet de vez en cuando,
+   batería, sesión no cerrada manualmente desde el teléfono). Aunque el modo multi-dispositivo
+   no exige que esté siempre online, revisa periódicamente que siga apareciendo como "vinculado"
+   en el teléfono.
+8. **Preferí un número que ya tenga historial normal de uso** (chip usado, con contactos y
+   conversaciones previas) en vez de un SIM recién activado y usado solo para este bot — los
+   números nuevos sin historial son los más vigilados.
+9. **Si ves un 403 o el panel marca "Posible bloqueo"**, no lo reintentes en bucle manualmente:
+   espera unos minutos/horas, revisa el estado en la app oficial del teléfono, y solo entonces
+   pulsa "Reconectar" una vez.
 
 ## Variables de entorno
 

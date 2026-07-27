@@ -31,9 +31,18 @@ export class WaManager {
   private authDir: string;
   private stopping = false;
   private reconnectAttempt = 0;
+  /** Guards against two overlapping start() calls opening two sockets on the same session at once. */
+  private connecting = false;
 
   qr: string | undefined;
   connectionState: ConnectionState['connection'] = 'close';
+  /**
+   * Set when WhatsApp itself rejects the connection (HTTP 403 / DisconnectReason.forbidden).
+   * This is the same signal that precedes number bans/restrictions, so we stop auto-retrying
+   * and require an explicit manual reconnect instead of hammering the endpoint.
+   */
+  banSuspected = false;
+  lastDisconnectCode: number | undefined;
 
   constructor(private session: string) {
     this.authDir = join(process.cwd(), 'auth_info', session);
@@ -44,11 +53,9 @@ export class WaManager {
     this.handler = handler;
   }
 
-  async start(): Promise<void> {
-    this.stopping = false;
+  private async buildSocket() {
     const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
     const { version } = await fetchLatestBaileysVersion();
-
     const sock = makeWASocket({
       version,
       auth: state,
@@ -56,6 +63,19 @@ export class WaManager {
       printQRInTerminal: false,
       markOnlineOnConnect: false,
     });
+    return { sock, saveCreds };
+  }
+
+  async start(): Promise<void> {
+    if (this.connecting || this.isConnected()) return; // never open a second socket on top of a live/pending one
+    this.connecting = true;
+    this.stopping = false;
+
+    const built = await this.buildSocket().catch((err) => {
+      this.connecting = false;
+      throw err;
+    });
+    const { sock, saveCreds } = built;
     this.sock = sock;
 
     sock.ev.on('creds.update', saveCreds);
@@ -70,22 +90,47 @@ export class WaManager {
       if (connection) this.connectionState = connection;
 
       if (connection === 'open') {
+        this.connecting = false;
         this.qr = undefined;
         this.reconnectAttempt = 0;
+        this.banSuspected = false;
         console.log('[WA] Conectado a WhatsApp.');
       }
 
       if (connection === 'close') {
+        this.connecting = false;
         if (this.stopping) return; // intentional disconnect/logout, don't auto-retry
 
         const code = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
+        this.lastDisconnectCode = code;
         const loggedOut = code === DisconnectReason.loggedOut;
+        const forbidden = code === DisconnectReason.forbidden; // 403
         console.log('[WA] Conexion cerrada (code=%s).', code ?? '?');
+
         if (loggedOut) {
           console.log('[WA] Sesion cerrada. Borrando credenciales para poder generar un QR nuevo.');
           void rm(this.authDir, { recursive: true, force: true });
-        } else if (this.reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
-          console.log('[WA] Demasiados intentos fallidos, dejo de reintentar. Conecta de nuevo desde el panel.');
+          return;
+        }
+
+        if (forbidden) {
+          // A 403 means WhatsApp's servers rejected the connection outright - this is the same
+          // signal that shows up right before/during a number ban or temporary restriction.
+          // Auto-retrying in a loop here is exactly the "suspicious automated behaviour" pattern
+          // that gets numbers flagged, so we stop and wait for a deliberate manual reconnect
+          // (see /api/connection/reconnect) instead. Credentials are kept intact - this is not
+          // a logout, so there is no new QR to generate.
+          this.banSuspected = true;
+          console.log(
+            '[WA] WhatsApp respondio 403 (prohibido). Puede ser un bloqueo temporal o definitivo del numero. ' +
+              'NO se reintenta automaticamente: revisa el estado del numero en la app oficial de WhatsApp antes ' +
+              'de reconectar manualmente desde el panel.',
+          );
+          return;
+        }
+
+        if (this.reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
+          console.log('[WA] Demasiados intentos fallidos, dejo de reintentar. Reconecta desde el panel.');
         } else {
           const delay = Math.min(60_000, 2_000 * 2 ** this.reconnectAttempt);
           this.reconnectAttempt += 1;
@@ -137,6 +182,19 @@ export class WaManager {
 
   isConnected(): boolean {
     return this.connectionState === 'open';
+  }
+
+  /**
+   * Manually re-establishes the connection without restarting the whole process, e.g. from the
+   * admin panel's "Reconectar" button. Only does something when the socket is actually idle -
+   * calling it while already connected/connecting is a no-op, and the reconnect() itself needs
+   * to be explicit rather than automatic once a 403 has been seen (see connection.update above).
+   */
+  async reconnect(): Promise<void> {
+    if (this.connecting || this.isConnected()) return;
+    this.reconnectAttempt = 0;
+    this.banSuspected = false;
+    await this.start();
   }
 
   /** Logs the session out and deletes its stored credentials, so the next start() shows a fresh QR. */

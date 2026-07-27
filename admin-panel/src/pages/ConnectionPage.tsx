@@ -4,11 +4,13 @@ import { useApi } from '../lib/api.ts';
 import { useAuth } from '../lib/auth.tsx';
 import { Card } from '../components/ui/Card.tsx';
 import { Badge } from '../components/ui/Badge.tsx';
+import { Button } from '../components/ui/Button.tsx';
 
 interface ConnectionStatus {
   connection: string;
   connected: boolean;
   hasQr: boolean;
+  banSuspected: boolean;
 }
 
 export function ConnectionPage() {
@@ -16,6 +18,7 @@ export function ConnectionPage() {
   const { token } = useAuth();
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [reconnecting, setReconnecting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -56,22 +59,43 @@ export function ConnectionPage() {
 
   const started = status !== null && (status.connected || status.hasQr || status.connection !== 'close');
 
+  async function handleReconnect() {
+    setReconnecting(true);
+    try {
+      await api.post('/api/connection/reconnect');
+    } catch {
+      // silent: status polling will reflect whatever happens next
+    } finally {
+      setReconnecting(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-lg p-8">
       <h1 className="mb-6 font-display text-2xl font-semibold text-ink dark:text-white">Conexión</h1>
       <Card className="flex flex-col items-center gap-5 p-8 text-center">
         {status && (
-          <Badge tone={status.connected ? 'success' : started ? 'warning' : 'neutral'}>
-            {status.connected ? 'Conectado' : started ? status.connection : 'Sin conectar'}
+          <Badge tone={status.connected ? 'success' : status.banSuspected ? 'error' : started ? 'warning' : 'neutral'}>
+            {status.connected ? 'Conectado' : status.banSuspected ? 'Posible bloqueo' : started ? status.connection : 'Sin conectar'}
           </Badge>
         )}
 
-        {status && !started && (
+        {status && status.banSuspected && (
+          <div className="rounded-xl bg-error/10 p-4 text-sm text-error">
+            <p className="font-medium">WhatsApp rechazó la conexión (403).</p>
+            <p className="mt-1 text-gray-dark">
+              Puede ser una restricción temporal o un bloqueo del número. Antes de reconectar, abre WhatsApp
+              en el teléfono y confirma que la cuenta no aparece bloqueada/limitada. No se reintenta
+              automáticamente para no empeorar el bloqueo.
+            </p>
+          </div>
+        )}
+
+        {status && !started && !status.banSuspected && (
           <>
             <Smartphone size={40} className="text-primary/60" />
             <p className="max-w-xs text-sm text-gray-dark">
-              El bot todavía no se ha vinculado. Reinicia el servidor y espera el código QR aquí, o
-              revisa la consola.
+              El bot todavía no se ha vinculado. Pulsa «Reconectar» y espera el código QR aquí.
             </p>
           </>
         )}
@@ -89,7 +113,7 @@ export function ConnectionPage() {
           </div>
         )}
 
-        {status && started && !status.connected && !qrUrl && (
+        {status && started && !status.connected && !qrUrl && !status.banSuspected && (
           <p className="text-sm text-gray-dark">Esperando código QR…</p>
         )}
 
@@ -97,6 +121,12 @@ export function ConnectionPage() {
           <p className="text-sm text-gray-dark">
             El bot está en línea y respondiendo por WhatsApp. 🎉
           </p>
+        )}
+
+        {status && !status.connected && (
+          <Button onClick={handleReconnect} disabled={reconnecting} variant={status.banSuspected ? 'secondary' : 'primary'}>
+            {reconnecting ? 'Reconectando…' : 'Reconectar'}
+          </Button>
         )}
       </Card>
     </div>

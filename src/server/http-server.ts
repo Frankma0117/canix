@@ -18,15 +18,15 @@ import type { RecurrenceFreq, TodoScope, TodoStatus, ReminderStatus } from '../t
 const here = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(here, '..', '..', 'public');
 
-/** Wraps a handler and forwards thrown errors to Express as a 500. */
+/** Wraps a handler (sync or async) and forwards thrown/rejected errors to Express as a 500. */
 function h(fn: (req: Request, res: Response) => unknown) {
   return (req: Request, res: Response) => {
-    try {
-      fn(req, res);
-    } catch (err) {
-      console.error('[API] Error:', (err as Error).message);
-      res.status(500).json({ error: (err as Error).message });
-    }
+    Promise.resolve()
+      .then(() => fn(req, res))
+      .catch((err) => {
+        console.error('[API] Error:', (err as Error).message);
+        res.status(500).json({ error: (err as Error).message });
+      });
   };
 }
 
@@ -56,7 +56,12 @@ export function createServer(bot: BotManager): Express {
     '/api/connection/status',
     h((_req, res) => {
       const wa = bot.session;
-      res.json({ connection: wa.connectionState, connected: wa.isConnected(), hasQr: Boolean(wa.qr) });
+      res.json({
+        connection: wa.connectionState,
+        connected: wa.isConnected(),
+        hasQr: Boolean(wa.qr),
+        banSuspected: wa.banSuspected,
+      });
     }),
   );
   app.get(
@@ -70,6 +75,15 @@ export function createServer(bot: BotManager): Express {
       const png = await qrcode.toBuffer(wa.qr, { width: 320, margin: 1 });
       res.setHeader('Content-Type', 'image/png');
       res.send(png);
+    }),
+  );
+  // Manually re-establish the WhatsApp connection without restarting the whole process.
+  // No-op if already connected/connecting; intentionally NOT automatic after a 403 (see wa-manager.ts).
+  app.post(
+    '/api/connection/reconnect',
+    h(async (_req, res) => {
+      await bot.session.reconnect();
+      res.json({ ok: true });
     }),
   );
 
