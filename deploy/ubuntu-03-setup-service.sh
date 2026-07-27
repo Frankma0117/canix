@@ -20,10 +20,6 @@ fi
 echo "== Ajustando permisos de $APP_DIR =="
 chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
 
-echo "== Creando carpeta de logs =="
-mkdir -p /var/log/canix
-chown "$SERVICE_USER:$SERVICE_USER" /var/log/canix
-
 echo "== Instalando unidad systemd =="
 cp "$APP_DIR/deploy/canix.service" /etc/systemd/system/canix.service
 systemctl daemon-reload

@@ -12,8 +12,8 @@ WorkingDirectory=/opt/canix
 ExecStart=/usr/bin/npm run start
 Restart=on-failure
 RestartSec=5
-StandardOutput=append:/var/log/canix/canix.log
-StandardError=append:/var/log/canix/canix.error.log
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
