@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+auth_info/
+data/*.db
+data/*.db-journal
+data/*.db-shm
+data/*.db-wal
+*.log
+npm-debug.log*
+*.tsbuildinfo
+.DS_Store
+
+# Panel admin (React/Vite): build generado
+public/assets/
+public/index.html

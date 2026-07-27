@@ -1,0 +1,19 @@
+[Unit]
+Description=canix - asistente personal por WhatsApp
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=canix
+WorkingDirectory=/opt/canix
+# Ajusta la ruta de node/npm si usas nvm o una version instalada aparte
+# (systemd no carga tu perfil de shell, asi que PATH puede no incluirla).
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/var/log/canix/canix.log
+StandardError=append:/var/log/canix/canix.error.log
+
+[Install]
+WantedBy=multi-user.target

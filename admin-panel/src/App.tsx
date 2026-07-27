@@ -1,0 +1,55 @@
+import { useState } from 'react';
+import { AuthProvider, useAuth } from './lib/auth.tsx';
+import { LockScreen } from './components/LockScreen.tsx';
+import { Sidebar } from './components/Sidebar.tsx';
+import { TodosPage } from './pages/TodosPage.tsx';
+import { RoutinesPage } from './pages/RoutinesPage.tsx';
+import { RemindersPage } from './pages/RemindersPage.tsx';
+import { LinksPage } from './pages/LinksPage.tsx';
+import { CategoriesPage } from './pages/CategoriesPage.tsx';
+import { ContactsPage } from './pages/ContactsPage.tsx';
+import { ConnectionPage } from './pages/ConnectionPage.tsx';
+
+export type SectionId =
+  | 'today'
+  | 'later'
+  | 'routines'
+  | 'reminders'
+  | 'links'
+  | 'categories'
+  | 'contacts'
+  | 'connection';
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <Gate />
+    </AuthProvider>
+  );
+}
+
+function Gate() {
+  const { token } = useAuth();
+  if (!token) return <LockScreen />;
+  return <Shell />;
+}
+
+function Shell() {
+  const [section, setSection] = useState<SectionId>('today');
+
+  return (
+    <div className="flex min-h-screen bg-gray-light dark:bg-[#141110]">
+      <Sidebar active={section} onNavigate={setSection} />
+      <main className="flex-1 overflow-y-auto">
+        {section === 'today' && <TodosPage scope="today" title="Pendientes de hoy" />}
+        {section === 'later' && <TodosPage scope="later" title="Para después" />}
+        {section === 'routines' && <RoutinesPage />}
+        {section === 'reminders' && <RemindersPage />}
+        {section === 'links' && <LinksPage />}
+        {section === 'categories' && <CategoriesPage />}
+        {section === 'contacts' && <ContactsPage />}
+        {section === 'connection' && <ConnectionPage />}
+      </main>
+    </div>
+  );
+}
