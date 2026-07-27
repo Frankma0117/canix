@@ -5,6 +5,17 @@
 # esta descargado, lo omite.
 set -euo pipefail
 
+# unzip no viene instalado por defecto en varias imagenes minimas de Ubuntu (curl casi siempre
+# si, pero se revisa igual por si acaso).
+missing_pkgs=""
+command -v unzip >/dev/null 2>&1 || missing_pkgs="$missing_pkgs unzip"
+command -v curl >/dev/null 2>&1 || missing_pkgs="$missing_pkgs curl"
+if [ -n "$missing_pkgs" ]; then
+  echo "== Instalando dependencias que faltan:$missing_pkgs =="
+  sudo apt-get update
+  sudo apt-get install -y $missing_pkgs
+fi
+
 APP_DIR="/opt/canix"
 cd "$APP_DIR"
 

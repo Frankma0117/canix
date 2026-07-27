@@ -5,7 +5,7 @@ set -euo pipefail
 
 echo "== Instalando dependencias del sistema =="
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl gnupg git build-essential python3
+sudo apt-get install -y ca-certificates curl gnupg git build-essential python3 unzip
 
 echo "== Instalando Node.js 20.x (NodeSource) =="
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
