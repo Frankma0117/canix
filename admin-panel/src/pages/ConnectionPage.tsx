@@ -19,6 +19,7 @@ export function ConnectionPage() {
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [reconnecting, setReconnecting] = useState(false);
+  const [switchingNumber, setSwitchingNumber] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -67,6 +68,24 @@ export function ConnectionPage() {
       // silent: status polling will reflect whatever happens next
     } finally {
       setReconnecting(false);
+    }
+  }
+
+  async function handleUseNewNumber() {
+    if (
+      !confirm(
+        'Esto desvincula el número actual (se borra la sesión guardada) y muestra un QR nuevo para ' +
+          'vincular otro número. El número anterior no se ve afectado, solo deja de estar conectado a este bot. ¿Continuar?',
+      )
+    )
+      return;
+    setSwitchingNumber(true);
+    try {
+      await api.post('/api/connection/new-number');
+    } catch {
+      // silent: status polling will reflect whatever happens next
+    } finally {
+      setSwitchingNumber(false);
     }
   }
 
@@ -124,9 +143,14 @@ export function ConnectionPage() {
         )}
 
         {status && !status.connected && (
-          <Button onClick={handleReconnect} disabled={reconnecting} variant={status.banSuspected ? 'secondary' : 'primary'}>
-            {reconnecting ? 'Reconectando…' : 'Reconectar'}
-          </Button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Button onClick={handleReconnect} disabled={reconnecting} variant={status.banSuspected ? 'secondary' : 'primary'}>
+              {reconnecting ? 'Reconectando…' : 'Reconectar (mismo número)'}
+            </Button>
+            <Button onClick={handleUseNewNumber} disabled={switchingNumber} variant={status.banSuspected ? 'primary' : 'ghost'}>
+              {switchingNumber ? 'Generando QR…' : 'Usar otro número'}
+            </Button>
+          </div>
         )}
       </Card>
     </div>

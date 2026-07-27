@@ -186,6 +186,13 @@ tras agotar los reintentos automáticos era reiniciar todo el servidor.
   aparece bloqueada o limitada.
 - El bot nunca abre dos sockets a la vez sobre la misma sesión (evita el escenario de dos
   conexiones simultáneas peleando por el mismo número, otra causa común de bloqueos).
+- Si el número quedó bloqueado/restringido y no quieres esperarlo, el botón **"Usar otro
+  número"** descarta la sesión guardada (`auth_info/<WA_SESSION>`) y muestra un QR nuevo al
+  instante para vincular un número distinto — no afecta al número anterior, solo deja de estar
+  conectado a este bot. Es una acción manual y deliberada (endpoint `POST
+  /api/connection/new-number`, método `WaManager.useNewNumber()`); nunca se dispara sola, porque
+  descartar/re-vincular sesiones automáticamente sería el mismo patrón de churn que causa
+  bloqueos.
 
 ## Cómo evitar que WhatsApp bloquee/restrinja el número
 

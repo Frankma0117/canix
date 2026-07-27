@@ -208,6 +208,21 @@ export class WaManager {
     this.sock = undefined;
     this.qr = undefined;
     this.connectionState = 'close';
+    this.reconnectAttempt = 0;
+    this.banSuspected = false;
     await rm(this.authDir, { recursive: true, force: true });
+  }
+
+  /**
+   * Abandons the current number and starts fresh: discards stored credentials and immediately
+   * shows a new QR, so a *different* phone number can be linked instead. This is the deliberate,
+   * manual escape hatch for when the linked number is flagged/blocked (banSuspected) and waiting
+   * on it (via reconnect()) isn't an option - it is never triggered automatically, only by an
+   * explicit admin action, since repeatedly discarding/relinking on its own would itself look
+   * like the kind of churn that gets numbers flagged.
+   */
+  async useNewNumber(): Promise<void> {
+    await this.logout();
+    await this.start();
   }
 }

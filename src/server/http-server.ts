@@ -86,6 +86,15 @@ export function createServer(bot: BotManager): Express {
       res.json({ ok: true });
     }),
   );
+  // Abandons the currently linked number and shows a new QR to link a different one.
+  // Deliberate admin action only - never triggered automatically.
+  app.post(
+    '/api/connection/new-number',
+    h(async (_req, res) => {
+      await bot.session.useNewNumber();
+      res.json({ ok: true });
+    }),
+  );
 
   // ---------- Categories ----------
   app.get('/api/categories', h((_req, res) => res.json(categoriesRepo.listAll())));
