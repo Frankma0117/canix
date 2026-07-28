@@ -1,3 +1,4 @@
+import { quietLibsignalLogs } from './util/quiet-libsignal.js';
 import { env } from './config/env.js';
 import { assertDbConnection } from './db/pool.js';
 import { initSchema } from './db/init.js';
@@ -6,6 +7,8 @@ import { BotManager } from './whatsapp/bot-manager.js';
 import { TaskScheduler } from './scheduler/task-scheduler.js';
 import { createServer } from './server/http-server.js';
 import { getAdminToken } from './server/auth.js';
+
+quietLibsignalLogs();
 
 async function main() {
   console.log('=== canix · asistente personal por WhatsApp ===');

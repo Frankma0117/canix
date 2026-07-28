@@ -5,11 +5,12 @@ import { phoneToJid, isJid } from '../../util/jid.js';
 export const sendMessageTool: Tool = {
   name: 'send_message',
   description:
-    'Envía un mensaje de WhatsApp a alguien (busca primero por nombre en mis contactos, o usa un número directo).',
+    'Envía un mensaje de WhatsApp a alguien (busca primero por nombre en mis contactos, o usa un número directo). ' +
+    'Funciona con cualquier número real de WhatsApp, le haya escrito antes al bot o no.',
   parameters: {
     type: 'object',
     properties: {
-      to: { type: 'string', description: 'Nombre de un contacto guardado, o número de teléfono.' },
+      to: { type: 'string', description: 'Nombre de un contacto guardado, o número de teléfono con indicativo.' },
       message: { type: 'string', description: 'Texto a enviar.' },
     },
     required: ['to', 'message'],
@@ -22,6 +23,7 @@ export const sendMessageTool: Tool = {
     if (!to || !message) return 'Error: falta destinatario o mensaje.';
 
     let targetJid: string;
+    let isNewRawNumber = false;
     if (isJid(to)) {
       targetJid = to;
     } else {
@@ -32,12 +34,39 @@ export const sendMessageTool: Tool = {
         return `Hay varios contactos que coinciden con "${to}": ${matches.map((m) => m.name).join(', ')}. Sé más específico.`;
       } else if (/^[\d\s()+-]{6,}$/.test(to)) {
         targetJid = phoneToJid(to);
+        isNewRawNumber = true;
       } else {
         return `No encontré ningún contacto llamado "${to}". Guárdalo primero con add_contact o dame su número.`;
       }
     }
 
-    await ctx.wa.sendText(targetJid, message);
+    // A saved contact (or an explicit jid) was already validated when it was added/first seen -
+    // but a raw number typed just now might not be real/complete, and sendText() won't
+    // necessarily throw for that (WhatsApp can silently swallow sends to a bad jid). Verify it
+    // first so we never claim "enviado" when nothing actually went out.
+    if (isNewRawNumber) {
+      const exists = await ctx.wa.checkOnWhatsApp(targetJid);
+      console.log('[TOOL] send_message: verificacion de %s -> existe=%s', targetJid, exists === null ? 'no se pudo verificar' : exists);
+      if (exists === false) {
+        return `Ese número (${to}) no parece tener WhatsApp. Revisa que esté completo con el indicativo del país (ej. 57 para Colombia, sin el +).`;
+      }
+    }
+
+    console.log('[TOOL] send_message: enviando a %s...', targetJid);
+    try {
+      await ctx.wa.sendText(targetJid, message);
+      console.log('[TOOL] send_message: sock.sendMessage() confirmo el envio a %s sin error.', targetJid);
+    } catch (err) {
+      console.error('[TOOL] send_message: fallo el envio a %s:', targetJid, (err as Error).message);
+      return `No se pudo enviar el mensaje a ${to}: ${(err as Error).message}`;
+    }
+
+    // First time writing to a raw number that worked - save it as a contact so it's easy to
+    // reach again by name/number next time, instead of a one-off.
+    if (isNewRawNumber) {
+      contactsRepo.upsert(ctx.userId, to, targetJid, null);
+    }
+
     return `Mensaje enviado a ${to}.`;
   },
 };

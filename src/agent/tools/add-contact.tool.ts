@@ -28,7 +28,14 @@ export const addContactTool: Tool = {
 
     // Best-effort right away: confirm the number is real, and cache its lid if it has one, so
     // sending to them later (even if they never write first) works from the get-go.
-    const [exists] = await Promise.all([ctx.wa.checkOnWhatsApp(jid), ctx.wa.prefetchLid(jid)]);
+    const [exists, lid] = await Promise.all([ctx.wa.checkOnWhatsApp(jid), ctx.wa.prefetchLid(jid)]);
+    console.log(
+      '[TOOL] add_contact: verificacion de "%s" (%s) -> existe=%s, lid=%s',
+      name,
+      jid,
+      exists === null ? 'no se pudo verificar' : exists,
+      lid ?? '(no encontrado)',
+    );
 
     if (exists === false) {
       return (

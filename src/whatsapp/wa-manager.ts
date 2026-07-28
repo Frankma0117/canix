@@ -204,6 +204,13 @@ export class WaManager {
 
         const name = m.pushName || undefined;
 
+        // Mark it read (blue ticks) right as we start actually handling it - mirrors a person
+        // opening the chat and reading the message before typing a reply. Best-effort: a failed
+        // read receipt shouldn't stop the message from being answered.
+        await sock.readMessages([m.key]).catch((err) => {
+          console.error('[WA] No se pudo marcar como leido:', (err as Error).message);
+        });
+
         try {
           await this.handler?.({ jid, name, text: text.trim(), fromAudio });
         } catch (err) {
@@ -226,24 +233,20 @@ export class WaManager {
   }
 
   /**
-   * Resolves a phone-number jid to its @lid if one is known or resolvable, so sending still
-   * works for people who've never written to the bot first. Sending straight to a phone jid can
-   * fail for accounts WhatsApp already routes by lid - Baileys can look that mapping up live via
-   * the USync protocol (the same thing `onWhatsApp` uses under the hood) when it isn't cached
-   * yet, instead of only learning it passively from incoming traffic (see 'lid-mapping.update').
-   * Returns the input unchanged for anything that isn't a plain phone jid, or if resolution fails.
-   */
-  private async resolveSendTarget(jid: string): Promise<string> {
-    const lid = await this.prefetchLid(jid);
-    return lid ?? jid;
-  }
-
-  /**
    * Actively looks up and persists a phone jid's @lid (if WhatsApp has one for it), instead of
-   * only waiting to learn it passively from that person's incoming traffic. Safe/cheap to call
-   * eagerly right after saving a contact or granting access - do this so the lookup has already
-   * happened by the time you actually need to message them (see add-contact.tool.ts,
-   * grant-access.tool.ts). Returns the lid if found, or null if unknown/unresolvable/unconnected.
+   * only waiting to learn it passively from that person's incoming traffic. Used to enrich
+   * contacts/users records for identification purposes (see add-contact.tool.ts,
+   * grant-access.tool.ts, bot-manager's incoming-sender resolution).
+   *
+   * Deliberately NOT used to pick the *send* target anymore (see sendText/sendAudio below) - an
+   * earlier version of this code forced every send through a lid resolved this way, on the theory
+   * that phone-jid sends could fail for lid-primary accounts. In practice that made things worse:
+   * real traffic showed messages only actually arrived for people who'd already written to the
+   * bot (whose lid we'd learned from a real, live conversation - see the 'lid-mapping.update'
+   * listener), while a *speculatively queried* lid for someone who'd never messaged first would
+   * get accepted by sendMessage() with no error, yet silently never arrive. Baileys already knows
+   * how to route a plain phone-jid send correctly on its own; forcing our own guessed lid in front
+   * of it was actively harmful for exactly the "message someone cold" case that matters most here.
    */
   async prefetchLid(jid: string): Promise<string | null> {
     if (!this.sock || !jid.endsWith('@s.whatsapp.net')) return null;
@@ -277,18 +280,39 @@ export class WaManager {
     }
   }
 
-  /** Sends a text message to a JID (e.g. 573001234567@s.whatsapp.net). */
+  /**
+   * WhatsApp requires a "trusted_contact" privacy token to exist between you and a jid for
+   * messages to reliably reach them - Baileys normally issues this itself, but only as a
+   * fire-and-forget call made AFTER the message is already sent (see messages-send.js), which
+   * races the very first message to someone new against the token actually landing server-side.
+   * Awaiting it here first closes that race for a first-contact send; it's a no-op-ish cheap call
+   * for someone already trusted (an existing conversation), so it's safe to do on every send.
+   */
+  private async ensurePrivacyToken(jid: string): Promise<void> {
+    if (!this.sock || jid.endsWith('@g.us') || jid === 'status@broadcast') return;
+    try {
+      await this.sock.issuePrivacyTokens([jid]);
+    } catch (err) {
+      // Best-effort - if this fails we still attempt the actual send below rather than blocking it.
+      console.error('[WA] No se pudo emitir el token de privacidad para %s:', jid, (err as Error).message);
+    }
+  }
+
+  /** Sends a text message to a JID (e.g. 573001234567@s.whatsapp.net) - sent exactly as given,
+   *  no lid substitution (see prefetchLid's comment for why). */
   async sendText(jid: string, text: string): Promise<void> {
     if (!this.sock) throw new Error('WhatsApp no esta conectado');
-    const target = await this.resolveSendTarget(jid);
-    await this.sock.sendMessage(target, { text });
+    await this.ensurePrivacyToken(jid);
+    console.log('[WA] Enviando texto a %s', jid);
+    await this.sock.sendMessage(jid, { text });
   }
 
   /** Sends a WhatsApp voice note (ogg/opus, played inline like a recorded ptt message). */
   async sendAudio(jid: string, audio: Buffer): Promise<void> {
     if (!this.sock) throw new Error('WhatsApp no esta conectado');
-    const target = await this.resolveSendTarget(jid);
-    await this.sock.sendMessage(target, { audio, mimetype: 'audio/ogg; codecs=opus', ptt: true });
+    await this.ensurePrivacyToken(jid);
+    console.log('[WA] Enviando audio a %s', jid);
+    await this.sock.sendMessage(jid, { audio, mimetype: 'audio/ogg; codecs=opus', ptt: true });
   }
 
   /** Briefly shows "typing..." (feedback to the user). */

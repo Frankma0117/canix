@@ -36,10 +36,16 @@ export const contactsRepo = {
     return this.getByJid(userId, jid)!;
   },
 
-  /** The jid to actually send to: prefer the lid once known (sending via the phone jid alone can
-   *  fail for some accounts/privacy settings - see wa-manager.ts's lid-mapping.update handling). */
+  /**
+   * The jid to actually send to: always the phone jid, never the stored lid. Baileys already
+   * routes a plain phone-jid send correctly on its own - substituting a lid we resolved
+   * separately (rather than one learned from that person's own live traffic) turned out to
+   * silently break messaging anyone who hadn't written to the bot first (see
+   * wa-manager.ts's prefetchLid comment for the full story). `contact.lid` is still stored and
+   * useful for *identifying* a contact, just not for choosing where to send.
+   */
   sendTarget(contact: Contact): string {
-    return contact.lid ?? contact.jid;
+    return contact.jid;
   },
 
   /** Called from wa-manager.ts when WhatsApp reveals a phone<->lid pairing - applies to every
