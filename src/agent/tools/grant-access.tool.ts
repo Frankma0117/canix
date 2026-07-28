@@ -6,11 +6,12 @@ export const grantAccessTool: Tool = {
   name: 'grant_access',
   description:
     'Le da acceso al bot a otra persona (solo el administrador puede usar esto). Cada persona tiene su propia ' +
-    'configuración, recordatorios, rutinas, contactos, etc. — completamente separados, nada se comparte entre usuarios.',
+    'configuración, recordatorios, rutinas, contactos, etc. — completamente separados, nada se comparte entre usuarios. ' +
+    'Pide siempre el número CON indicativo de país (ej. 57 para Colombia) si no es obvio de dónde es.',
   parameters: {
     type: 'object',
     properties: {
-      phone: { type: 'string', description: 'Número de WhatsApp de la persona (cualquier formato).' },
+      phone: { type: 'string', description: 'Número de WhatsApp con indicativo de país (ej. 573001234567).' },
       name: { type: 'string', description: 'Nombre de la persona.' },
     },
     required: ['phone', 'name'],
@@ -25,6 +26,17 @@ export const grantAccessTool: Tool = {
 
     const jid = phoneToJid(phone);
     const user = usersRepo.create({ jid, name, role: 'user' });
+
+    // Best-effort right away: confirm the number is real, and cache its lid so the bot can reach
+    // them (and you can message them, if saved as a contact too) from the get-go.
+    const [exists] = await Promise.all([ctx.wa.checkOnWhatsApp(jid), ctx.wa.prefetchLid(jid)]);
+
+    if (exists === false) {
+      return (
+        `Le di acceso a "${user.name}" (#${user.id}), pero ese número no parece tener WhatsApp. ` +
+        'Revisa que esté completo con el indicativo del país (ej. 57 para Colombia, sin el +).'
+      );
+    }
     return `Listo, "${user.name}" ya tiene acceso al bot con su propia configuración (#${user.id}).`;
   },
 };

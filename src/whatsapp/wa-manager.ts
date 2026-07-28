@@ -234,7 +234,19 @@ export class WaManager {
    * Returns the input unchanged for anything that isn't a plain phone jid, or if resolution fails.
    */
   private async resolveSendTarget(jid: string): Promise<string> {
-    if (!this.sock || !jid.endsWith('@s.whatsapp.net')) return jid;
+    const lid = await this.prefetchLid(jid);
+    return lid ?? jid;
+  }
+
+  /**
+   * Actively looks up and persists a phone jid's @lid (if WhatsApp has one for it), instead of
+   * only waiting to learn it passively from that person's incoming traffic. Safe/cheap to call
+   * eagerly right after saving a contact or granting access - do this so the lookup has already
+   * happened by the time you actually need to message them (see add-contact.tool.ts,
+   * grant-access.tool.ts). Returns the lid if found, or null if unknown/unresolvable/unconnected.
+   */
+  async prefetchLid(jid: string): Promise<string | null> {
+    if (!this.sock || !jid.endsWith('@s.whatsapp.net')) return null;
     try {
       const lid = await this.sock.signalRepository.lidMapping.getLIDForPN(jid);
       if (lid) {
@@ -245,7 +257,24 @@ export class WaManager {
     } catch (err) {
       console.error('[WA] No se pudo resolver el lid de %s:', jid, (err as Error).message);
     }
-    return jid;
+    return null;
+  }
+
+  /**
+   * Checks whether a phone jid is an actual, reachable WhatsApp account - useful right when
+   * saving a contact/granting access, to catch a bad number (missing indicativo, typo, etc.)
+   * immediately instead of only failing later when someone finally tries to message it.
+   * Returns null (unknown, never blocks on it) if unconnected or the check itself fails.
+   */
+  async checkOnWhatsApp(jid: string): Promise<boolean | null> {
+    if (!this.sock) return null;
+    try {
+      const results = await this.sock.onWhatsApp(jid);
+      return results?.[0]?.exists ?? null;
+    } catch (err) {
+      console.error('[WA] No se pudo verificar %s en WhatsApp:', jid, (err as Error).message);
+      return null;
+    }
   }
 
   /** Sends a text message to a JID (e.g. 573001234567@s.whatsapp.net). */

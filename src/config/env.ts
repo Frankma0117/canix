@@ -21,6 +21,11 @@ export const env = {
 
   wa: {
     session: process.env.WA_SESSION ?? 'personal-agent',
+    // Prepended to phone numbers that look "local" (given without a country code) when building a
+    // WhatsApp jid - e.g. a bare 10-digit Colombian mobile number becomes 57XXXXXXXXXX. Without
+    // this, a number saved/typed without indicativo produces an invalid jid that silently can't
+    // be messaged (see util/jid.ts). Set to '' to disable and always use numbers exactly as given.
+    defaultCountryCode: process.env.DEFAULT_COUNTRY_CODE ?? '57',
   },
 
   audio: {
