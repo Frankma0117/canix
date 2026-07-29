@@ -1,6 +1,7 @@
 import type { Tool } from '../tool-registry.js';
 import { usersRepo } from '../../db/repositories/users.repo.js';
 import { phoneToJid } from '../../util/jid.js';
+import { ensureDailyAgendaReminder } from '../agenda.js';
 
 export const grantAccessTool: Tool = {
   name: 'grant_access',
@@ -26,6 +27,7 @@ export const grantAccessTool: Tool = {
 
     const jid = phoneToJid(phone);
     const user = usersRepo.create({ jid, name, role: 'user' });
+    ensureDailyAgendaReminder(user.id, user.jid);
 
     // Best-effort right away: confirm the number is real, and cache its lid so the bot can reach
     // them (and you can message them, if saved as a contact too) from the get-go.

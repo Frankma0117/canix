@@ -48,7 +48,16 @@ export interface Contact {
 
 export type ReminderStatus = 'pending' | 'executed' | 'failed' | 'cancelled';
 export type RecurrenceFreq = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
-export type ReminderKind = 'reminder' | 'important_date' | 'flexible' | 'routine_reminder' | 'routine_checkin';
+export type ReminderKind =
+  | 'reminder'
+  | 'important_date'
+  | 'flexible'
+  | 'routine_reminder'
+  | 'routine_checkin'
+  // One per user, auto-created on bootstrap/grant_access: fires daily at MORNING_SUMMARY_TIME.
+  // Its `message` is ignored at send time - task-scheduler.ts builds the agenda text fresh every
+  // time from that day's routines/todos/reminders (see agent/agenda.ts).
+  | 'daily_agenda';
 
 export interface Reminder {
   id: number;
@@ -56,6 +65,9 @@ export interface Reminder {
   // Set only for the reminder_time / checkin pair auto-created by a routine (kind
   // 'routine_reminder' / 'routine_checkin') - deleting the routine cascades and removes both.
   todo_id: number | null;
+  // Optional reference to a saved link (see save_link/list_links) - lets a reminder point at
+  // "haz el ejercicio de tal link" without repeating the URL in the message.
+  link_id: number | null;
   message: string;
   run_at: string; // 'YYYY-MM-DD HH:mm:ss' local time, next fire time
   target_jid: string | null; // null = owner
@@ -79,6 +91,9 @@ export interface Todo {
   user_id: number;
   title: string;
   category_id: number | null;
+  // Optional reference to a saved link (see save_link/list_links) - e.g. "mañana a la hora de
+  // almuerzo hago el ejercicio de tal link" attaches that link to the todo/routine.
+  link_id: number | null;
   scope: TodoScope;
   due_date: string | null; // 'YYYY-MM-DD'
   recurrence_freq: RecurrenceFreq | null; // used when scope === 'routine'

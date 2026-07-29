@@ -14,12 +14,21 @@ simplificada para uso personal: sin multi-negocio, con SQLite en vez de MySQL.
   o a un contacto guardado.
 - 🔗 **Links por categoría**: le envías un link por WhatsApp y el bot te pregunta en qué
   categoría guardarlo y una breve descripción antes de guardarlo. Las categorías las creas tú
-  (por chat o desde el panel).
+  (por chat o desde el panel) - el bot nunca inventa ni crea una categoría nueva por su cuenta,
+  siempre te muestra las que ya existen primero. También puedes programar una tarea/recordatorio
+  sobre un link ya guardado ("mañana a la hora de almuerzo hago el ejercicio de tal link", "a las
+  6am recuérdame lo de ese video") y queda la referencia al link, no solo el texto.
 - 🎲 **Consultar una categoría**: "dame algo de comidas" te sugiere un link al azar de esa
   categoría (prioriza los que no has usado hace tiempo).
 - 🗑️ **Eliminar links**: le pides borrar uno, el bot lo busca y confirma antes de eliminarlo.
 - ✅ **Tareas**: "hoy" (solo para el día), "para después" (sin fecha fija) y "rutinas" (hábitos
-  recurrentes con seguimiento diario/semanal y racha).
+  recurrentes con seguimiento diario/semanal y racha). Se pueden **editar** (título, categoría,
+  fecha, hora, duración) sin borrarlas y volver a crearlas - por chat (`edit_todo`/`edit_routine`,
+  editar una rutina conserva su historial/racha) o desde el panel.
+- 🌅 **Agenda del día**: cada mañana (hora configurable, `MORNING_SUMMARY_TIME`) te llega
+  automáticamente el orden del día completo - rutinas, recordatorios y tareas de hoy, empezando
+  por lo primero. Pregúntalo en cualquier momento ("¿qué tengo hoy?", "¿cómo va mi día?") y también
+  te dice qué rutina ya pasó de hora sin marcarse, para que la reprogrames el mismo día si quieres.
 - 💬 **Enviar mensajes**: "envíale un mensaje a Juan diciéndole que..." — busca el contacto
   guardado y lo envía por WhatsApp.
 - 📅 **Fechas importantes**: cumpleaños, aniversarios, reuniones que no puedes dejar pasar. A
@@ -145,6 +154,12 @@ Internamente esto crea la rutina más dos recordatorios ligados a ella (`kind: r
 `routine_checkin`, ver `src/agent/routine-setup.ts`) — al borrar la rutina, ambos se borran
 también (`ON DELETE CASCADE`). Responder la pregunta de chequeo no marca nada automáticamente:
 dile al bot que sí/no cumpliste y él llama `checkin_routine` por ti.
+
+Si ya marcaste la rutina como cumplida (por ejemplo la hiciste antes de la hora avisada), el
+chequeo automático de esa hora **no vuelve a preguntar** — el scheduler revisa si ya hay un
+`habit_log` del día antes de mandar la pregunta (ver `task-scheduler.ts`). Y si quieres cambiarle
+la hora, duración, nombre o categoría a una rutina ya creada, usa `edit_routine` (o el lápiz en el
+panel) en vez de borrarla y crearla de nuevo - así no pierdes el historial ni la racha.
 
 ## Audio: transcripción y voz (100% local)
 
@@ -348,7 +363,8 @@ reducen mucho ese riesgo:
 | Variable | Descripción | Default |
 |----------|-------------|---------|
 | `PORT` | Puerto del panel/API | `3000` |
-| `TIMEZONE` | Zona horaria IANA | `America/Bogota` |
+| `TIMEZONE` | Zona horaria IANA (todo el bot usa esta para "ahora"/"hoy") | `America/Bogota` |
+| `MORNING_SUMMARY_TIME` | Hora `HH:mm` de la agenda automática diaria | `06:30` |
 | `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY` / `AI_BASE_URL` | Config de IA (compatible OpenAI) | — |
 | `DB_PATH` | Ruta del archivo SQLite | `./data/app.db` |
 | `WA_SESSION` | Nombre de la sesión de Baileys (carpeta en `auth_info/`) | `personal-agent` |

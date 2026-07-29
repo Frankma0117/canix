@@ -4,6 +4,7 @@ import { usersRepo } from '../db/repositories/users.repo.js';
 import { messagesRepo } from '../db/repositories/messages.repo.js';
 import { resetAllUserData } from '../db/reset-user.js';
 import { processMessage } from '../agent/ai-agent.js';
+import { ensureDailyAgendaReminder } from '../agent/agenda.js';
 import { env } from '../config/env.js';
 import { sleep, typingDelayMs, readingPauseMs } from '../util/human-delay.js';
 import { synthesizeVoiceNote } from '../audio/tts.js';
@@ -94,6 +95,7 @@ export class BotManager {
       if (!usersRepo.hasAny()) {
         const admin = usersRepo.create({ jid: phoneJid, name: name ?? null, role: 'admin' });
         if (lid) usersRepo.setLid(phoneJid, lid);
+        ensureDailyAgendaReminder(admin.id, admin.jid);
         console.log(
           '[SETUP] Administrador registrado: "%s" (jid=%s%s) #%d',
           name ?? '(sin nombre)',

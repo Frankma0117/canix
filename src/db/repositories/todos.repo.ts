@@ -37,12 +37,13 @@ export const todosRepo = {
       recurrenceFreq?: RecurrenceFreq | null;
       reminderTime?: string | null;
       durationMinutes?: number | null;
+      linkId?: number | null;
     },
   ): number {
     const info = db
       .prepare(
-        `INSERT INTO todos (user_id, title, category_id, scope, due_date, recurrence_freq, reminder_time, duration_minutes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO todos (user_id, title, category_id, scope, due_date, recurrence_freq, reminder_time, duration_minutes, link_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         userId,
@@ -53,8 +54,28 @@ export const todosRepo = {
         fields.recurrenceFreq ?? null,
         fields.reminderTime ?? null,
         fields.durationMinutes ?? null,
+        fields.linkId ?? null,
       );
     return Number(info.lastInsertRowid);
+  },
+
+  /** Partial update for a plain (non-routine) todo's editable fields - use updateRoutineWithReminders
+   *  for scope 'routine' instead, since that also needs to move its linked reminders. */
+  update(
+    userId: number,
+    id: number,
+    fields: { title?: string; categoryId?: number | null; dueDate?: string | null; linkId?: number | null },
+  ): void {
+    const current = this.getById(userId, id);
+    if (!current) return;
+    db.prepare('UPDATE todos SET title = ?, category_id = ?, due_date = ?, link_id = ? WHERE id = ? AND user_id = ?').run(
+      fields.title ?? current.title,
+      fields.categoryId === undefined ? current.category_id : fields.categoryId,
+      fields.dueDate === undefined ? current.due_date : fields.dueDate,
+      fields.linkId === undefined ? current.link_id : fields.linkId,
+      id,
+      userId,
+    );
   },
 
   complete(userId: number, id: number): void {

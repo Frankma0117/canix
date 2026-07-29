@@ -1,6 +1,7 @@
 import type { Tool } from '../tool-registry.js';
 import { remindersRepo } from '../../db/repositories/reminders.repo.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
+import { linksRepo } from '../../db/repositories/links.repo.js';
 import type { ReminderStatus } from '../../types/index.js';
 
 export const listRemindersTool: Tool = {
@@ -34,6 +35,11 @@ export const listRemindersTool: Tool = {
       : remindersRepo.listAll(ctx.userId, status);
 
     if (reminders.length === 0) return 'No hay recordatorios que coincidan.';
-    return reminders.map((r) => `#${r.id} ${r.run_at} — ${r.message}`).join('\n');
+    return reminders
+      .map((r) => {
+        const link = r.link_id ? linksRepo.getById(ctx.userId, r.link_id) : undefined;
+        return `#${r.id} ${r.run_at} — ${r.message}${link ? ` 🔗${link.url}` : ''}`;
+      })
+      .join('\n');
   },
 };

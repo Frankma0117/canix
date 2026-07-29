@@ -8,6 +8,10 @@ export const env = {
 
   timezone: process.env.TIMEZONE ?? 'America/Bogota',
 
+  // Hora 'HH:mm' (en TIMEZONE) a la que cada usuario recibe su agenda del día automáticamente -
+  // ver ensureDailyAgendaReminder() en agent/agenda.ts.
+  morningSummaryTime: process.env.MORNING_SUMMARY_TIME ?? '06:30',
+
   ai: {
     provider: process.env.AI_PROVIDER ?? 'openai',
     model: process.env.AI_MODEL ?? 'gpt-4o-mini',

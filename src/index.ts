@@ -7,6 +7,8 @@ import { BotManager } from './whatsapp/bot-manager.js';
 import { TaskScheduler } from './scheduler/task-scheduler.js';
 import { createServer } from './server/http-server.js';
 import { getAdminToken } from './server/auth.js';
+import { usersRepo } from './db/repositories/users.repo.js';
+import { ensureDailyAgendaReminder } from './agent/agenda.js';
 
 quietLibsignalLogs();
 
@@ -20,6 +22,11 @@ async function main() {
 
   // 2) Agent tools
   registerTools();
+
+  // Backfill: users bootstrapped before the daily-agenda feature existed never got their
+  // recurring reminder created (that only happens at bootstrap/grant_access time) - this makes
+  // every upgrade pick it up too. No-op for users that already have one (see agent/agenda.ts).
+  for (const user of usersRepo.listAll()) ensureDailyAgendaReminder(user.id, user.jid);
 
   // 3) WhatsApp: single dedicated session
   const bot = new BotManager();

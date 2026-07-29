@@ -2,6 +2,7 @@ import type { Tool } from '../tool-registry.js';
 import { remindersRepo } from '../../db/repositories/reminders.repo.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
 import { contactsRepo } from '../../db/repositories/contacts.repo.js';
+import { linksRepo } from '../../db/repositories/links.repo.js';
 import { normalizeDate, parseWall, nowLocal } from '../../util/datetime.js';
 import { phoneToJid, isJid } from '../../util/jid.js';
 import type { RecurrenceFreq } from '../../types/index.js';
@@ -11,7 +12,10 @@ const FREQS: RecurrenceFreq[] = ['none', 'daily', 'weekly', 'monthly', 'yearly']
 export const scheduleReminderTool: Tool = {
   name: 'schedule_reminder',
   description:
-    'Programa un recordatorio para un momento futuro (fecha/hora concreta, o "en 5 minutos", o repetitivo). Calcula tú la fecha/hora exacta a partir de la fecha/hora actual que tienes en el prompt.',
+    'Programa un recordatorio para un momento futuro (fecha/hora concreta, o "en 5 minutos", o repetitivo). Calcula ' +
+    'tú la fecha/hora exacta a partir de la fecha/hora actual que tienes en el prompt. Si el recordatorio es sobre ' +
+    'un link ya guardado (ej. "a las 6am recuérdame el ejercicio de tal link"), búscalo primero (list_links/search) ' +
+    'y pasa su id en link_id.',
   parameters: {
     type: 'object',
     properties: {
@@ -34,6 +38,7 @@ export const scheduleReminderTool: Tool = {
         type: 'number',
         description: 'Cada cuántas unidades de recurrence_freq se repite (ej. 2 = cada 2 semanas). Default 1.',
       },
+      link_id: { type: 'number', description: 'Id de un link ya guardado que este recordatorio referencia (opcional).' },
     },
     required: ['run_at', 'message'],
     additionalProperties: false,
@@ -64,6 +69,13 @@ export const scheduleReminderTool: Tool = {
       categoryId = categoriesRepo.findOrCreate(ctx.userId, String(args.category)).id;
     }
 
+    let linkId: number | null = null;
+    if (args.link_id !== undefined) {
+      const link = linksRepo.getById(ctx.userId, Number(args.link_id));
+      if (!link) return `No encontré el link #${args.link_id}.`;
+      linkId = link.id;
+    }
+
     const freq = FREQS.includes(args.recurrence_freq as RecurrenceFreq)
       ? (args.recurrence_freq as RecurrenceFreq)
       : 'none';
@@ -76,6 +88,7 @@ export const scheduleReminderTool: Tool = {
       categoryId,
       recurrenceFreq: freq,
       recurrenceInterval: interval,
+      linkId,
     });
 
     const recurrenceNote = freq !== 'none' ? ` (se repite cada ${interval} ${freq})` : '';

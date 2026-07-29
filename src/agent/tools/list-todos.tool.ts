@@ -1,6 +1,7 @@
 import type { Tool } from '../tool-registry.js';
 import { todosRepo } from '../../db/repositories/todos.repo.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
+import { linksRepo } from '../../db/repositories/links.repo.js';
 import type { TodoScope, TodoStatus } from '../../types/index.js';
 
 export const listTodosTool: Tool = {
@@ -33,11 +34,14 @@ export const listTodosTool: Tool = {
 
     if (todos.length === 0) return 'No hay tareas que coincidan.';
     return todos
-      .map(
-        (t) =>
+      .map((t) => {
+        const link = t.link_id ? linksRepo.getById(ctx.userId, t.link_id) : undefined;
+        return (
           `#${t.id} ${t.title}${t.due_date ? ` (${t.due_date})` : ''} [${t.scope}]` +
-          (t.scope === 'routine' && t.reminder_time ? ` ⏰${t.reminder_time} (${t.duration_minutes}min)` : ''),
-      )
+          (t.scope === 'routine' && t.reminder_time ? ` ⏰${t.reminder_time} (${t.duration_minutes}min)` : '') +
+          (link ? ` 🔗${link.url}` : '')
+        );
+      })
       .join('\n');
   },
 };

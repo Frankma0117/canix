@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, Check, ListTodo } from 'lucide-react';
+import { Plus, Trash2, Check, ListTodo, Pencil } from 'lucide-react';
 import { useApi } from '../lib/api.ts';
 import type { Category, Todo, TodoScope } from '../lib/types.ts';
 import { Card } from '../components/ui/Card.tsx';
@@ -15,6 +15,7 @@ export function TodosPage({ scope, title }: { scope: TodoScope; title: string })
   const [todos, setTodos] = useState<Todo[] | null>(null);
   const [showDone, setShowDone] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<Todo | null>(null);
   const [taskTitle, setTaskTitle] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -69,6 +70,32 @@ export function TodosPage({ scope, title }: { scope: TodoScope; title: string })
     await load();
   }
 
+  function openEdit(t: Todo) {
+    setEditing(t);
+    setTaskTitle(t.title);
+    setCategoryId(t.category_id ? String(t.category_id) : '');
+    setDueDate(t.due_date ?? '');
+  }
+
+  async function handleSaveEdit() {
+    if (!editing || !taskTitle.trim()) return;
+    setSaving(true);
+    try {
+      await api.put(`/api/todos/${editing.id}`, {
+        title: taskTitle.trim(),
+        category_id: categoryId ? Number(categoryId) : null,
+        due_date: dueDate || null,
+      });
+      setEditing(null);
+      setTaskTitle('');
+      setCategoryId('');
+      setDueDate('');
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-3xl p-8">
       <div className="mb-6 flex items-center justify-between">
@@ -121,6 +148,13 @@ export function TodosPage({ scope, title }: { scope: TodoScope; title: string })
                   </button>
                 )}
                 <button
+                  onClick={() => openEdit(t)}
+                  className="rounded-lg p-2 text-gray-dark hover:bg-gray-medium/60 dark:hover:bg-white/10"
+                  aria-label="Editar"
+                >
+                  <Pencil size={16} />
+                </button>
+                <button
                   onClick={() => handleDelete(t.id)}
                   className="rounded-lg p-2 text-gray-dark hover:bg-error/10 hover:text-error"
                   aria-label="Eliminar"
@@ -157,6 +191,35 @@ export function TodosPage({ scope, title }: { scope: TodoScope; title: string })
             </div>
             <Button className="w-full" onClick={handleCreate} disabled={saving || !taskTitle.trim()}>
               {saving ? 'Guardando…' : 'Crear tarea'}
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {editing && (
+        <Modal title="Editar tarea" onClose={() => setEditing(null)}>
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="todo-edit-title">Qué hay que hacer</Label>
+              <Input id="todo-edit-title" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} autoFocus />
+            </div>
+            <div>
+              <Label htmlFor="todo-edit-cat">Categoría (opcional)</Label>
+              <Select id="todo-edit-cat" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                <option value="">(sin categoría)</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="todo-edit-date">Fecha (opcional)</Label>
+              <Input id="todo-edit-date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+            <Button className="w-full" onClick={handleSaveEdit} disabled={saving || !taskTitle.trim()}>
+              {saving ? 'Guardando…' : 'Guardar cambios'}
             </Button>
           </div>
         </Modal>

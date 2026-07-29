@@ -26,7 +26,13 @@ export interface Contact {
 
 export type ReminderStatus = 'pending' | 'executed' | 'failed' | 'cancelled';
 export type RecurrenceFreq = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
-export type ReminderKind = 'reminder' | 'important_date' | 'flexible' | 'routine_reminder' | 'routine_checkin';
+export type ReminderKind =
+  | 'reminder'
+  | 'important_date'
+  | 'flexible'
+  | 'routine_reminder'
+  | 'routine_checkin'
+  | 'daily_agenda';
 
 export interface Reminder {
   id: number;
@@ -34,6 +40,7 @@ export interface Reminder {
   run_at: string;
   target_jid: string | null;
   category_id: number | null;
+  link_id: number | null;
   recurrence_freq: RecurrenceFreq;
   recurrence_interval: number;
   status: ReminderStatus;
@@ -50,6 +57,7 @@ export interface Todo {
   id: number;
   title: string;
   category_id: number | null;
+  link_id: number | null;
   scope: TodoScope;
   due_date: string | null;
   recurrence_freq: RecurrenceFreq | null;

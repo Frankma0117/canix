@@ -1,5 +1,7 @@
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
+import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { nowLocal, addMinutes, addMonths, addDays, dateOnly, randomTimeOnDate } from '../util/datetime.js';
+import { buildAgendaMessage } from '../agent/agenda.js';
 import type { WaManager } from '../whatsapp/wa-manager.js';
 import type { Reminder } from '../types/index.js';
 
@@ -35,6 +37,11 @@ function nextRunAt(reminder: Reminder): string | undefined {
  */
 export class TaskScheduler {
   private timer: NodeJS.Timeout | undefined;
+  // Guards against overlapping ticks: if a send is slow (many due reminders, a network hiccup)
+  // and takes longer than intervalMs, setInterval fires again anyway - without this flag both
+  // ticks would fetch the same still-'pending' reminder and send it twice. This was the main
+  // cause of a reminder occasionally going out 2-3 times.
+  private running = false;
 
   constructor(
     private wa: WaManager,
@@ -54,33 +61,74 @@ export class TaskScheduler {
 
   private async tick(): Promise<void> {
     if (!this.wa.isConnected()) return; // retried on the next tick once connected
+    if (this.running) return; // previous tick still in flight - never process the same due set twice
+    this.running = true;
 
-    let due: Reminder[];
     try {
-      due = remindersRepo.listDue(nowLocal());
-    } catch (err) {
-      console.error('[SCHEDULER] Error consultando recordatorios:', (err as Error).message);
-      return;
-    }
-
-    for (const reminder of due) {
+      let due: Reminder[];
       try {
+        due = remindersRepo.listDue(nowLocal());
+      } catch (err) {
+        console.error('[SCHEDULER] Error consultando recordatorios:', (err as Error).message);
+        return;
+      }
+
+      for (const reminder of due) {
         const target = reminder.target_jid;
         if (!target) continue;
-        // Plain reminders get a generic ⏰ prefix; every other kind already carries its own
-        // emoji/wording at creation time (important_date, flexible, routine_reminder/checkin -
-        // see schedule-important-date.tool.ts, schedule-flexible-reminder.tool.ts, routine-setup.ts).
-        const prefix = reminder.kind === 'reminder' ? '⏰ ' : '';
-        await this.wa.sendText(target, `${prefix}${reminder.message}`);
-        console.log('[SCHEDULER] Recordatorio #%d enviado a %s.', reminder.id, target);
+
+        // A routine check-in whose habit was already marked done for the day (e.g. the user did
+        // it early and called checkin_routine before this reminder was due) shouldn't ask again -
+        // just move it along silently instead of re-asking a question that's already answered.
+        if (reminder.kind === 'routine_checkin' && reminder.todo_id) {
+          const log = habitLogsRepo.getForDate(reminder.todo_id, dateOnly(reminder.run_at));
+          if (log?.done) {
+            const next = nextRunAt(reminder);
+            if (next) remindersRepo.reschedule(reminder.id, next);
+            else remindersRepo.markStatus(reminder.id, 'executed');
+            console.log(
+              '[SCHEDULER] Chequeo #%d omitido (rutina #%d ya marcada el %s).',
+              reminder.id,
+              reminder.todo_id,
+              dateOnly(reminder.run_at),
+            );
+            continue;
+          }
+        }
 
         const next = nextRunAt(reminder);
-        if (next) remindersRepo.reschedule(reminder.id, next);
-        else remindersRepo.markStatus(reminder.id, 'executed');
-      } catch (err) {
-        console.error('[SCHEDULER] Recordatorio #%d falló:', reminder.id, (err as Error).message);
-        remindersRepo.markStatus(reminder.id, 'failed');
+        try {
+          // Commit the state transition BEFORE sending: if the process crashes/restarts in the
+          // gap between a successful send and this write, a reminder left 'pending' with run_at
+          // in the past would resend (and duplicate) on the next boot's first tick. Writing first
+          // means a crash can at most *skip* a resend, never repeat one - a much better trade-off
+          // than the duplicate-message complaint this used to cause.
+          if (next) remindersRepo.reschedule(reminder.id, next);
+          else remindersRepo.markStatus(reminder.id, 'executed');
+
+          // kind 'daily_agenda' ignores its stored `message` and builds the day's agenda fresh at
+          // send time (see agent/agenda.ts) - that's the whole point, it must reflect whatever
+          // was checked in/added/edited since it was created, not a stale snapshot.
+          const text =
+            reminder.kind === 'daily_agenda'
+              ? buildAgendaMessage(reminder.user_id)
+              : // Plain reminders get a generic ⏰ prefix; every other kind already carries its own
+                // emoji/wording at creation time (important_date, flexible, routine_reminder/checkin -
+                // see schedule-important-date.tool.ts, schedule-flexible-reminder.tool.ts, routine-setup.ts).
+                `${reminder.kind === 'reminder' ? '⏰ ' : ''}${reminder.message}`;
+
+          await this.wa.sendText(target, text);
+          console.log('[SCHEDULER] Recordatorio #%d enviado a %s.', reminder.id, target);
+        } catch (err) {
+          console.error('[SCHEDULER] Recordatorio #%d falló:', reminder.id, (err as Error).message);
+          // Best-effort only: a one-off reminder gets marked failed so it's visible; a recurring
+          // one was already moved to its next occurrence above, which just means this particular
+          // occurrence is skipped rather than risking a duplicate by retrying it here.
+          if (!next) remindersRepo.markStatus(reminder.id, 'failed');
+        }
       }
+    } finally {
+      this.running = false;
     }
   }
 }

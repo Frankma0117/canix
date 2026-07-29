@@ -156,6 +156,10 @@ export function initSchema(): void {
   ensureColumn('reminders', 'kind', "kind TEXT NOT NULL DEFAULT 'reminder'");
   ensureColumn('reminders', 'window_start', 'window_start TEXT');
   ensureColumn('reminders', 'window_end', 'window_end TEXT');
+  // Optional link back to a saved link (see links table) so a todo/reminder can reference "haz el
+  // ejercicio de tal link" without duplicating the URL - set only via chat (add_todo/schedule_reminder).
+  ensureColumn('todos', 'link_id', 'link_id INTEGER REFERENCES links(id) ON DELETE SET NULL');
+  ensureColumn('reminders', 'link_id', 'link_id INTEGER REFERENCES links(id) ON DELETE SET NULL');
 }
 
 /** Adds a column to `table` if it doesn't already exist (table/column names here are always our own constants, never user input). */

@@ -52,13 +52,14 @@ export const remindersRepo = {
       windowStart?: string | null;
       windowEnd?: string | null;
       todoId?: number | null;
+      linkId?: number | null;
     },
   ): number {
     const info = db
       .prepare(
         `INSERT INTO reminders
-         (user_id, message, run_at, target_jid, category_id, recurrence_freq, recurrence_interval, kind, window_start, window_end, todo_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (user_id, message, run_at, target_jid, category_id, recurrence_freq, recurrence_interval, kind, window_start, window_end, todo_id, link_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         userId,
@@ -72,8 +73,39 @@ export const remindersRepo = {
         fields.windowStart ?? null,
         fields.windowEnd ?? null,
         fields.todoId ?? null,
+        fields.linkId ?? null,
       );
     return Number(info.lastInsertRowid);
+  },
+
+  /** Partial update for a plain reminder's editable fields (message/time/recurrence/target/category). */
+  update(
+    userId: number,
+    id: number,
+    fields: {
+      message?: string;
+      runAt?: string;
+      targetJid?: string | null;
+      categoryId?: number | null;
+      recurrenceFreq?: RecurrenceFreq;
+      recurrenceInterval?: number;
+    },
+  ): void {
+    const current = this.getById(userId, id);
+    if (!current) return;
+    db.prepare(
+      `UPDATE reminders SET message = ?, run_at = ?, target_jid = ?, category_id = ?,
+       recurrence_freq = ?, recurrence_interval = ?, status = 'pending' WHERE id = ? AND user_id = ?`,
+    ).run(
+      fields.message ?? current.message,
+      fields.runAt ?? current.run_at,
+      fields.targetJid === undefined ? current.target_jid : fields.targetJid,
+      fields.categoryId === undefined ? current.category_id : fields.categoryId,
+      fields.recurrenceFreq ?? current.recurrence_freq,
+      fields.recurrenceInterval ?? current.recurrence_interval,
+      id,
+      userId,
+    );
   },
 
   /** Reschedules a recurring reminder to its next run_at, keeping it pending. */

@@ -12,7 +12,7 @@ import { todosRepo } from '../db/repositories/todos.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { rewardsRepo } from '../db/repositories/rewards.repo.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
-import { createRoutineWithReminders } from '../agent/routine-setup.js';
+import { createRoutineWithReminders, updateRoutineWithReminders } from '../agent/routine-setup.js';
 import { todayLocal } from '../util/datetime.js';
 import { phoneToJid } from '../util/jid.js';
 import { requireAdminToken, validateLogin } from './auth.js';
@@ -197,6 +197,27 @@ export function createServer(bot: BotManager): Express {
       res.json(categoryId ? remindersRepo.listByCategory(adminId, categoryId, status) : remindersRepo.listAll(adminId, status));
     }),
   );
+  app.put(
+    '/api/reminders/:id',
+    h((req, res) => {
+      const adminId = getAdminId();
+      const id = Number(req.params.id);
+      const reminder = remindersRepo.getById(adminId, id);
+      if (!reminder) return res.status(404).json({ error: 'No existe ese recordatorio' });
+      if (reminder.kind === 'routine_reminder' || reminder.kind === 'routine_checkin' || reminder.kind === 'daily_agenda') {
+        return res.status(400).json({ error: 'Este recordatorio pertenece a una rutina o es automático - edítalo desde su rutina' });
+      }
+      const { message, run_at, category_id, recurrence_freq, recurrence_interval } = req.body ?? {};
+      remindersRepo.update(adminId, id, {
+        message: message || undefined,
+        runAt: run_at || undefined,
+        categoryId: category_id === undefined ? undefined : category_id,
+        recurrenceFreq: recurrence_freq || undefined,
+        recurrenceInterval: recurrence_interval === undefined ? undefined : Number(recurrence_interval),
+      });
+      res.json({ ok: true });
+    }),
+  );
   app.post(
     '/api/reminders/:id/cancel',
     h((req, res) => {
@@ -253,6 +274,36 @@ export function createServer(bot: BotManager): Express {
         recurrenceFreq: (recurrence_freq as RecurrenceFreq) ?? null,
       });
       res.json({ id });
+    }),
+  );
+  app.put(
+    '/api/todos/:id',
+    h((req, res) => {
+      const adminId = getAdminId();
+      const id = Number(req.params.id);
+      const todo = todosRepo.getById(adminId, id);
+      if (!todo) return res.status(404).json({ error: 'No existe esa tarea' });
+
+      const { title, category_id, due_date, recurrence_freq, reminder_time, duration_minutes } = req.body ?? {};
+
+      if (todo.scope === 'routine') {
+        const ok = updateRoutineWithReminders(adminId, id, {
+          title: title || undefined,
+          categoryId: category_id === undefined ? undefined : category_id,
+          freq: recurrence_freq === 'weekly' ? 'weekly' : recurrence_freq === 'daily' ? 'daily' : undefined,
+          reminderTime: reminder_time || undefined,
+          durationMinutes: duration_minutes === undefined ? undefined : Number(duration_minutes),
+        });
+        if (!ok) return res.status(404).json({ error: 'No existe esa rutina' });
+        return res.json({ ok: true });
+      }
+
+      todosRepo.update(adminId, id, {
+        title: title || undefined,
+        categoryId: category_id === undefined ? undefined : category_id,
+        dueDate: due_date === undefined ? undefined : due_date,
+      });
+      res.json({ ok: true });
     }),
   );
   app.post(
