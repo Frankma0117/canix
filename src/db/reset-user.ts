@@ -9,7 +9,18 @@ import { db } from './pool.js';
  */
 export function resetAllUserData(userId: number): void {
   const tx = db.transaction(() => {
-    for (const table of ['messages', 'rewards_punishments', 'reminders', 'todos', 'links', 'contacts', 'categories']) {
+    for (const table of [
+      'messages',
+      'rewards_punishments',
+      'reminders',
+      'exercises',
+      'meal_plans',
+      'recipes',
+      'todos',
+      'links',
+      'contacts',
+      'categories',
+    ]) {
       db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).run(userId);
     }
   });

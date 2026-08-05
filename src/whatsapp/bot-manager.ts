@@ -5,6 +5,7 @@ import { messagesRepo } from '../db/repositories/messages.repo.js';
 import { resetAllUserData } from '../db/reset-user.js';
 import { processMessage } from '../agent/ai-agent.js';
 import { ensureDailyAgendaReminder } from '../agent/agenda.js';
+import { legacyAdminToken } from '../server/auth.js';
 import { env } from '../config/env.js';
 import { sleep, typingDelayMs, readingPauseMs } from '../util/human-delay.js';
 import { synthesizeVoiceNote } from '../audio/tts.js';
@@ -96,6 +97,10 @@ export class BotManager {
         const admin = usersRepo.create({ jid: phoneJid, name: name ?? null, role: 'admin' });
         if (lid) usersRepo.setLid(phoneJid, lid);
         ensureDailyAgendaReminder(admin.id, admin.jid);
+        // Seeded from the legacy single-token source (env ADMIN_TOKEN or auth_info/admin-token.txt)
+        // rather than a fresh random one, so whatever's already printed/configured for the admin
+        // works immediately - see server/auth.ts.
+        usersRepo.setPanelToken(admin.id, legacyAdminToken());
         console.log(
           '[SETUP] Administrador registrado: "%s" (jid=%s%s) #%d',
           name ?? '(sin nombre)',

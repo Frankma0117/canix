@@ -40,8 +40,24 @@ class ToolRegistry {
     return this.tools.get(name);
   }
 
-  toOpenAITools(): OpenAI.Chat.Completions.ChatCompletionTool[] {
-    return [...this.tools.values()].map((t) => ({
+  /** All registered tool names - used to validate/list what a user can be restricted to (see set-user-permissions.tool.ts). */
+  names(): string[] {
+    return [...this.tools.keys()];
+  }
+
+  all(): Tool[] {
+    return [...this.tools.values()];
+  }
+
+  /**
+   * OpenAI tool defs to hand the model this turn. When `allowed` is given (a restricted user - see
+   * users.allowed_tools), only those tools are included - this is also a direct token-saving win:
+   * a user limited to a handful of tools sends a much smaller `tools` array every single turn
+   * instead of the full ~30-tool catalog.
+   */
+  toOpenAITools(allowed?: string[] | null): OpenAI.Chat.Completions.ChatCompletionTool[] {
+    const tools = allowed ? [...this.tools.values()].filter((t) => allowed.includes(t.name)) : [...this.tools.values()];
+    return tools.map((t) => ({
       type: 'function' as const,
       function: {
         name: t.name,

@@ -53,13 +53,16 @@ export const remindersRepo = {
       windowEnd?: string | null;
       todoId?: number | null;
       linkId?: number | null;
+      intervalSeconds?: number | null;
+      repeatCount?: number | null;
+      withAudio?: boolean;
     },
   ): number {
     const info = db
       .prepare(
         `INSERT INTO reminders
-         (user_id, message, run_at, target_jid, category_id, recurrence_freq, recurrence_interval, kind, window_start, window_end, todo_id, link_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (user_id, message, run_at, target_jid, category_id, recurrence_freq, recurrence_interval, kind, window_start, window_end, todo_id, link_id, interval_seconds, repeat_count, with_audio)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         userId,
@@ -74,8 +77,24 @@ export const remindersRepo = {
         fields.windowEnd ?? null,
         fields.todoId ?? null,
         fields.linkId ?? null,
+        fields.intervalSeconds ?? null,
+        fields.repeatCount ?? null,
+        fields.withAudio ? 1 : 0,
       );
     return Number(info.lastInsertRowid);
+  },
+
+  /** Advances an interval reminder (kind 'interval') to its next occurrence, or marks it executed
+   *  once repeat_count is reached - always bumping fired_count either way (see task-scheduler.ts). */
+  advanceInterval(id: number, nextRunAt: string | null): void {
+    if (nextRunAt) {
+      db.prepare("UPDATE reminders SET run_at = ?, status = 'pending', fired_count = fired_count + 1 WHERE id = ?").run(
+        nextRunAt,
+        id,
+      );
+    } else {
+      db.prepare("UPDATE reminders SET status = 'executed', fired_count = fired_count + 1 WHERE id = ?").run(id);
+    }
   },
 
   /** Partial update for a plain reminder's editable fields (message/time/recurrence/target/category). */

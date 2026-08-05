@@ -47,8 +47,9 @@ simplificada para uso personal: sin multi-negocio, con SQLite en vez de MySQL.
   premios/castigos se pueden borrar por chat (`delete_routine`, `delete_reminder`,
   `delete_contact`, `delete_category`, `delete_reward_punishment`) o desde el panel.
 - 📊 **Panel web** (`admin-panel/`): ver/editar categorías, links, tareas, rutinas (con racha),
-  premios/castigos, recordatorios y contactos — siempre sobre tus propios datos como admin (el
-  panel es solo tuyo; el resto de usuarios interactúan solo por WhatsApp).
+  premios/castigos, recordatorios y contactos. Cada persona con acceso (admin o quien recibió
+  `grant_access`) tiene su propio token aleatorio y su propio panel, con solo sus datos - la
+  gestión de la conexión de WhatsApp sigue siendo solo del administrador.
 
 El bot habla como un amigo cercano (no como un asistente formal) — ver `BASE_PROMPT` en
 `src/agent/ai-agent.ts` si quieres ajustar el tono a tu propia forma de hablar. Además, cada
@@ -96,8 +97,9 @@ start.cmd
 - La primera vez se crea el esquema SQLite automáticamente.
 - En la consola aparece un **QR**: escanéalo desde WhatsApp (del número dedicado al bot) →
   *Dispositivos vinculados*.
-- El panel web queda en **http://localhost:3000** (token de acceso impreso en consola, o defínelo
-  en `ADMIN_TOKEN`).
+- El panel web queda en **http://localhost:3000** (token del administrador impreso en consola, o
+  defínelo en `ADMIN_TOKEN`). Cada persona a la que le des acceso con `grant_access` recibe su
+  propio token aleatorio por WhatsApp para entrar a su propio panel.
 - El **primer número que le escriba al bot** por WhatsApp queda registrado como **administrador**.
   Desde ahí puedes darle acceso a otras personas con `grant_access` — ver "Multi-usuario" abajo.
 
@@ -132,9 +134,14 @@ ve lo del otro, ni siquiera el administrador.
   (`grant_access`, solo funciona si lo pide el admin).
 - **Quitar acceso**: *"quítale el acceso a Juan"* (`revoke_access`) — borra toda su información,
   no se puede deshacer.
-- **Ver quién tiene acceso**: *"¿quién tiene acceso al bot?"* (`list_users`).
-- El panel web (`admin-panel/`) siempre muestra y edita **los datos del administrador** — el resto
-  de usuarios solo interactúan por WhatsApp, no tienen acceso al panel.
+- **Ver quién tiene acceso**: *"¿quién tiene acceso al bot?"* (`list_users`) - también muestra si
+  alguien tiene funciones restringidas (ver `set_user_permissions` más abajo).
+- **Restringir funciones**: *"que Juan solo pueda guardar y ver recordatorios"*
+  (`set_user_permissions`) — limita a alguien (nunca al admin) a un subconjunto de herramientas;
+  *"dale acceso completo a Juan de nuevo"* para quitar la restricción.
+- El panel web (`admin-panel/`) muestra y edita **los datos de quien inició sesión con su token** -
+  cada persona con acceso (admin o no) tiene el suyo propio y solo ve lo suyo. La gestión de la
+  conexión de WhatsApp en sí (página "Conexión") sigue siendo solo del administrador.
 
 **LID de WhatsApp**: además del número de teléfono, el bot guarda el `@lid` (el identificador
 "privado" que WhatsApp usa cada vez más en vez del número) de usuarios y contactos apenas lo
@@ -231,7 +238,7 @@ src/
                  2 recordatorios), tools/
   audio/         ffmpeg.ts (conversión), stt.ts (Vosk), tts.ts (Piper) - todo local, sin IA
   scheduler/     task-scheduler.ts (recordatorios, con recurrencia, cruza todos los usuarios)
-  server/        API Express + panel + auth (panel siempre opera sobre el usuario admin)
+  server/        API Express + panel + auth (cada request se resuelve a su propio usuario por token)
   util/          fechas (datetime.ts), jid.ts, human-delay.ts (pausa "escribiendo")
 admin-panel/     panel admin (React + Vite + Tailwind), compila a public/
 public/          estatico servido por Express (build del panel)
@@ -368,7 +375,9 @@ reducen mucho ese riesgo:
 | `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY` / `AI_BASE_URL` | Config de IA (compatible OpenAI) | — |
 | `DB_PATH` | Ruta del archivo SQLite | `./data/app.db` |
 | `WA_SESSION` | Nombre de la sesión de Baileys (carpeta en `auth_info/`) | `personal-agent` |
-| `ADMIN_TOKEN` | Token de acceso al panel. Vacío = se genera solo | — |
+| `ADMIN_TOKEN` | Token del administrador para el panel. Vacío = se genera solo. Cada otro usuario recibe el suyo automáticamente | — |
+| `AI_HISTORY_TURNS` | Mensajes pasados que se reenvían como contexto en cada llamada a la IA | `14` |
+| `PANEL_URL` | URL pública del panel (opcional, solo para el mensaje de bienvenida a nuevos usuarios) | — |
 | `VOSK_MODEL_PATH` | Carpeta del modelo de Vosk (transcripción de audios). Ver sección Audio | `./models/vosk-es` |
 | `PIPER_BIN_PATH` | Ruta al binario de Piper (respuesta por voz). Vacío = desactivado | — |
 | `PIPER_VOICE_PATH` | Ruta al modelo de voz `.onnx` de Piper | — |

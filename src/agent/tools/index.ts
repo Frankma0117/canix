@@ -24,6 +24,7 @@ import { checkinRoutineTool } from './checkin-routine.tool.js';
 import { routineProgressTool } from './routine-progress.tool.js';
 import { scheduleImportantDateTool } from './schedule-important-date.tool.js';
 import { scheduleFlexibleReminderTool } from './schedule-flexible-reminder.tool.js';
+import { scheduleIntervalReminderTool } from './schedule-interval-reminder.tool.js';
 import { registerRewardPunishmentTool } from './register-reward-punishment.tool.js';
 import { listRewardsPunishmentsTool } from './list-rewards-punishments.tool.js';
 import { deleteContactTool } from './delete-contact.tool.js';
@@ -34,6 +35,20 @@ import { deleteReminderTool } from './delete-reminder.tool.js';
 import { grantAccessTool } from './grant-access.tool.js';
 import { revokeAccessTool } from './revoke-access.tool.js';
 import { listUsersTool } from './list-users.tool.js';
+import { setUserPermissionsTool } from './set-user-permissions.tool.js';
+import { listAvailableToolsTool } from './list-available-tools.tool.js';
+import { addExerciseTool } from './add-exercise.tool.js';
+import { listExercisesTool } from './list-exercises.tool.js';
+import { editExerciseTool } from './edit-exercise.tool.js';
+import { deleteExerciseTool } from './delete-exercise.tool.js';
+import { planMealTool } from './plan-meal.tool.js';
+import { listMealPlanTool } from './list-meal-plan.tool.js';
+import { deleteMealPlanTool } from './delete-meal-plan.tool.js';
+import { saveRecipeTool } from './save-recipe.tool.js';
+import { listRecipesTool } from './list-recipes.tool.js';
+import { getRecipeTool } from './get-recipe.tool.js';
+import { deleteRecipeTool } from './delete-recipe.tool.js';
+import { regeneratePanelTokenTool } from './regenerate-panel-token.tool.js';
 
 /** Registers every tool the agent can use. Called once at boot. */
 export function registerTools(): void {
@@ -62,6 +77,7 @@ export function registerTools(): void {
   registry.register(routineProgressTool);
   registry.register(scheduleImportantDateTool);
   registry.register(scheduleFlexibleReminderTool);
+  registry.register(scheduleIntervalReminderTool);
   registry.register(registerRewardPunishmentTool);
   registry.register(listRewardsPunishmentsTool);
   registry.register(deleteContactTool);
@@ -72,4 +88,18 @@ export function registerTools(): void {
   registry.register(grantAccessTool);
   registry.register(revokeAccessTool);
   registry.register(listUsersTool);
+  registry.register(setUserPermissionsTool);
+  registry.register(listAvailableToolsTool);
+  registry.register(addExerciseTool);
+  registry.register(listExercisesTool);
+  registry.register(editExerciseTool);
+  registry.register(deleteExerciseTool);
+  registry.register(planMealTool);
+  registry.register(listMealPlanTool);
+  registry.register(deleteMealPlanTool);
+  registry.register(saveRecipeTool);
+  registry.register(listRecipesTool);
+  registry.register(getRecipeTool);
+  registry.register(deleteRecipeTool);
+  registry.register(regeneratePanelTokenTool);
 }

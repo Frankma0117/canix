@@ -38,10 +38,12 @@ function Gate() {
 
 function Shell() {
   const [section, setSection] = useState<SectionId>('today');
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
 
   return (
     <div className="flex min-h-screen bg-gray-light dark:bg-[#141110]">
-      <Sidebar active={section} onNavigate={setSection} />
+      <Sidebar active={section} onNavigate={setSection} isAdmin={isAdmin} />
       <main className="flex-1 overflow-y-auto">
         {section === 'today' && <TodosPage scope="today" title="Pendientes de hoy" />}
         {section === 'later' && <TodosPage scope="later" title="Para después" />}
@@ -51,7 +53,9 @@ function Shell() {
         {section === 'links' && <LinksPage />}
         {section === 'categories' && <CategoriesPage />}
         {section === 'contacts' && <ContactsPage />}
-        {section === 'connection' && <ConnectionPage />}
+        {/* Connection page manages the single shared WhatsApp session - admin only (the backend
+            rejects it for anyone else too, see requirePanelAdmin in server/auth.ts). */}
+        {section === 'connection' && isAdmin && <ConnectionPage />}
       </main>
     </div>
   );

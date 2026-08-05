@@ -129,6 +129,50 @@ export function initSchema(): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- Structured breakdown of a routine (scope='routine' todo) into individual exercises with
+    -- sets/reps/weight/duration - the routine itself still owns the habit-tracking/reminder side
+    -- (see todos/habit_logs), this just attaches "what exactly to do" to it.
+    CREATE TABLE IF NOT EXISTS exercises (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      todo_id INTEGER NOT NULL REFERENCES todos(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      sets INTEGER,
+      reps INTEGER,
+      seconds INTEGER,
+      weight_kg REAL,
+      order_index INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- What to eat on a given date/meal slot - pure planning/reference, no reminder wired to it.
+    CREATE TABLE IF NOT EXISTS meal_plans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      plan_date TEXT NOT NULL,
+      meal_slot TEXT NOT NULL CHECK (meal_slot IN ('desayuno', 'almuerzo', 'cena', 'onces')),
+      title TEXT NOT NULL,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Recipes the user asked to save after a suggest-from-ingredients chat reply (see BASE_PROMPT) -
+    -- suggesting one costs no extra tokens (the model just answers in text), only saving does.
+    CREATE TABLE IF NOT EXISTS recipes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      ingredients TEXT NOT NULL,
+      instructions TEXT NOT NULL,
+      category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_exercises_todo ON exercises(todo_id);
+    CREATE INDEX IF NOT EXISTS idx_exercises_user ON exercises(user_id);
+    CREATE INDEX IF NOT EXISTS idx_meal_plans_user_date ON meal_plans(user_id, plan_date);
+    CREATE INDEX IF NOT EXISTS idx_recipes_user ON recipes(user_id);
+
     CREATE INDEX IF NOT EXISTS idx_links_category ON links(category_id);
     CREATE INDEX IF NOT EXISTS idx_reminders_status_run_at ON reminders(status, run_at);
     CREATE INDEX IF NOT EXISTS idx_todos_scope_status ON todos(scope, status);
@@ -160,6 +204,20 @@ export function initSchema(): void {
   // ejercicio de tal link" without duplicating the URL - set only via chat (add_todo/schedule_reminder).
   ensureColumn('todos', 'link_id', 'link_id INTEGER REFERENCES links(id) ON DELETE SET NULL');
   ensureColumn('reminders', 'link_id', 'link_id INTEGER REFERENCES links(id) ON DELETE SET NULL');
+  // JSON array of tool names this user is limited to (see set-user-permissions.tool.ts /
+  // agent/ai-agent.ts). NULL (the default for every existing row) means unrestricted - nothing
+  // changes for the admin or anyone already granted access until the admin explicitly restricts them.
+  ensureColumn('users', 'allowed_tools', 'allowed_tools TEXT');
+  // Short-cycle repeating alerts (kind 'interval') - see schedule-interval-reminder.tool.ts.
+  ensureColumn('reminders', 'interval_seconds', 'interval_seconds INTEGER');
+  ensureColumn('reminders', 'repeat_count', 'repeat_count INTEGER');
+  ensureColumn('reminders', 'fired_count', 'fired_count INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('reminders', 'with_audio', 'with_audio INTEGER NOT NULL DEFAULT 0');
+  // Per-user random panel token (see server/auth.ts / users.repo.ts's ensurePanelToken). Partial
+  // unique index (not a UNIQUE column constraint - SQLite's ALTER TABLE ADD COLUMN can't add one)
+  // so multiple not-yet-backfilled NULLs are fine, but no two real tokens can collide.
+  ensureColumn('users', 'panel_token', 'panel_token TEXT');
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_panel_token ON users(panel_token) WHERE panel_token IS NOT NULL');
 }
 
 /** Adds a column to `table` if it doesn't already exist (table/column names here are always our own constants, never user input). */

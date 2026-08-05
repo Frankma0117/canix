@@ -57,8 +57,8 @@ export function LockScreen() {
         </Button>
 
         <p className="mt-4 text-center text-xs text-gray-dark">
-          El token se genera al iniciar el servidor y se imprime en la consola
-          (o se define en <code>ADMIN_TOKEN</code>).
+          Cada persona con acceso al bot tiene su propio token - pídeselo al administrador o
+          revisa el mensaje de bienvenida que te mandó el bot por WhatsApp.
         </p>
       </form>
     </div>

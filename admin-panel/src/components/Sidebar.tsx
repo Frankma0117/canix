@@ -17,11 +17,16 @@ const ITEMS: { id: SectionId; label: string; icon: typeof CalendarClock }[] = [
 export function Sidebar({
   active,
   onNavigate,
+  isAdmin,
 }: {
   active: SectionId;
   onNavigate: (section: SectionId) => void;
+  isAdmin: boolean;
 }) {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  // The WhatsApp connection is a single shared session, not per-client data - only the admin
+  // manages it (the backend rejects it for anyone else too, see requirePanelAdmin).
+  const items = isAdmin ? ITEMS : ITEMS.filter((i) => i.id !== 'connection');
 
   return (
     <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-gray-medium/70 bg-white px-3 py-5 dark:border-white/10 dark:bg-[#181411]">
@@ -33,12 +38,12 @@ export function Sidebar({
           <p className="font-display text-base font-semibold leading-none text-ink dark:text-white">
             Canix
           </p>
-          <p className="text-xs text-gray-dark">Panel personal</p>
+          <p className="text-xs text-gray-dark">{user?.name ?? 'Panel personal'}</p>
         </div>
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto">
-        {ITEMS.map(({ id, label, icon: Icon }) => {
+        {items.map(({ id, label, icon: Icon }) => {
           const isActive = active === id;
           return (
             <button

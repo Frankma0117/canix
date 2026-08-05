@@ -2,6 +2,7 @@ import type { Tool } from '../tool-registry.js';
 import { usersRepo } from '../../db/repositories/users.repo.js';
 import { phoneToJid } from '../../util/jid.js';
 import { ensureDailyAgendaReminder } from '../agenda.js';
+import { env } from '../../config/env.js';
 
 export const grantAccessTool: Tool = {
   name: 'grant_access',
@@ -28,6 +29,7 @@ export const grantAccessTool: Tool = {
     const jid = phoneToJid(phone);
     const user = usersRepo.create({ jid, name, role: 'user' });
     ensureDailyAgendaReminder(user.id, user.jid);
+    const panelToken = usersRepo.ensurePanelToken(user.id);
 
     // Best-effort right away: confirm the number is real, and cache its lid so the bot can reach
     // them (and you can message them, if saved as a contact too) from the get-go.
@@ -39,6 +41,13 @@ export const grantAccessTool: Tool = {
         'Revisa que esté completo con el indicativo del país (ej. 57 para Colombia, sin el +).'
       );
     }
-    return `Listo, "${user.name}" ya tiene acceso al bot con su propia configuración (#${user.id}).`;
+
+    // Their own panel token - separate from yours, only ever shows their own data (see server/auth.ts).
+    const panelLine = env.panelUrl ? `${env.panelUrl} con este token: ${panelToken}` : `este token: ${panelToken}`;
+    await ctx.wa
+      .sendText(jid, `¡Hola ${user.name}! Ya tienes acceso a este asistente. Si quieres, también puedes entrar al panel web en ${panelLine}`)
+      .catch((err) => console.error('[TOOL] grant_access: no se pudo avisar el token del panel a %s:', jid, (err as Error).message));
+
+    return `Listo, "${user.name}" ya tiene acceso al bot con su propia configuración (#${user.id}) y le avisé su token del panel.`;
   },
 };

@@ -23,7 +23,11 @@ export const scheduleReminderTool: Tool = {
         type: 'string',
         description: "Momento exacto de la próxima ejecución, 'YYYY-MM-DD HH:mm' (hora local).",
       },
-      message: { type: 'string', description: 'Texto del recordatorio a enviar.' },
+      message: {
+        type: 'string',
+        description:
+          'Texto del recordatorio, en tono natural y cercano (no como ítem de lista). Si el usuario dio el motivo, inclúyelo tal cual - nunca lo inventes.',
+      },
       category: { type: 'string', description: 'Categoría opcional para clasificar el recordatorio.' },
       target: {
         type: 'string',

@@ -13,6 +13,12 @@ export interface User {
   lid: string | null;
   name: string | null;
   role: UserRole;
+  // JSON-encoded array of tool names this user is limited to (see set-user-permissions.tool.ts).
+  // NULL = unrestricted (full access) - always the case for the admin.
+  allowed_tools: string | null;
+  // Random per-user token for the web panel (see server/auth.ts) - each granted user gets their
+  // own, scoped to only their own data, instead of everyone sharing one admin-only token.
+  panel_token: string | null;
   created_at: string;
 }
 
@@ -57,7 +63,11 @@ export type ReminderKind =
   // One per user, auto-created on bootstrap/grant_access: fires daily at MORNING_SUMMARY_TIME.
   // Its `message` is ignored at send time - task-scheduler.ts builds the agenda text fresh every
   // time from that day's routines/todos/reminders (see agent/agenda.ts).
-  | 'daily_agenda';
+  | 'daily_agenda'
+  // Short-cycle repeating alert (e.g. "avísame cada 30s, 5 veces, para cambiar de serie") - see
+  // interval_seconds/repeat_count/fired_count below and schedule-interval-reminder.tool.ts. Stop
+  // it early with cancel_reminder/delete_reminder like any other pending reminder.
+  | 'interval';
 
 export interface Reminder {
   id: number;
@@ -80,6 +90,14 @@ export interface Reminder {
   // on every recurrence instead of repeating at the same clock time (see task-scheduler.ts).
   window_start: string | null;
   window_end: string | null;
+  // Only used for kind === 'interval': how many seconds between each fire, and the total number of
+  // times to fire before stopping on its own (fired_count tracks progress - see task-scheduler.ts).
+  interval_seconds: number | null;
+  repeat_count: number | null;
+  fired_count: number;
+  // Only used for kind === 'interval': also send a local-TTS voice note alongside the text on each
+  // fire (no AI/tokens - see audio/tts.ts). Silently a no-op if Piper isn't configured.
+  with_audio: number;
   created_at: string;
 }
 
@@ -130,6 +148,42 @@ export interface Owner {
   id: 1;
   jid: string;
   name: string | null;
+  created_at: string;
+}
+
+/** One exercise within a routine (scope='routine' todo) - see exercises.repo.ts. */
+export interface Exercise {
+  id: number;
+  user_id: number;
+  todo_id: number;
+  name: string;
+  sets: number | null;
+  reps: number | null;
+  seconds: number | null; // for time-based exercises (plancha, etc.) instead of reps
+  weight_kg: number | null;
+  order_index: number;
+  created_at: string;
+}
+
+export type MealSlot = 'desayuno' | 'almuerzo' | 'cena' | 'onces';
+
+export interface MealPlan {
+  id: number;
+  user_id: number;
+  plan_date: string; // 'YYYY-MM-DD'
+  meal_slot: MealSlot;
+  title: string;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface Recipe {
+  id: number;
+  user_id: number;
+  title: string;
+  ingredients: string;
+  instructions: string;
+  category_id: number | null;
   created_at: string;
 }
 

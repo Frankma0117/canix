@@ -2,6 +2,7 @@ import { todosRepo } from '../db/repositories/todos.repo.js';
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { db } from '../db/pool.js';
 import { todayLocal, addMinutes, addDays, parseWall, nowLocal } from '../util/datetime.js';
+import { routineStartMessage, routineCheckinMessage } from '../util/motivational.js';
 import type { RecurrenceFreq, Reminder } from '../types/index.js';
 
 /** Pushes a same-day run_at forward one cycle if it's already in the past, so a routine set up
@@ -44,7 +45,7 @@ export function createRoutineWithReminders(
   const checkinRunAt = addMinutes(reminderRunAt, fields.durationMinutes);
 
   remindersRepo.create(userId, {
-    message: `⏰ Hora de: ${fields.title}`,
+    message: routineStartMessage(fields.title),
     runAt: reminderRunAt,
     targetJid,
     categoryId: fields.categoryId,
@@ -54,7 +55,7 @@ export function createRoutineWithReminders(
     todoId: id,
   });
   remindersRepo.create(userId, {
-    message: `✅ ¿Cumpliste con "${fields.title}"? Cuéntame para marcarlo (rutina #${id}).`,
+    message: routineCheckinMessage(fields.title),
     runAt: checkinRunAt,
     targetJid,
     categoryId: fields.categoryId,
@@ -112,7 +113,7 @@ export function updateRoutineWithReminders(
     const checkinRunAt = addMinutes(reminderRunAt, durationMinutes);
     if (reminderLink) {
       remindersRepo.update(userId, reminderLink.id, {
-        message: `⏰ Hora de: ${title}`,
+        message: routineStartMessage(title),
         runAt: reminderRunAt,
         categoryId,
         recurrenceFreq: freq,
@@ -120,7 +121,7 @@ export function updateRoutineWithReminders(
     }
     if (checkinLink) {
       remindersRepo.update(userId, checkinLink.id, {
-        message: `✅ ¿Cumpliste con "${title}"? Cuéntame para marcarlo (rutina #${id}).`,
+        message: routineCheckinMessage(title),
         runAt: checkinRunAt,
         categoryId,
         recurrenceFreq: freq,
@@ -129,11 +130,11 @@ export function updateRoutineWithReminders(
   } else {
     // Only title/category changed - keep the existing run_at, just refresh the wording/category.
     if (reminderLink) {
-      remindersRepo.update(userId, reminderLink.id, { message: `⏰ Hora de: ${title}`, categoryId });
+      remindersRepo.update(userId, reminderLink.id, { message: routineStartMessage(title), categoryId });
     }
     if (checkinLink) {
       remindersRepo.update(userId, checkinLink.id, {
-        message: `✅ ¿Cumpliste con "${title}"? Cuéntame para marcarlo (rutina #${id}).`,
+        message: routineCheckinMessage(title),
         categoryId,
       });
     }

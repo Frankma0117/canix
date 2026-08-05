@@ -11,7 +11,11 @@ export const listUsersTool: Tool = {
     const users = usersRepo.listAll();
     if (users.length === 0) return 'No hay usuarios registrados.';
     return users
-      .map((u) => `#${u.id} ${u.name ?? '(sin nombre)'}${u.role === 'admin' ? ' — administrador' : ''}`)
+      .map((u) => {
+        const allowed = usersRepo.getAllowedTools(u);
+        const restriction = u.role === 'admin' ? ' — administrador' : allowed ? ` — restringido a: ${allowed.join(', ')}` : '';
+        return `#${u.id} ${u.name ?? '(sin nombre)'}${restriction}`;
+      })
       .join('\n');
   },
 };

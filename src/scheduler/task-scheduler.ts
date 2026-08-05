@@ -1,7 +1,9 @@
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
-import { nowLocal, addMinutes, addMonths, addDays, dateOnly, randomTimeOnDate } from '../util/datetime.js';
+import { nowLocal, addMinutes, addMonths, addDays, addSeconds, dateOnly, randomTimeOnDate } from '../util/datetime.js';
 import { buildAgendaMessage } from '../agent/agenda.js';
+import { plainReminderPrefix } from '../util/motivational.js';
+import { synthesizeVoiceNote } from '../audio/tts.js';
 import type { WaManager } from '../whatsapp/wa-manager.js';
 import type { Reminder } from '../types/index.js';
 
@@ -77,6 +79,11 @@ export class TaskScheduler {
         const target = reminder.target_jid;
         if (!target) continue;
 
+        if (reminder.kind === 'interval') {
+          await this.handleIntervalReminder(reminder, target);
+          continue;
+        }
+
         // A routine check-in whose habit was already marked done for the day (e.g. the user did
         // it early and called checkin_routine before this reminder was due) shouldn't ask again -
         // just move it along silently instead of re-asking a question that's already answered.
@@ -112,10 +119,12 @@ export class TaskScheduler {
           const text =
             reminder.kind === 'daily_agenda'
               ? buildAgendaMessage(reminder.user_id)
-              : // Plain reminders get a generic ⏰ prefix; every other kind already carries its own
-                // emoji/wording at creation time (important_date, flexible, routine_reminder/checkin -
-                // see schedule-important-date.tool.ts, schedule-flexible-reminder.tool.ts, routine-setup.ts).
-                `${reminder.kind === 'reminder' ? '⏰ ' : ''}${reminder.message}`;
+              : // Plain reminders get a rotating warm/motivational lead-in (see util/motivational.ts) so
+                // they read like a friend's nudge instead of a flat notification; every other kind
+                // already carries its own emoji/wording at creation time (important_date, flexible,
+                // routine_reminder/checkin - see schedule-important-date.tool.ts,
+                // schedule-flexible-reminder.tool.ts, routine-setup.ts).
+                `${reminder.kind === 'reminder' ? `${plainReminderPrefix()} ` : ''}${reminder.message}`;
 
           await this.wa.sendText(target, text);
           console.log('[SCHEDULER] Recordatorio #%d enviado a %s.', reminder.id, target);
@@ -129,6 +138,37 @@ export class TaskScheduler {
       }
     } finally {
       this.running = false;
+    }
+  }
+
+  /**
+   * Handles a kind='interval' reminder (see schedule-interval-reminder.tool.ts): unlike the
+   * daily/weekly/etc. recurrence system, this one manages its own short cadence and stops itself
+   * once repeat_count is reached. Same write-before-send ordering as the main loop, for the same
+   * crash-safety reason (see the comment above in tick()).
+   */
+  private async handleIntervalReminder(reminder: Reminder, target: string): Promise<void> {
+    const firedCountAfter = reminder.fired_count + 1;
+    const done = !reminder.repeat_count || firedCountAfter >= reminder.repeat_count;
+    const next = done ? null : addSeconds(reminder.run_at, reminder.interval_seconds ?? 30);
+
+    try {
+      remindersRepo.advanceInterval(reminder.id, next);
+
+      const counter = reminder.repeat_count ? `${firedCountAfter}/${reminder.repeat_count}` : `${firedCountAfter}`;
+      const closing = done ? ' ✅ ¡Listo, terminaste!' : '';
+      const text = `🔁 ${counter} — ${reminder.message}${closing}`;
+
+      await this.wa.sendText(target, text);
+      console.log('[SCHEDULER] Recordatorio por intervalo #%d enviado a %s (%s).', reminder.id, target, counter);
+
+      if (reminder.with_audio) {
+        const voice = await synthesizeVoiceNote(text).catch(() => null);
+        if (voice) await this.wa.sendAudio(target, voice).catch(() => {});
+      }
+    } catch (err) {
+      console.error('[SCHEDULER] Recordatorio por intervalo #%d falló:', reminder.id, (err as Error).message);
+      if (done) remindersRepo.markStatus(reminder.id, 'failed');
     }
   }
 }

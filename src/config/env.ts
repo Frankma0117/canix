@@ -17,6 +17,9 @@ export const env = {
     model: process.env.AI_MODEL ?? 'gpt-4o-mini',
     apiKey: process.env.AI_API_KEY ?? '',
     baseUrl: process.env.AI_BASE_URL ?? 'https://api.openai.com/v1',
+    // How many past messages (user+assistant turns) to resend as context on every call - the
+    // single biggest lever on input-token cost per message. Lower = cheaper but shorter memory.
+    historyTurns: parseInt(process.env.AI_HISTORY_TURNS ?? '14', 10),
   },
 
   db: {
@@ -50,6 +53,10 @@ export const env = {
   // Admin panel access token. If not set here, the server generates
   // one and saves it to auth_info/admin-token.txt (see src/server/auth.ts).
   adminToken: process.env.ADMIN_TOKEN ?? '',
+
+  // Public URL of the web panel, only used to build the link a newly-granted user gets over
+  // WhatsApp (see grant-access.tool.ts) - purely cosmetic, the API works the same without it.
+  panelUrl: process.env.PANEL_URL ?? '',
 };
 
 export type Env = typeof env;

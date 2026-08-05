@@ -15,23 +15,19 @@ import { usersRepo } from '../db/repositories/users.repo.js';
 import { createRoutineWithReminders, updateRoutineWithReminders } from '../agent/routine-setup.js';
 import { todayLocal } from '../util/datetime.js';
 import { phoneToJid } from '../util/jid.js';
-import { requireAdminToken, validateLogin } from './auth.js';
+import { resolvePanelUser, requirePanelAdmin, findUserByToken } from './auth.js';
 import type { RecurrenceFreq, TodoScope, TodoStatus, ReminderStatus, RewardPunishmentType } from '../types/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(here, '..', '..', 'public');
 
 /**
- * The panel is admin-only (gated by ADMIN_TOKEN) and always operates on the admin's own data -
- * other users only ever interact through WhatsApp chat, never the panel (see grant_access tool).
- * Throws until the admin has bootstrapped (their first message to the bot) - caught by h() below.
+ * Every client (admin or granted user) gets their own random panel token and only ever sees their
+ * own data - resolvePanelUser() middleware (see auth.js) already resolved and attached the owning
+ * user before any route below runs, this just reads it back.
  */
-function getAdminId(): number {
-  const admin = usersRepo.getAdmin();
-  if (!admin) {
-    throw new Error('Aún no hay administrador registrado: escríbele al bot por WhatsApp primero.');
-  }
-  return admin.id;
+function userId(req: Request): number {
+  return req.panelUser!.id;
 }
 
 /** Wraps a handler (sync or async) and forwards thrown/rejected errors to Express as a 500. */
@@ -57,17 +53,29 @@ export function createServer(bot: BotManager): Express {
     '/api/auth/login',
     h((req, res) => {
       const { token } = req.body ?? {};
-      if (!validateLogin(String(token ?? ''))) {
+      const user = findUserByToken(String(token ?? ''));
+      if (!user) {
         res.status(401).json({ error: 'Token invalido' });
         return;
       }
-      res.json({ ok: true });
+      res.json({ ok: true, user: { id: user.id, name: user.name, role: user.role } });
     }),
   );
 
-  app.use('/api', requireAdminToken);
+  app.use('/api', resolvePanelUser);
 
-  // ---------- WhatsApp connection ----------
+  // Lets the panel re-learn who it's logged in as after a page reload (it only persists the raw
+  // token, not the user info from login) without re-prompting for the token.
+  app.get(
+    '/api/auth/me',
+    h((req, res) => {
+      const user = req.panelUser!;
+      res.json({ id: user.id, name: user.name, role: user.role });
+    }),
+  );
+
+  // ---------- WhatsApp connection (admin only - it's a single shared WhatsApp session) ----------
+  app.use('/api/connection', requirePanelAdmin);
   app.get(
     '/api/connection/status',
     h((_req, res) => {
@@ -113,27 +121,27 @@ export function createServer(bot: BotManager): Express {
   );
 
   // ---------- Categories ----------
-  app.get('/api/categories', h((_req, res) => res.json(categoriesRepo.listAll(getAdminId()))));
+  app.get('/api/categories', h((req, res) => res.json(categoriesRepo.listAll(userId(req)))));
   app.post(
     '/api/categories',
     h((req, res) => {
       const { name, description } = req.body ?? {};
       if (!name) return res.status(400).json({ error: 'name requerido' });
-      const id = categoriesRepo.create(getAdminId(), name, description || null);
+      const id = categoriesRepo.create(userId(req), name, description || null);
       res.json({ id });
     }),
   );
   app.put(
     '/api/categories/:id',
     h((req, res) => {
-      categoriesRepo.update(getAdminId(), Number(req.params.id), req.body ?? {});
+      categoriesRepo.update(userId(req), Number(req.params.id), req.body ?? {});
       res.json({ ok: true });
     }),
   );
   app.delete(
     '/api/categories/:id',
     h((req, res) => {
-      categoriesRepo.remove(getAdminId(), Number(req.params.id));
+      categoriesRepo.remove(userId(req), Number(req.params.id));
       res.json({ ok: true });
     }),
   );
@@ -143,7 +151,7 @@ export function createServer(bot: BotManager): Express {
     '/api/links',
     h((req, res) => {
       const categoryId = req.query.categoryId ? Number(req.query.categoryId) : undefined;
-      res.json(linksRepo.listByCategory(getAdminId(), categoryId));
+      res.json(linksRepo.listByCategory(userId(req), categoryId));
     }),
   );
   app.post(
@@ -151,7 +159,7 @@ export function createServer(bot: BotManager): Express {
     h((req, res) => {
       const { url, category_id, title, description } = req.body ?? {};
       if (!url) return res.status(400).json({ error: 'url requerida' });
-      const id = linksRepo.create(getAdminId(), {
+      const id = linksRepo.create(userId(req), {
         url,
         categoryId: category_id ?? null,
         title: title || null,
@@ -163,26 +171,26 @@ export function createServer(bot: BotManager): Express {
   app.delete(
     '/api/links/:id',
     h((req, res) => {
-      linksRepo.remove(getAdminId(), Number(req.params.id));
+      linksRepo.remove(userId(req), Number(req.params.id));
       res.json({ ok: true });
     }),
   );
 
   // ---------- Contacts ----------
-  app.get('/api/contacts', h((_req, res) => res.json(contactsRepo.listAll(getAdminId()))));
+  app.get('/api/contacts', h((req, res) => res.json(contactsRepo.listAll(userId(req)))));
   app.post(
     '/api/contacts',
     h((req, res) => {
       const { name, phone, notes } = req.body ?? {};
       if (!name || !phone) return res.status(400).json({ error: 'name y phone requeridos' });
-      const contact = contactsRepo.upsert(getAdminId(), name, phoneToJid(phone), notes || null);
+      const contact = contactsRepo.upsert(userId(req), name, phoneToJid(phone), notes || null);
       res.json(contact);
     }),
   );
   app.delete(
     '/api/contacts/:id',
     h((req, res) => {
-      contactsRepo.remove(getAdminId(), Number(req.params.id));
+      contactsRepo.remove(userId(req), Number(req.params.id));
       res.json({ ok: true });
     }),
   );
@@ -193,22 +201,22 @@ export function createServer(bot: BotManager): Express {
     h((req, res) => {
       const status = req.query.status as ReminderStatus | undefined;
       const categoryId = req.query.categoryId ? Number(req.query.categoryId) : undefined;
-      const adminId = getAdminId();
-      res.json(categoryId ? remindersRepo.listByCategory(adminId, categoryId, status) : remindersRepo.listAll(adminId, status));
+      const uid = userId(req);
+      res.json(categoryId ? remindersRepo.listByCategory(uid, categoryId, status) : remindersRepo.listAll(uid, status));
     }),
   );
   app.put(
     '/api/reminders/:id',
     h((req, res) => {
-      const adminId = getAdminId();
+      const uid = userId(req);
       const id = Number(req.params.id);
-      const reminder = remindersRepo.getById(adminId, id);
+      const reminder = remindersRepo.getById(uid, id);
       if (!reminder) return res.status(404).json({ error: 'No existe ese recordatorio' });
       if (reminder.kind === 'routine_reminder' || reminder.kind === 'routine_checkin' || reminder.kind === 'daily_agenda') {
         return res.status(400).json({ error: 'Este recordatorio pertenece a una rutina o es automático - edítalo desde su rutina' });
       }
       const { message, run_at, category_id, recurrence_freq, recurrence_interval } = req.body ?? {};
-      remindersRepo.update(adminId, id, {
+      remindersRepo.update(uid, id, {
         message: message || undefined,
         runAt: run_at || undefined,
         categoryId: category_id === undefined ? undefined : category_id,
@@ -221,14 +229,14 @@ export function createServer(bot: BotManager): Express {
   app.post(
     '/api/reminders/:id/cancel',
     h((req, res) => {
-      remindersRepo.cancel(getAdminId(), Number(req.params.id));
+      remindersRepo.cancel(userId(req), Number(req.params.id));
       res.json({ ok: true });
     }),
   );
   app.delete(
     '/api/reminders/:id',
     h((req, res) => {
-      remindersRepo.remove(getAdminId(), Number(req.params.id));
+      remindersRepo.remove(userId(req), Number(req.params.id));
       res.json({ ok: true });
     }),
   );
@@ -240,7 +248,7 @@ export function createServer(bot: BotManager): Express {
       const scope = req.query.scope as TodoScope | undefined;
       const status = req.query.status as TodoStatus | undefined;
       const categoryId = req.query.categoryId ? Number(req.query.categoryId) : undefined;
-      res.json(todosRepo.list(getAdminId(), { scope, status, categoryId }));
+      res.json(todosRepo.list(userId(req), { scope, status, categoryId }));
     }),
   );
   app.post(
@@ -249,14 +257,14 @@ export function createServer(bot: BotManager): Express {
       const { title, category_id, scope, due_date, recurrence_freq, reminder_time, duration_minutes } = req.body ?? {};
       if (!title) return res.status(400).json({ error: 'title requerido' });
 
-      const adminId = getAdminId();
+      const uid = userId(req);
 
       if (scope === 'routine') {
         if (!reminder_time || !duration_minutes) {
           return res.status(400).json({ error: 'Las rutinas necesitan reminder_time y duration_minutes' });
         }
-        const admin = usersRepo.getById(adminId)!;
-        const id = createRoutineWithReminders(adminId, admin.jid, {
+        const owner = usersRepo.getById(uid)!;
+        const id = createRoutineWithReminders(uid, owner.jid, {
           title,
           categoryId: category_id ?? null,
           freq: recurrence_freq === 'weekly' ? 'weekly' : 'daily',
@@ -266,7 +274,7 @@ export function createServer(bot: BotManager): Express {
         return res.json({ id });
       }
 
-      const id = todosRepo.create(adminId, {
+      const id = todosRepo.create(uid, {
         title,
         categoryId: category_id ?? null,
         scope: scope || 'today',
@@ -279,15 +287,15 @@ export function createServer(bot: BotManager): Express {
   app.put(
     '/api/todos/:id',
     h((req, res) => {
-      const adminId = getAdminId();
+      const uid = userId(req);
       const id = Number(req.params.id);
-      const todo = todosRepo.getById(adminId, id);
+      const todo = todosRepo.getById(uid, id);
       if (!todo) return res.status(404).json({ error: 'No existe esa tarea' });
 
       const { title, category_id, due_date, recurrence_freq, reminder_time, duration_minutes } = req.body ?? {};
 
       if (todo.scope === 'routine') {
-        const ok = updateRoutineWithReminders(adminId, id, {
+        const ok = updateRoutineWithReminders(uid, id, {
           title: title || undefined,
           categoryId: category_id === undefined ? undefined : category_id,
           freq: recurrence_freq === 'weekly' ? 'weekly' : recurrence_freq === 'daily' ? 'daily' : undefined,
@@ -298,7 +306,7 @@ export function createServer(bot: BotManager): Express {
         return res.json({ ok: true });
       }
 
-      todosRepo.update(adminId, id, {
+      todosRepo.update(uid, id, {
         title: title || undefined,
         categoryId: category_id === undefined ? undefined : category_id,
         dueDate: due_date === undefined ? undefined : due_date,
@@ -309,35 +317,44 @@ export function createServer(bot: BotManager): Express {
   app.post(
     '/api/todos/:id/complete',
     h((req, res) => {
-      todosRepo.complete(getAdminId(), Number(req.params.id));
+      todosRepo.complete(userId(req), Number(req.params.id));
       res.json({ ok: true });
     }),
   );
   app.delete(
     '/api/todos/:id',
     h((req, res) => {
-      todosRepo.remove(getAdminId(), Number(req.params.id));
+      todosRepo.remove(userId(req), Number(req.params.id));
       res.json({ ok: true });
     }),
   );
 
   // ---------- Habit logs (routine check-ins) ----------
+  // habit_logs rows are keyed by todo_id alone (no user_id column) - ownership must be checked via
+  // the parent todo before touching them, otherwise one client could read/edit another's habit
+  // history just by guessing/incrementing a todo id. Harmless back when the panel was admin-only
+  // (there was only ever one possible owner), a real cross-tenant leak now that every client has a
+  // token (see auth.js's resolvePanelUser).
   app.get(
     '/api/todos/:id/history',
     h((req, res) => {
+      const id = Number(req.params.id);
+      if (!todosRepo.getById(userId(req), id)) return res.status(404).json({ error: 'No existe esa rutina' });
       const days = req.query.days ? Number(req.query.days) : 30;
       res.json({
-        history: habitLogsRepo.history(Number(req.params.id), days),
-        streak: habitLogsRepo.currentStreak(Number(req.params.id), todayLocal()),
+        history: habitLogsRepo.history(id, days),
+        streak: habitLogsRepo.currentStreak(id, todayLocal()),
       });
     }),
   );
   app.post(
     '/api/todos/:id/checkin',
     h((req, res) => {
+      const id = Number(req.params.id);
+      if (!todosRepo.getById(userId(req), id)) return res.status(404).json({ error: 'No existe esa rutina' });
       const { date, done, note } = req.body ?? {};
       const logDate = date || todayLocal();
-      habitLogsRepo.checkIn(Number(req.params.id), logDate, done !== false, note || null);
+      habitLogsRepo.checkIn(id, logDate, done !== false, note || null);
       res.json({ ok: true });
     }),
   );
@@ -348,8 +365,8 @@ export function createServer(bot: BotManager): Express {
     h((req, res) => {
       const type = req.query.type as RewardPunishmentType | undefined;
       const todoId = req.query.todoId ? Number(req.query.todoId) : undefined;
-      const adminId = getAdminId();
-      res.json(todoId ? rewardsRepo.listByTodo(adminId, todoId) : rewardsRepo.listAll(adminId, type));
+      const uid = userId(req);
+      res.json(todoId ? rewardsRepo.listByTodo(uid, todoId) : rewardsRepo.listAll(uid, type));
     }),
   );
   app.post(
@@ -358,7 +375,7 @@ export function createServer(bot: BotManager): Express {
       const { type, description, todo_id, note, date } = req.body ?? {};
       if (type !== 'reward' && type !== 'punishment') return res.status(400).json({ error: 'type debe ser reward o punishment' });
       if (!description) return res.status(400).json({ error: 'description requerida' });
-      const id = rewardsRepo.create(getAdminId(), {
+      const id = rewardsRepo.create(userId(req), {
         type,
         description,
         todoId: todo_id ?? null,
@@ -371,7 +388,7 @@ export function createServer(bot: BotManager): Express {
   app.delete(
     '/api/rewards/:id',
     h((req, res) => {
-      rewardsRepo.remove(getAdminId(), Number(req.params.id));
+      rewardsRepo.remove(userId(req), Number(req.params.id));
       res.json({ ok: true });
     }),
   );

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { db } from '../pool.js';
 import type { User, UserRole } from '../../types/index.js';
 
@@ -54,6 +55,40 @@ export const usersRepo = {
 
   setLid(jid: string, lid: string): void {
     db.prepare('UPDATE users SET lid = ? WHERE jid = ?').run(lid, jid);
+  },
+
+  /** Restricts a user to only the given tool names, or pass null to clear the restriction (full access). */
+  setAllowedTools(id: number, tools: string[] | null): void {
+    db.prepare('UPDATE users SET allowed_tools = ? WHERE id = ?').run(tools ? JSON.stringify(tools) : null, id);
+  },
+
+  /** Parses a user's allowed_tools column. Null means unrestricted (every tool available). */
+  getAllowedTools(user: User): string[] | null {
+    if (!user.allowed_tools) return null;
+    try {
+      const parsed = JSON.parse(user.allowed_tools);
+      return Array.isArray(parsed) ? (parsed as string[]) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  getByPanelToken(token: string): User | undefined {
+    return db.prepare('SELECT * FROM users WHERE panel_token = ?').get(token) as User | undefined;
+  },
+
+  setPanelToken(id: number, token: string): void {
+    db.prepare('UPDATE users SET panel_token = ? WHERE id = ?').run(token, id);
+  },
+
+  /** Returns this user's panel token, generating one on the fly if they don't have one yet
+   *  (e.g. an account created before the per-client panel feature existed). */
+  ensurePanelToken(id: number): string {
+    const user = this.getById(id);
+    if (user?.panel_token) return user.panel_token;
+    const token = randomBytes(24).toString('hex');
+    this.setPanelToken(id, token);
+    return token;
   },
 
   remove(id: number): void {

@@ -39,6 +39,13 @@ export function addDays(s: string, days: number): string {
   return addMinutes(s, days * 24 * 60);
 }
 
+/** Adds seconds to a local date/time string - used by short-cycle interval reminders (see task-scheduler.ts). */
+export function addSeconds(s: string, seconds: number): string {
+  const dt = parseWall(s);
+  dt.setUTCSeconds(dt.getUTCSeconds() + seconds);
+  return fmtWall(dt);
+}
+
 /** Picks a random 'HH:mm:ss' time within [windowStart, windowEnd] (both 'HH:mm') on the given date. */
 export function randomTimeOnDate(dateOnly: string, windowStart: string, windowEnd: string): string {
   const [sh, sm] = windowStart.split(':').map(Number);

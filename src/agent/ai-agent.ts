@@ -4,9 +4,11 @@ import { registry, type ToolContext } from './tool-registry.js';
 import { messagesRepo } from '../db/repositories/messages.repo.js';
 import { categoriesRepo } from '../db/repositories/categories.repo.js';
 import { todosRepo } from '../db/repositories/todos.repo.js';
+import { usersRepo } from '../db/repositories/users.repo.js';
 import { currentTimeContext, todayLocal } from '../util/datetime.js';
 import { buildAgendaMessage } from './agenda.js';
 import { sleep } from '../util/human-delay.js';
+import { env } from '../config/env.js';
 import type { WaManager } from '../whatsapp/wa-manager.js';
 
 const MAX_ITERATIONS = 6;
@@ -24,17 +26,28 @@ async function callModelWithRetry(
   params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
 ): Promise<OpenAI.Chat.Completions.ChatCompletion | null> {
   try {
-    return await client.chat.completions.create(params);
+    const res = await client.chat.completions.create(params);
+    logUsage(res);
+    return res;
   } catch (err) {
     console.error('[LLM] Error llamando al modelo (intento 1/2):', (err as Error).message);
     await sleep(1500);
     try {
-      return await client.chat.completions.create(params);
+      const res = await client.chat.completions.create(params);
+      logUsage(res);
+      return res;
     } catch (err2) {
       console.error('[LLM] Error llamando al modelo (intento 2/2, me rindo):', (err2 as Error).message);
       return null;
     }
   }
+}
+
+/** Visibility into token spend per call - the cheapest way to actually see where cost goes
+ *  instead of guessing (see AI_HISTORY_TURNS / tool-permission filtering for the actual levers). */
+function logUsage(res: OpenAI.Chat.Completions.ChatCompletion): void {
+  const u = res.usage;
+  if (u) console.log('[LLM] Tokens: prompt=%d completion=%d total=%d', u.prompt_tokens, u.completion_tokens, u.total_tokens);
 }
 
 type ChatMsg = OpenAI.Chat.Completions.ChatCompletionMessageParam;
@@ -122,6 +135,13 @@ Reglas de las herramientas:
   ('YYYY-MM-DD HH:mm') a partir de mi fecha/hora actual (te la doy abajo) y de lo que te pida, sea
   una fecha concreta, "en 5 minutos", "mañana a las 3pm", "todos los días a las 8am", etc. Usa
   recurrence_freq/interval para recordatorios repetitivos.
+- El campo "message" de un recordatorio (schedule_reminder/schedule_important_date/
+  schedule_flexible_reminder) NO debe sonar seco tipo lista de pendientes ("Revisar el horno") -
+  redáctalo como si se lo dijeras a un amigo ("revisar el horno" en minúscula/tono natural, ya que
+  el envío le agrega un saludo motivador al inicio). Si te di el motivo o la razón ("recuérdame
+  pagar el arriendo porque se vence"), inclúyelo en el mensaje ("pagar el arriendo, porque se
+  vence") - pero NUNCA inventes un "porque" que no te haya dado, eso viola la regla de no inventar
+  nada.
 - Para fechas que no quiero olvidar de verdad - cumpleaños, aniversarios, una reunión importante,
   algo que "no puedo dejar pasar" - usa schedule_important_date en vez de schedule_reminder: además
   del aviso el día exacto, manda un aviso previo (advance_notice_days) para que no me agarre de
@@ -130,6 +150,12 @@ Reglas de las herramientas:
   minutos entre 3pm y 5pm", "practicar Duolingo en algún momento del día"), usa
   schedule_flexible_reminder con una ventana horaria (window_start/window_end) - el sistema elige
   una hora al azar dentro de esa ventana cada día, así no se vuelve mecánico.
+- Para avisos que se repiten cada cierto tiempo un número fijo de veces (ej. "avísame cada 30
+  segundos, 5 veces, para cambiar de serie", timers de ejercicio/descansos, o para insistir en algo
+  urgente), usa schedule_interval_reminder - NO uses schedule_reminder con recurrence para esto,
+  esa recurrencia es para días/semanas/meses/años, no segundos. Si el usuario pide que le llames o
+  que insista hasta que le conteste, esta es la alternativa real (no puedo hacer llamadas de
+  verdad): explica eso brevemente y ofrece el aviso repetido como reemplazo.
 - Para tareas (todos): "today" es solo para hoy, "later" para pendientes sin fecha fija o para más
   adelante, y "routine" para hábitos recurrentes (ejercicio, leer, etc.). Una tarea de "today"/
   "later" se marca con complete_todo; una rutina se marca con checkin_routine - son cosas
@@ -152,6 +178,19 @@ Reglas de las herramientas:
   semana me premio con...", "si fallo 3 días seguidos me castigo sin..."), regístralos con
   register_reward_punishment (type: reward|punishment) y consúltalos con list_rewards_punishments
   cuando te pregunte por mi historial.
+- Para el detalle de una rutina de ejercicio (qué ejercicios, series, repeticiones o segundos, peso),
+  usa add_exercise/list_exercises/edit_exercise/delete_exercise - la rutina en sí (horario,
+  duración, racha) sigue siendo create_routine/checkin_routine, esto solo agrega el desglose.
+- Para planear comidas (desayuno, almuerzo, cena, onces) de un día o de varios, usa plan_meal (una
+  llamada por cada fecha+comida), list_meal_plan para consultar y delete_meal_plan para quitar algo.
+  Esto es solo planeación/referencia, no crea recordatorios a menos que te lo pida explícitamente.
+- Si te doy ingredientes que tengo y me preguntas o pregunto qué puedo cocinar, sugiéreme una receta
+  directamente en tu respuesta (con tu propio conocimiento, sin necesidad de ninguna tool) - solo
+  usa save_recipe si te pido explícitamente guardarla, y get_recipe/list_recipes/delete_recipe para
+  consultar o borrar recetas ya guardadas.
+- Cada persona con acceso tiene su propio panel web con su propio token (separado del de cualquier
+  otro) - si preguntan cómo entrar o si se les perdió el token, usa regenerate_panel_token (sin
+  argumentos les regenera el suyo propio).
 - Si te pido explícitamente que le mandes un mensaje a alguien ("envíale un mensaje a X diciendo
   Y", "dile a X que...", etc.), USA send_message DE UNA VEZ - no lo pienses de más, no me
   preguntes "¿seguro?" ni pidas confirmación extra, esa petición explícita ya es el permiso. Si me
@@ -180,7 +219,11 @@ const ADMIN_PROMPT_ADDENDUM = `
 
 Eres el administrador de este bot. Además de todo lo anterior, puedes darle acceso a otras
 personas con grant_access (cada una queda con su propia configuración, sin compartir nada con la
-tuya), quitárselo con revoke_access, y ver quién tiene acceso con list_users.`;
+tuya), quitárselo con revoke_access, y ver quién tiene acceso con list_users. También puedes
+limitar a alguien (que no seas tú) a solo un subconjunto de funciones con set_user_permissions
+(ej. "que Ana solo pueda guardar y ver recordatorios") - usa list_available_tools primero si no
+tienes claros los nombres exactos, y nunca inventes un nombre de función. También puedes
+regenerar el token del panel de otra persona con regenerate_panel_token pasando su nombre/número.`;
 
 /**
  * Builds the system prompt with dynamic context (date, categories, today's agenda, later-pending
@@ -227,7 +270,12 @@ export async function processMessage(
 ): Promise<string> {
   const { client, model } = getAiClient();
 
-  const history = messagesRepo.history(user.id, 20);
+  // The admin always has full access; anyone else may be limited to a subset by the admin (see
+  // set-user-permissions.tool.ts) - null means unrestricted, same as before this feature existed.
+  const fullUser = usersRepo.getById(user.id);
+  const allowedTools = !user.isAdmin && fullUser ? usersRepo.getAllowedTools(fullUser) : null;
+
+  const history = messagesRepo.history(user.id, env.ai.historyTurns);
   // If my last turn was a bare clarifying question, this incoming message is almost certainly the
   // answer to it - flags the "answer arrived, now actually call the tool" corrective retry below.
   const lastAssistantMsg = [...history].reverse().find((m) => m.role === 'assistant');
@@ -242,7 +290,7 @@ export async function processMessage(
   ];
 
   const ctx: ToolContext = { ownerJid: user.jid, userId: user.id, isAdmin: user.isAdmin, wa };
-  const tools = registry.toOpenAITools();
+  const tools = registry.toOpenAITools(allowedTools);
   const callParams = (toolChoice: 'auto' | 'required' = 'auto') => ({
     model,
     messages,
@@ -344,6 +392,12 @@ export async function processMessage(
       if (!tool) {
         result = `Error: la herramienta "${tc.function.name}" no existe.`;
         console.error(`[TOOL] ${tc.function.name}: no existe en el registro.`);
+      } else if (allowedTools && !allowedTools.includes(tc.function.name)) {
+        // Defense in depth: toOpenAITools(allowedTools) above already keeps a restricted user's
+        // model call from ever being *offered* a disallowed tool, but nothing stops a model from
+        // hallucinating a call to a name it saw earlier in history/training anyway - block it here too.
+        result = `No tienes permiso para usar "${tc.function.name}". Pídele al administrador que te dé acceso.`;
+        console.error(`[TOOL] ${tc.function.name}: bloqueada por permisos (usuario #%d).`, user.id);
       } else {
         try {
           const args = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
