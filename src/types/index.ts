@@ -48,6 +48,8 @@ export interface Contact {
   name: string;
   jid: string;
   lid: string | null;
+  // WhatsApp's public @username handle, if known - reference/search label only, see contacts.repo.ts.
+  username: string | null;
   notes: string | null;
   created_at: string;
 }
@@ -64,6 +66,10 @@ export type ReminderKind =
   // Its `message` is ignored at send time - task-scheduler.ts builds the agenda text fresh every
   // time from that day's routines/todos/reminders (see agent/agenda.ts).
   | 'daily_agenda'
+  // One per user, auto-created on bootstrap/grant_access: fires weekly (WEEKLY_REPORT_DAY/TIME).
+  // Same "ignore stored message, build fresh at send time" pattern as daily_agenda - see
+  // agent/weekly-report.ts.
+  | 'weekly_report'
   // Short-cycle repeating alert (e.g. "avísame cada 30s, 5 veces, para cambiar de serie") - see
   // interval_seconds/repeat_count/fired_count below and schedule-interval-reminder.tool.ts. Stop
   // it early with cancel_reminder/delete_reminder like any other pending reminder.

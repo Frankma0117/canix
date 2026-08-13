@@ -2,6 +2,7 @@ import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { nowLocal, addMinutes, addMonths, addDays, addSeconds, dateOnly, randomTimeOnDate } from '../util/datetime.js';
 import { buildAgendaMessage } from '../agent/agenda.js';
+import { buildWeeklyReportMessage } from '../agent/weekly-report.js';
 import { plainReminderPrefix } from '../util/motivational.js';
 import { synthesizeVoiceNote } from '../audio/tts.js';
 import type { WaManager } from '../whatsapp/wa-manager.js';
@@ -113,13 +114,16 @@ export class TaskScheduler {
           if (next) remindersRepo.reschedule(reminder.id, next);
           else remindersRepo.markStatus(reminder.id, 'executed');
 
-          // kind 'daily_agenda' ignores its stored `message` and builds the day's agenda fresh at
-          // send time (see agent/agenda.ts) - that's the whole point, it must reflect whatever
-          // was checked in/added/edited since it was created, not a stale snapshot.
+          // kind 'daily_agenda'/'weekly_report' ignore their stored `message` and build the real
+          // content fresh at send time (see agent/agenda.ts, agent/weekly-report.ts) - that's the
+          // whole point, it must reflect whatever changed since the reminder was created, not a
+          // stale snapshot.
           const text =
             reminder.kind === 'daily_agenda'
               ? buildAgendaMessage(reminder.user_id)
-              : // Plain reminders get a rotating warm/motivational lead-in (see util/motivational.ts) so
+              : reminder.kind === 'weekly_report'
+                ? buildWeeklyReportMessage(reminder.user_id)
+                : // Plain reminders get a rotating warm/motivational lead-in (see util/motivational.ts) so
                 // they read like a friend's nudge instead of a flat notification; every other kind
                 // already carries its own emoji/wording at creation time (important_date, flexible,
                 // routine_reminder/checkin - see schedule-important-date.tool.ts,

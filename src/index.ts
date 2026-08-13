@@ -10,11 +10,12 @@ import { createServer } from './server/http-server.js';
 import { legacyAdminToken } from './server/auth.js';
 import { usersRepo } from './db/repositories/users.repo.js';
 import { ensureDailyAgendaReminder } from './agent/agenda.js';
+import { ensureWeeklyReportReminder } from './agent/weekly-report.js';
 
 quietLibsignalLogs();
 
 async function main() {
-  console.log('=== canix · asistente personal por WhatsApp ===');
+  console.log('=== Cania · asistente personal por WhatsApp ===');
 
   // 0) Refuse to run twice against the same DB/session (see util/single-instance.ts) - a real
   // cause of duplicate reminder sends is two processes each running their own scheduler.
@@ -31,7 +32,10 @@ async function main() {
   // Backfill: users bootstrapped before the daily-agenda feature existed never got their
   // recurring reminder created (that only happens at bootstrap/grant_access time) - this makes
   // every upgrade pick it up too. No-op for users that already have one (see agent/agenda.ts).
-  for (const user of usersRepo.listAll()) ensureDailyAgendaReminder(user.id, user.jid);
+  for (const user of usersRepo.listAll()) {
+    ensureDailyAgendaReminder(user.id, user.jid);
+    ensureWeeklyReportReminder(user.id, user.jid);
+  }
 
   // Backfill: every user needs their own panel_token now that the web panel is per-client instead
   // of admin-only (see server/auth.ts). The admin's is seeded from the old single shared

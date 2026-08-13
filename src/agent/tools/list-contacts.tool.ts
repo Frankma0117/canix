@@ -9,6 +9,8 @@ export const listContactsTool: Tool = {
   async execute(_args, ctx) {
     const contacts = contactsRepo.listAll(ctx.userId);
     if (contacts.length === 0) return 'No hay contactos guardados todavía.';
-    return contacts.map((c) => `#${c.id} ${c.name}${c.notes ? ` — ${c.notes}` : ''}`).join('\n');
+    return contacts
+      .map((c) => `#${c.id} ${c.name}${c.username ? ` (@${c.username})` : ''}${c.notes ? ` — ${c.notes}` : ''}`)
+      .join('\n');
   },
 };

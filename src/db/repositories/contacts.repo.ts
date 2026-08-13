@@ -27,12 +27,21 @@ export const contactsRepo = {
       .all(userId, `%${query}%`) as Contact[];
   },
 
-  upsert(userId: number, name: string, jid: string, notes: string | null = null): Contact {
+  /** Exact (case-insensitive) match on the saved @username label - see the `username` column
+   *  comment in db/init.ts for why this is reference-only, not a live WhatsApp lookup. */
+  getByUsername(userId: number, username: string): Contact | undefined {
+    return db
+      .prepare('SELECT * FROM contacts WHERE user_id = ? AND username = ? COLLATE NOCASE')
+      .get(userId, username) as Contact | undefined;
+  },
+
+  upsert(userId: number, name: string, jid: string, notes: string | null = null, username: string | null = null): Contact {
     db.prepare(
-      `INSERT INTO contacts (user_id, name, jid, notes) VALUES (?, ?, ?, ?)
+      `INSERT INTO contacts (user_id, name, jid, notes, username) VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(user_id, jid) DO UPDATE SET name = excluded.name,
-         notes = COALESCE(excluded.notes, contacts.notes)`,
-    ).run(userId, name.trim(), jid, notes);
+         notes = COALESCE(excluded.notes, contacts.notes),
+         username = COALESCE(excluded.username, contacts.username)`,
+    ).run(userId, name.trim(), jid, notes, username);
     return this.getByJid(userId, jid)!;
   },
 

@@ -19,6 +19,7 @@ import { editTodoTool } from './edit-todo.tool.js';
 import { editReminderTool } from './edit-reminder.tool.js';
 import { editRoutineTool } from './edit-routine.tool.js';
 import { getTodayAgendaTool } from './get-today-agenda.tool.js';
+import { getWeekReportTool } from './get-week-report.tool.js';
 import { createRoutineTool } from './create-routine.tool.js';
 import { checkinRoutineTool } from './checkin-routine.tool.js';
 import { routineProgressTool } from './routine-progress.tool.js';
@@ -72,6 +73,7 @@ export function registerTools(): void {
   registry.register(editReminderTool);
   registry.register(editRoutineTool);
   registry.register(getTodayAgendaTool);
+  registry.register(getWeekReportTool);
   registry.register(createRoutineTool);
   registry.register(checkinRoutineTool);
   registry.register(routineProgressTool);

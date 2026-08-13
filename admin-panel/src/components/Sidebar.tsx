@@ -36,7 +36,7 @@ export function Sidebar({
         </div>
         <div>
           <p className="font-display text-base font-semibold leading-none text-ink dark:text-white">
-            Canix
+            Cania
           </p>
           <p className="text-xs text-gray-dark">{user?.name ?? 'Panel personal'}</p>
         </div>

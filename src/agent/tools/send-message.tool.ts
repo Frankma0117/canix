@@ -26,6 +26,20 @@ export const sendMessageTool: Tool = {
     let isNewRawNumber = false;
     if (isJid(to)) {
       targetJid = to;
+    } else if (to.startsWith('@')) {
+      // WhatsApp's public @username handle: only resolvable against a contact YOU already saved
+      // with that username label (add_contact) - the installed WhatsApp library doesn't yet expose
+      // a way to resolve an arbitrary username straight to a jid, so a cold "@alguien" with no
+      // saved match can't be sent, only reported honestly instead of silently failing.
+      const byUsername = contactsRepo.getByUsername(ctx.userId, to.slice(1));
+      if (!byUsername) {
+        return (
+          `No tengo guardado un contacto con el username "${to}". Todavía no puedo mandarle el primer mensaje ` +
+          'a alguien solo por su @username (WhatsApp no lo permite todavía desde acá) - dame su número o ' +
+          'guárdalo primero con add_contact (nombre + número, el username es solo una etiqueta).'
+        );
+      }
+      targetJid = contactsRepo.sendTarget(byUsername);
     } else {
       const matches = contactsRepo.findByName(ctx.userId, to);
       if (matches.length === 1) {

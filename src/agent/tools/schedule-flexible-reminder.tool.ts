@@ -2,6 +2,7 @@ import type { Tool } from '../tool-registry.js';
 import { remindersRepo } from '../../db/repositories/reminders.repo.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
 import { todayLocal, dateOnly, addDays, randomTimeOnDate, parseWall, nowLocal } from '../../util/datetime.js';
+import { flexibleReminderMessage } from '../../util/motivational.js';
 
 const TIME_RE = /^\d{1,2}:\d{2}$/;
 
@@ -43,7 +44,7 @@ export const scheduleFlexibleReminderTool: Tool = {
     }
 
     const id = remindersRepo.create(ctx.userId, {
-      message: `🎲 ${message}`,
+      message: flexibleReminderMessage(message),
       runAt,
       targetJid: ctx.ownerJid,
       categoryId,

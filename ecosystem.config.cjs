@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'canix',
+      name: 'cania',
       script: 'npm',
       args: 'run start',
       cwd: __dirname,

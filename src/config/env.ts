@@ -12,6 +12,11 @@ export const env = {
   // ver ensureDailyAgendaReminder() en agent/agenda.ts.
   morningSummaryTime: process.env.MORNING_SUMMARY_TIME ?? '06:30',
 
+  // Día y hora (en TIMEZONE) del reporte semanal automático - ver ensureWeeklyReportReminder() en
+  // agent/weekly-report.ts. Día: 0=domingo .. 6=sábado (igual convención que weekdayName()/parseWall).
+  weeklyReportDay: parseInt(process.env.WEEKLY_REPORT_DAY ?? '0', 10),
+  weeklyReportTime: process.env.WEEKLY_REPORT_TIME ?? '19:00',
+
   ai: {
     provider: process.env.AI_PROVIDER ?? 'openai',
     model: process.env.AI_MODEL ?? 'gpt-4o-mini',

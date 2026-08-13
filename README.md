@@ -1,4 +1,4 @@
-# canix 🗂️
+# Cania 🗂️
 
 Asistente personal por WhatsApp: recordatorios, una biblioteca de links clasificados por
 categorías, tareas (de hoy, para después o rutinas) y seguimiento de hábitos. Es **multi-usuario**
@@ -29,6 +29,12 @@ simplificada para uso personal: sin multi-negocio, con SQLite en vez de MySQL.
   automáticamente el orden del día completo - rutinas, recordatorios y tareas de hoy, empezando
   por lo primero. Pregúntalo en cualquier momento ("¿qué tengo hoy?", "¿cómo va mi día?") y también
   te dice qué rutina ya pasó de hora sin marcarse, para que la reprogrames el mismo día si quieres.
+- 📊 **Resumen semanal**: cada semana (día/hora configurable, `WEEKLY_REPORT_DAY`/`WEEKLY_REPORT_TIME`)
+  te llega cuánto cumpliste en los últimos 7 días, separado en rutinas (días cumplidos + racha) y
+  tareas de una sola vez (cumplidas vs pendientes). Pregúntalo en cualquier momento ("¿cómo me fue
+  esta semana?") con `get_week_report`.
+- 🎉 **Stickers de celebración**: al marcar una tarea o rutina como hecha, además del mensaje de
+  confirmación te llega un sticker (100% local, generado sin IA/tokens - ver `util/stickers.ts`).
 - 💬 **Enviar mensajes**: "envíale un mensaje a Juan diciéndole que..." — busca el contacto
   guardado y lo envía por WhatsApp.
 - 📅 **Fechas importantes**: cumpleaños, aniversarios, reuniones que no puedes dejar pasar. A
@@ -269,8 +275,8 @@ pm2 save
 pm2 startup   # sigue las instrucciones que imprime para que arranque solo tras reiniciar el servidor
 ```
 
-- `pm2 logs canix` para ver los logs (ahí aparece el QR la primera vez, y el token del panel).
-- `pm2 restart canix` / `pm2 stop canix` para reiniciar o parar.
+- `pm2 logs cania` para ver los logs (ahí aparece el QR la primera vez, y el token del panel).
+- `pm2 restart cania` / `pm2 stop cania` para reiniciar o parar.
 
 ### Opción B: systemd
 
@@ -288,7 +294,7 @@ sudo journalctl -u canix -f   # logs en vivo (para escanear el QR la primera vez
 
 ### Notas para producción
 
-- **QR de WhatsApp**: la primera vez hay que escanearlo desde los logs (`pm2 logs canix` o
+- **QR de WhatsApp**: la primera vez hay que escanearlo desde los logs (`pm2 logs cania` o
   `journalctl -u canix -f`) o desde el panel (`Conexión`). Si ya vinculaste el bot en local,
   puedes copiar la carpeta `auth_info/` completa al servidor para no tener que volver a escanear.
 - **No pierdas `data/` ni `auth_info/`** en cada deploy: son el estado persistente (base de
@@ -298,7 +304,7 @@ sudo journalctl -u canix -f   # logs en vivo (para escanear el QR la primera vez
   directo en el firewall.
 - **Actualizar código**: `git pull` (o subir los archivos nuevos), `npm install` si cambiaron
   dependencias, `cd admin-panel && npm install && npm run build && cd ..` si cambió el panel, y
-  `pm2 restart canix` / `sudo systemctl restart canix`.
+  `pm2 restart cania` / `sudo systemctl restart canix`.
 
 ## Reconexión de WhatsApp (sin reiniciar el servidor)
 
@@ -372,6 +378,8 @@ reducen mucho ese riesgo:
 | `PORT` | Puerto del panel/API | `3000` |
 | `TIMEZONE` | Zona horaria IANA (todo el bot usa esta para "ahora"/"hoy") | `America/Bogota` |
 | `MORNING_SUMMARY_TIME` | Hora `HH:mm` de la agenda automática diaria | `06:30` |
+| `WEEKLY_REPORT_DAY` | Día del resumen semanal automático (`0`=domingo .. `6`=sábado) | `0` |
+| `WEEKLY_REPORT_TIME` | Hora `HH:mm` del resumen semanal automático | `19:00` |
 | `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY` / `AI_BASE_URL` | Config de IA (compatible OpenAI) | — |
 | `DB_PATH` | Ruta del archivo SQLite | `./data/app.db` |
 | `WA_SESSION` | Nombre de la sesión de Baileys (carpeta en `auth_info/`) | `personal-agent` |

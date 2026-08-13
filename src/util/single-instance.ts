@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from '
 import { dirname, join, resolve } from 'node:path';
 import { env } from '../config/env.js';
 
-const lockPath = join(dirname(resolve(process.cwd(), env.db.path)), 'canix.lock');
+const lockPath = join(dirname(resolve(process.cwd(), env.db.path)), 'cania.lock');
 
 /** True if a process with this pid is alive (works cross-platform: signal 0 sends nothing, just checks). */
 function isAlive(pid: number): boolean {
@@ -15,7 +15,7 @@ function isAlive(pid: number): boolean {
 }
 
 /**
- * Refuses to start a second canix process against the same database/WhatsApp session. Two live
+ * Refuses to start a second Cania process against the same database/WhatsApp session. Two live
  * instances both running a TaskScheduler on the same SQLite file is a real-world way to get the
  * same reminder sent twice (each instance's scheduler independently sees the same due row) - this
  * was one of the suspected causes behind "the same notification arrives more than once" reports
@@ -30,7 +30,7 @@ export function acquireSingleInstanceLock(): void {
     const existingPid = Number(readFileSync(lockPath, 'utf8').trim());
     if (existingPid && isAlive(existingPid)) {
       console.error(
-        '[LOCK] Ya hay otra instancia de canix corriendo (pid %d) sobre la misma base de datos (%s). ' +
+        '[LOCK] Ya hay otra instancia de Cania corriendo (pid %d) sobre la misma base de datos (%s). ' +
           'No arranco una segunda para no duplicar envíos - ciérrala primero.',
         existingPid,
         env.db.path,

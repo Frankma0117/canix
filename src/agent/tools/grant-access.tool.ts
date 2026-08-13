@@ -2,6 +2,7 @@ import type { Tool } from '../tool-registry.js';
 import { usersRepo } from '../../db/repositories/users.repo.js';
 import { phoneToJid } from '../../util/jid.js';
 import { ensureDailyAgendaReminder } from '../agenda.js';
+import { ensureWeeklyReportReminder } from '../weekly-report.js';
 import { env } from '../../config/env.js';
 
 export const grantAccessTool: Tool = {
@@ -29,6 +30,7 @@ export const grantAccessTool: Tool = {
     const jid = phoneToJid(phone);
     const user = usersRepo.create({ jid, name, role: 'user' });
     ensureDailyAgendaReminder(user.id, user.jid);
+    ensureWeeklyReportReminder(user.id, user.jid);
     const panelToken = usersRepo.ensurePanelToken(user.id);
 
     // Best-effort right away: confirm the number is real, and cache its lid so the bot can reach

@@ -36,7 +36,7 @@ export function LockScreen() {
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-xl text-white shadow-lg shadow-primary/30">
             🗂️
           </div>
-          <h1 className="font-display text-2xl font-semibold text-ink dark:text-white">Canix</h1>
+          <h1 className="font-display text-2xl font-semibold text-ink dark:text-white">Cania</h1>
           <p className="mt-1 text-sm text-gray-dark">Acceso restringido a tu panel personal</p>
         </div>
 

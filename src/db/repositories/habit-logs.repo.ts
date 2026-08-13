@@ -16,6 +16,16 @@ export const habitLogsRepo = {
       .get(todoId, logDate) as HabitLog | undefined;
   },
 
+  /** How many days within [startDate, endDate] (both 'YYYY-MM-DD', inclusive) were checked in as
+   *  done - used by the weekly report to show "5/7 días cumplidos" per routine (see weekly-report.ts). */
+  countDoneInRange(todoId: number, startDate: string, endDate: string): number {
+    return (
+      db
+        .prepare('SELECT COUNT(*) AS c FROM habit_logs WHERE todo_id = ? AND log_date BETWEEN ? AND ? AND done = 1')
+        .get(todoId, startDate, endDate) as { c: number }
+    ).c;
+  },
+
   /** Last N days of history for a routine, most recent first. */
   history(todoId: number, days: number): HabitLog[] {
     return db

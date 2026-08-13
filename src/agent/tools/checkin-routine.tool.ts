@@ -2,6 +2,7 @@ import type { Tool } from '../tool-registry.js';
 import { todosRepo } from '../../db/repositories/todos.repo.js';
 import { habitLogsRepo } from '../../db/repositories/habit-logs.repo.js';
 import { todayLocal } from '../../util/datetime.js';
+import { pickCelebrationSticker } from '../../util/stickers.js';
 
 export const checkinRoutineTool: Tool = {
   name: 'checkin_routine',
@@ -28,6 +29,15 @@ export const checkinRoutineTool: Tool = {
     habitLogsRepo.checkIn(id, date, done, args.note ? String(args.note) : null);
 
     const streak = habitLogsRepo.currentStreak(id, todayLocal());
+
+    if (done) {
+      // Only celebrate an actual completion - never send a "congrats" sticker for a checkin that
+      // marks the routine as NOT done (see util/stickers.ts). Best-effort, never blocks the reply.
+      pickCelebrationSticker()
+        .then((webp) => (webp ? ctx.wa.sendSticker(ctx.ownerJid, webp) : undefined))
+        .catch(() => {});
+    }
+
     return `Rutina "${todo.title}" marcada como ${done ? 'hecha' : 'NO hecha'} el ${date}. Racha actual: ${streak} día(s).`;
   },
 };

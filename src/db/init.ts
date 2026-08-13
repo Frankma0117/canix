@@ -218,6 +218,12 @@ export function initSchema(): void {
   // so multiple not-yet-backfilled NULLs are fine, but no two real tokens can collide.
   ensureColumn('users', 'panel_token', 'panel_token TEXT');
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_panel_token ON users(panel_token) WHERE panel_token IS NOT NULL');
+  // WhatsApp's public @username handle (the new username-based identity WhatsApp is rolling out
+  // alongside phone numbers) - stored purely as a label on a saved contact for your own reference/
+  // search (see add-contact.tool.ts). NOT used to route messages: the installed Baileys version's
+  // username->jid USync resolution isn't wired up yet (see contacts.repo.ts's getByUsername), so
+  // sending still always needs a real phone number under the hood.
+  ensureColumn('contacts', 'username', 'username TEXT');
 }
 
 /** Adds a column to `table` if it doesn't already exist (table/column names here are always our own constants, never user input). */

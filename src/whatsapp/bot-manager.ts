@@ -5,6 +5,7 @@ import { messagesRepo } from '../db/repositories/messages.repo.js';
 import { resetAllUserData } from '../db/reset-user.js';
 import { processMessage } from '../agent/ai-agent.js';
 import { ensureDailyAgendaReminder } from '../agent/agenda.js';
+import { ensureWeeklyReportReminder } from '../agent/weekly-report.js';
 import { legacyAdminToken } from '../server/auth.js';
 import { env } from '../config/env.js';
 import { sleep, typingDelayMs, readingPauseMs } from '../util/human-delay.js';
@@ -97,10 +98,12 @@ export class BotManager {
         const admin = usersRepo.create({ jid: phoneJid, name: name ?? null, role: 'admin' });
         if (lid) usersRepo.setLid(phoneJid, lid);
         ensureDailyAgendaReminder(admin.id, admin.jid);
+        ensureWeeklyReportReminder(admin.id, admin.jid);
         // Seeded from the legacy single-token source (env ADMIN_TOKEN or auth_info/admin-token.txt)
         // rather than a fresh random one, so whatever's already printed/configured for the admin
         // works immediately - see server/auth.ts.
-        usersRepo.setPanelToken(admin.id, legacyAdminToken());
+        const panelToken = legacyAdminToken();
+        usersRepo.setPanelToken(admin.id, panelToken);
         console.log(
           '[SETUP] Administrador registrado: "%s" (jid=%s%s) #%d',
           name ?? '(sin nombre)',
@@ -108,6 +111,12 @@ export class BotManager {
           lid ? `, lid=${lid}` : '',
           admin.id,
         );
+        // index.ts only prints this token once, right after app.listen() - which fires at boot,
+        // *before* this first-ever admin even exists (they're only created here, on their first
+        // incoming message). That left the console with nothing to show on a genuinely fresh
+        // install - the token is printed here too, at the moment it's actually created, so a
+        // first-time setup always sees it somewhere.
+        console.log('[AUTH] Token de acceso del administrador: %s', panelToken);
       }
 
       let user = usersRepo.getByJidOrLid(phoneJid) ?? usersRepo.getByJidOrLid(jid);

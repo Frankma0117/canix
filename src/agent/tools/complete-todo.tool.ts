@@ -1,5 +1,6 @@
 import type { Tool } from '../tool-registry.js';
 import { todosRepo } from '../../db/repositories/todos.repo.js';
+import { pickCelebrationSticker } from '../../util/stickers.js';
 
 export const completeTodoTool: Tool = {
   name: 'complete_todo',
@@ -19,6 +20,13 @@ export const completeTodoTool: Tool = {
     if (!todo) return `No encontré la tarea #${id}.`;
     if (todo.scope === 'routine') return `#${id} "${todo.title}" es una rutina - usa checkin_routine para marcarla, no complete_todo.`;
     todosRepo.complete(ctx.userId, id);
+
+    // Best-effort celebration sticker alongside the text reply - never let this delay/break the
+    // actual confirmation (see util/stickers.ts).
+    pickCelebrationSticker()
+      .then((webp) => (webp ? ctx.wa.sendSticker(ctx.ownerJid, webp) : undefined))
+      .catch(() => {});
+
     return `Tarea #${id} "${todo.title}" marcada como hecha. 🎉`;
   },
 };

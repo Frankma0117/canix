@@ -4,6 +4,7 @@ import { categoriesRepo } from '../../db/repositories/categories.repo.js';
 import { contactsRepo } from '../../db/repositories/contacts.repo.js';
 import { normalizeDate, parseWall, nowLocal, addDays, addMonths } from '../../util/datetime.js';
 import { phoneToJid, isJid } from '../../util/jid.js';
+import { importantDateMessage, importantDateNoticeMessage } from '../../util/motivational.js';
 import type { RecurrenceFreq } from '../../types/index.js';
 
 export const scheduleImportantDateTool: Tool = {
@@ -73,7 +74,7 @@ export const scheduleImportantDateTool: Tool = {
     const finalTargetJid = targetJid ?? ctx.ownerJid;
 
     const mainId = remindersRepo.create(ctx.userId, {
-      message: `🎉 ${title}`,
+      message: importantDateMessage(title),
       runAt,
       targetJid: finalTargetJid,
       categoryId,
@@ -90,7 +91,7 @@ export const scheduleImportantDateTool: Tool = {
       const noticeRunAt = addDays(runAt, -advanceDays);
       if (parseWall(noticeRunAt) > parseWall(nowLocal())) {
         const noticeId = remindersRepo.create(ctx.userId, {
-          message: `📅 En ${advanceDays} día(s): ${title}`,
+          message: importantDateNoticeMessage(title, advanceDays),
           runAt: noticeRunAt,
           targetJid: finalTargetJid,
           categoryId,

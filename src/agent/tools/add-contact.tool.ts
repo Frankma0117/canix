@@ -6,12 +6,16 @@ export const addContactTool: Tool = {
   name: 'add_contact',
   description:
     'Guarda un contacto (nombre + número) para poder enviarle mensajes por nombre después. ' +
-    'Pide siempre el número CON indicativo de país (ej. 57 para Colombia) si no es obvio de dónde es.',
+    'Pide siempre el número CON indicativo de país (ej. 57 para Colombia) si no es obvio de dónde es. ' +
+    'Opcionalmente guarda también su @username de WhatsApp (el identificador público nuevo de WhatsApp) como ' +
+    'referencia/etiqueta para buscarlo - el envío real sigue siempre por número, WhatsApp todavía no expone una ' +
+    'forma de mandar el primer mensaje solo con el username.',
   parameters: {
     type: 'object',
     properties: {
       name: { type: 'string', description: 'Nombre del contacto.' },
       phone: { type: 'string', description: 'Número de WhatsApp con indicativo de país (ej. 573001234567).' },
+      username: { type: 'string', description: 'Su @username de WhatsApp, si lo tiene (sin el @). Opcional.' },
       notes: { type: 'string', description: 'Nota opcional sobre este contacto.' },
     },
     required: ['name', 'phone'],
@@ -22,9 +26,10 @@ export const addContactTool: Tool = {
     const name = String(args.name ?? '').trim();
     const phone = String(args.phone ?? '').trim();
     if (!name || !phone) return 'Error: falta nombre o número.';
+    const username = args.username ? String(args.username).trim().replace(/^@/, '') : null;
 
     const jid = phoneToJid(phone);
-    const contact = contactsRepo.upsert(ctx.userId, name, jid, args.notes ? String(args.notes) : null);
+    const contact = contactsRepo.upsert(ctx.userId, name, jid, args.notes ? String(args.notes) : null, username);
 
     // Best-effort right away: confirm the number is real, and cache its lid if it has one, so
     // sending to them later (even if they never write first) works from the get-go.

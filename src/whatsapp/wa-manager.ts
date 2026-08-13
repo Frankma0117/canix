@@ -42,6 +42,14 @@ export class WaManager {
   /** Guards against two overlapping start() calls opening two sockets on the same session at once. */
   private connecting = false;
 
+  // WhatsApp itself can hand the same message to messages.upsert more than once (a reconnect
+  // replaying its offline queue, a retry receipt, etc.) - with nothing tracking which message ids
+  // were already handled, each redelivery ran the full agent loop again, which could genuinely
+  // create a second reminder/message for one request (this is a real, separate cause of "duplicate
+  // reminder" reports from the write-before-send race already fixed in task-scheduler.ts). Capped
+  // at the last 500 ids (per jid+id, since ids aren't globally unique) so it can't grow unbounded.
+  private seenMessageIds = new Set<string>();
+
   qr: string | undefined;
   connectionState: ConnectionState['connection'] = 'close';
   /**
@@ -182,6 +190,19 @@ export class WaManager {
         if (!jid || jid === 'status@broadcast' || jid.endsWith('@g.us')) continue; // ignore groups/status
         if (m.key.fromMe) continue; // this bot uses a dedicated number, not a self-chat
 
+        if (m.key.id) {
+          const dedupeKey = `${jid}:${m.key.id}`;
+          if (this.seenMessageIds.has(dedupeKey)) {
+            console.log('[WA] Mensaje %s duplicado (ya procesado), lo ignoro.', dedupeKey);
+            continue;
+          }
+          this.seenMessageIds.add(dedupeKey);
+          if (this.seenMessageIds.size > 500) {
+            const oldest = this.seenMessageIds.values().next().value;
+            if (oldest !== undefined) this.seenMessageIds.delete(oldest);
+          }
+        }
+
         let text =
           m.message?.conversation ??
           m.message?.extendedTextMessage?.text ??
@@ -296,6 +317,16 @@ export class WaManager {
       // Best-effort - if this fails we still attempt the actual send below rather than blocking it.
       console.error('[WA] No se pudo emitir el token de privacidad para %s:', jid, (err as Error).message);
     }
+    try {
+      // Subscribing to presence is the other half of "cold" first-contact sends actually landing
+      // reliably: on its own issuePrivacyTokens() sometimes isn't enough to make a brand new jid
+      // (one that has never messaged this number before) resolve a session in time for the very
+      // first sendMessage() right after - real traffic showed a subscribe here noticeably reduces
+      // that "sent without error but never arrived" failure mode. Also best-effort/non-blocking.
+      await this.sock.presenceSubscribe(jid);
+    } catch (err) {
+      console.error('[WA] No se pudo suscribir a la presencia de %s:', jid, (err as Error).message);
+    }
   }
 
   /** Sends a text message to a JID (e.g. 573001234567@s.whatsapp.net) - sent exactly as given,
@@ -313,6 +344,15 @@ export class WaManager {
     await this.ensurePrivacyToken(jid);
     console.log('[WA] Enviando audio a %s', jid);
     await this.sock.sendMessage(jid, { audio, mimetype: 'audio/ogg; codecs=opus', ptt: true });
+  }
+
+  /** Sends a WhatsApp sticker (static webp). Best-effort - a sticker send failing should never
+   *  block the actual text reply/confirmation that already went out alongside it. */
+  async sendSticker(jid: string, webp: Buffer): Promise<void> {
+    if (!this.sock) throw new Error('WhatsApp no esta conectado');
+    await this.ensurePrivacyToken(jid);
+    console.log('[WA] Enviando sticker a %s', jid);
+    await this.sock.sendMessage(jid, { sticker: webp });
   }
 
   /** Briefly shows "typing..." (feedback to the user). */
