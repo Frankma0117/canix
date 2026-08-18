@@ -6,7 +6,9 @@ import { createRequire } from 'node:module';
 // load it directly via require instead of fighting the type resolution.
 const ffmpegPath = createRequire(import.meta.url)('ffmpeg-static') as string | null;
 
-function runFfmpeg(args: string[], input: Buffer): Promise<Buffer> {
+/** Spawns ffmpeg-static with `args`, piping `input` to stdin and collecting stdout - shared by
+ *  every ffmpeg-based conversion in this project (audio here, images in src/fashion/image/). */
+export function runFfmpeg(args: string[], input: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     if (!ffmpegPath) {
       reject(new Error('ffmpeg-static no proveyo un binario para esta plataforma'));

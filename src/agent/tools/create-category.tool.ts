@@ -1,5 +1,6 @@
 import type { Tool } from '../tool-registry.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
+import { resolveActingUser } from './act-on-behalf.js';
 
 export const createCategoryTool: Tool = {
   name: 'create_category',
@@ -10,17 +11,25 @@ export const createCategoryTool: Tool = {
     properties: {
       name: { type: 'string', description: 'Nombre de la categoría (ej. "Comidas", "Series").' },
       description: { type: 'string', description: 'Descripción corta opcional de para qué es.' },
+      target_user: {
+        type: 'string',
+        description: 'Solo administrador: nombre o número de otra persona con acceso, para creársela a ella en vez de a ti.',
+      },
     },
     required: ['name'],
     additionalProperties: false,
   },
 
   async execute(args, ctx) {
+    const acting = resolveActingUser(ctx, args.target_user ? String(args.target_user) : undefined);
+    if ('error' in acting) return acting.error;
+    const { userId } = acting;
+
     const name = String(args.name ?? '').trim();
     if (!name) return 'Error: falta el nombre de la categoría.';
-    const existing = categoriesRepo.getByName(ctx.userId, name);
+    const existing = categoriesRepo.getByName(userId, name);
     if (existing) return `La categoría "${existing.name}" ya existía (#${existing.id}).`;
-    const id = categoriesRepo.create(ctx.userId, name, args.description ? String(args.description) : null);
+    const id = categoriesRepo.create(userId, name, args.description ? String(args.description) : null);
     return `Categoría "${name}" creada (#${id}).`;
   },
 };

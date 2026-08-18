@@ -1,12 +1,16 @@
-import { jidNormalizedUser } from 'baileys';
+import { jidNormalizedUser, type WAMessage } from 'baileys';
 import { WaManager } from './wa-manager.js';
+import { handleFashionMessage } from '../fashion/router.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { messagesRepo } from '../db/repositories/messages.repo.js';
 import { resetAllUserData } from '../db/reset-user.js';
 import { processMessage } from '../agent/ai-agent.js';
 import { ensureDailyAgendaReminder } from '../agent/agenda.js';
 import { ensureWeeklyReportReminder } from '../agent/weekly-report.js';
+import { ensureDailyResetReminder } from '../agent/daily-reset.js';
+import { ensureDailyDedupReminder } from '../agent/dedup.js';
 import { legacyAdminToken } from '../server/auth.js';
+import { renderMainMenu, resolveMenuCategory, renderCategoryDetail, renderUnknownCategory } from '../agent/menu.js';
 import { env } from '../config/env.js';
 import { sleep, typingDelayMs, readingPauseMs } from '../util/human-delay.js';
 import { synthesizeVoiceNote } from '../audio/tts.js';
@@ -25,6 +29,7 @@ const RESET_ALL_WARNING =
 
 const HELP_TEXT =
   'Comandos disponibles:\n\n' +
+  '/menu - menú completo de todo lo que puedo hacer, organizado por categorías.\n' +
   '/reset - borra el historial de esta conversación (empezamos a "hablar" de cero, tu ' +
   'información sigue intacta).\n' +
   '/reset todo - borra TODA tu información (recordatorios, rutinas, contactos, links, ' +
@@ -75,11 +80,15 @@ export class BotManager {
     name,
     text,
     fromAudio,
+    imageMessage,
+    documentMessage,
   }: {
     jid: string;
     name?: string;
     text: string;
     fromAudio?: boolean;
+    imageMessage?: WAMessage;
+    documentMessage?: WAMessage;
   }) {
     // Everything below can fail in ways that have nothing to do with the user's message itself
     // (AI provider hiccup, a bug, WhatsApp acting up) - wrapping the whole thing means there is
@@ -99,6 +108,8 @@ export class BotManager {
         if (lid) usersRepo.setLid(phoneJid, lid);
         ensureDailyAgendaReminder(admin.id, admin.jid);
         ensureWeeklyReportReminder(admin.id, admin.jid);
+        ensureDailyResetReminder(admin.id, admin.jid);
+        ensureDailyDedupReminder(admin.id, admin.jid);
         // Seeded from the legacy single-token source (env ADMIN_TOKEN or auth_info/admin-token.txt)
         // rather than a fresh random one, so whatever's already printed/configured for the admin
         // works immediately - see server/auth.ts.
@@ -154,6 +165,35 @@ export class BotManager {
         await this.wa.sendText(jid, HELP_TEXT);
         return;
       }
+
+      // Full feature menu (two levels: categories, then one detail screen per category) - zero
+      // token, same raw-command pattern as /reset/ayuda above. See agent/menu.ts for the single
+      // source of truth also used by the show_menu AI tool, so both entry points stay in sync.
+      if (command === '/menu') {
+        const access = { fashionEnabled: env.fashion.enabled, isAdmin: user.role === 'admin' };
+        await this.wa.sendText(jid, renderMainMenu(access));
+        return;
+      }
+      if (command.startsWith('/menu ')) {
+        const access = { fashionEnabled: env.fashion.enabled, isAdmin: user.role === 'admin' };
+        const category = resolveMenuCategory(command.slice('/menu '.length), access);
+        await this.wa.sendText(jid, category ? renderCategoryDetail(category) : renderUnknownCategory(access));
+        return;
+      }
+
+      // Fashion Mode (armario/outfits, see src/fashion/) - entirely gated behind this flag, and
+      // the `&&` short-circuits before ever touching fashion_sessions, so a disabled deploy has
+      // zero behavior change here. Runs BEFORE the AI loop (pure state-machine, no tokens spent)
+      // for exactly the same reason the /reset-style commands above do - a structured wizard step
+      // (a numbered menu choice, a photo) doesn't need a model in the loop.
+      if (env.fashion.enabled) {
+        const result = await handleFashionMessage({ userId: user.id, jid, text, imageMessage, documentMessage, wa: this.wa });
+        if (result.consumed) {
+          if (result.reply) await this.wa.sendText(jid, result.reply);
+          return;
+        }
+      }
+      if (!text.trim()) return; // bare image, not consumed by Fashion - same silent-ignore as before this feature existed
 
       // Brief human-like pauses (see util/human-delay.ts) so replies don't land instantly on
       // every message - an obviously scripted response pattern is one of the signals that

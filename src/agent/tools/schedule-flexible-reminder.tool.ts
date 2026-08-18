@@ -3,6 +3,7 @@ import { remindersRepo } from '../../db/repositories/reminders.repo.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
 import { todayLocal, dateOnly, addDays, randomTimeOnDate, parseWall, nowLocal } from '../../util/datetime.js';
 import { flexibleReminderMessage } from '../../util/motivational.js';
+import { resolveActingUser } from './act-on-behalf.js';
 
 const TIME_RE = /^\d{1,2}:\d{2}$/;
 
@@ -20,12 +21,20 @@ export const scheduleFlexibleReminderTool: Tool = {
       window_start: { type: 'string', description: "Inicio de la ventana horaria, 'HH:mm'." },
       window_end: { type: 'string', description: "Fin de la ventana horaria, 'HH:mm'. Debe ser después de window_start." },
       category: { type: 'string', description: 'Categoría opcional.' },
+      target_user: {
+        type: 'string',
+        description: 'Solo administrador: nombre o número de otra persona con acceso, para agendárselo a ella en vez de a ti.',
+      },
     },
     required: ['message', 'window_start', 'window_end'],
     additionalProperties: false,
   },
 
   async execute(args, ctx) {
+    const acting = resolveActingUser(ctx, args.target_user ? String(args.target_user) : undefined);
+    if ('error' in acting) return acting.error;
+    const { userId, targetJid } = acting;
+
     const message = String(args.message ?? '').trim();
     const windowStart = String(args.window_start ?? '');
     const windowEnd = String(args.window_end ?? '');
@@ -35,7 +44,7 @@ export const scheduleFlexibleReminderTool: Tool = {
     }
 
     let categoryId: number | null = null;
-    if (args.category) categoryId = categoriesRepo.findOrCreate(ctx.userId, String(args.category)).id;
+    if (args.category) categoryId = categoriesRepo.findOrCreate(userId, String(args.category)).id;
 
     let runAt = randomTimeOnDate(todayLocal(), windowStart, windowEnd);
     if (parseWall(runAt) <= parseWall(nowLocal())) {
@@ -43,10 +52,10 @@ export const scheduleFlexibleReminderTool: Tool = {
       runAt = randomTimeOnDate(dateOnly(addDays(todayLocal(), 1)), windowStart, windowEnd);
     }
 
-    const id = remindersRepo.create(ctx.userId, {
+    const id = remindersRepo.create(userId, {
       message: flexibleReminderMessage(message),
       runAt,
-      targetJid: ctx.ownerJid,
+      targetJid,
       categoryId,
       recurrenceFreq: 'daily',
       recurrenceInterval: 1,

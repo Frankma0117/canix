@@ -57,6 +57,15 @@ const FLEXIBLE_PREFIXES = [
   '🍃 Métele un rato a:',
 ] as const;
 
+const AGENDA_INTROS = [
+  '🌞 ¡Buenos días! Vamos con todo hoy.',
+  '☕ Arrancando el día - esto es lo tuyo:',
+  '🙌 Nuevo día, nueva oportunidad de cumplir todo:',
+  '💪 A darle - así se ve tu día:',
+  '✨ Buen día - aquí va lo que tienes:',
+  '🔥 Vamos con toda la energía hoy:',
+] as const;
+
 export function plainReminderPrefix(): string {
   return pick(PLAIN_REMINDER_PREFIXES);
 }
@@ -79,4 +88,25 @@ export function importantDateNoticeMessage(title: string, advanceDays: number): 
 
 export function flexibleReminderMessage(message: string): string {
   return `${pick(FLEXIBLE_PREFIXES)} ${message}`;
+}
+
+export function dailyAgendaIntro(): string {
+  return pick(AGENDA_INTROS);
+}
+
+/**
+ * Strips a leading randomly-picked prefix (important_date/important_date_notice/flexible - the
+ * kinds whose prefix is baked into the stored `message` at creation time, unlike plain `reminder`)
+ * so two functionally-identical reminders created at different times can be compared for
+ * duplicates by their actual content (see agent/dedup.ts) instead of failing to match just because
+ * each got a different random emoji prefix.
+ */
+export function stripKnownPrefix(text: string): string {
+  const pools: readonly (readonly string[])[] = [IMPORTANT_DATE_PREFIXES, IMPORTANT_DATE_NOTICE_PREFIXES, FLEXIBLE_PREFIXES];
+  for (const pool of pools) {
+    for (const prefix of pool) {
+      if (text.startsWith(prefix)) return text.slice(prefix.length).trim();
+    }
+  }
+  return text.trim();
 }

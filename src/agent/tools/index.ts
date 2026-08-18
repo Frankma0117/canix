@@ -50,6 +50,18 @@ import { listRecipesTool } from './list-recipes.tool.js';
 import { getRecipeTool } from './get-recipe.tool.js';
 import { deleteRecipeTool } from './delete-recipe.tool.js';
 import { regeneratePanelTokenTool } from './regenerate-panel-token.tool.js';
+import { pauseNotificationsTool } from './pause-notifications.tool.js';
+import { resumeNotificationsTool } from './resume-notifications.tool.js';
+import { pauseReminderTool } from './pause-reminder.tool.js';
+import { resumeReminderTool } from './resume-reminder.tool.js';
+import { pauseRoutineTool } from './pause-routine.tool.js';
+import { resumeRoutineTool } from './resume-routine.tool.js';
+import { editLinkTool } from './edit-link.tool.js';
+import { editCategoryTool } from './edit-category.tool.js';
+import { editContactTool } from './edit-contact.tool.js';
+import { editMealPlanTool } from './edit-meal-plan.tool.js';
+import { editRecipeTool } from './edit-recipe.tool.js';
+import { showMenuTool } from './show-menu.tool.js';
 
 /** Registers every tool the agent can use. Called once at boot. */
 export function registerTools(): void {
@@ -104,4 +116,16 @@ export function registerTools(): void {
   registry.register(getRecipeTool);
   registry.register(deleteRecipeTool);
   registry.register(regeneratePanelTokenTool);
+  registry.register(pauseNotificationsTool);
+  registry.register(resumeNotificationsTool);
+  registry.register(pauseReminderTool);
+  registry.register(resumeReminderTool);
+  registry.register(pauseRoutineTool);
+  registry.register(resumeRoutineTool);
+  registry.register(editLinkTool);
+  registry.register(editCategoryTool);
+  registry.register(editContactTool);
+  registry.register(editMealPlanTool);
+  registry.register(editRecipeTool);
+  registry.register(showMenuTool);
 }

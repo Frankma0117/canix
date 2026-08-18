@@ -109,6 +109,26 @@ start.cmd
 - El **primer número que le escriba al bot** por WhatsApp queda registrado como **administrador**.
   Desde ahí puedes darle acceso a otras personas con `grant_access` — ver "Multi-usuario" abajo.
 
+## Comandos
+
+Comandos con barra (`/`) - se resuelven directo, sin pasar por la IA (cero tokens):
+
+| Comando | Qué hace |
+| --- | --- |
+| `/menu` | Menú principal: categorías de todo lo que el bot puede hacer |
+| `/menu <categoría>` | Detalle de una categoría - ej. `/menu recordatorios`, `/menu 1`, `/menu fashion` |
+| `/ayuda` (o `/help`) | Resumen rápido de estos mismos comandos |
+| `/reset` | Borra el historial de esta conversación (tu información no se toca) |
+| `/reset todo` | Borra TODA tu información (pide confirmación explícita antes de ejecutar) |
+
+`/menu` está pensado como el punto de entrada "moderno": un nivel principal con las categorías
+numeradas, y un segundo nivel de detalle por categoría (`agent/menu.ts` es la única fuente de este
+contenido - la tool `show_menu`, que la IA usa cuando le preguntás "qué puedes hacer" en lenguaje
+natural, renderiza exactamente el mismo menú principal). Las categorías de Fashion Mode y de
+administrador solo aparecen si corresponden (`FASHION_MODE_ENABLED=true` / sos admin).
+
+Todo lo demás no necesita comando - simplemente pedíselo al bot hablando normal.
+
 ## Ejemplos de uso (por WhatsApp)
 
 - "Recuérdame llamar al dentista mañana a las 10am"
@@ -213,6 +233,64 @@ que agregar a `.env`. Seguro de re-correr (omite lo que ya esté descargado).
    `es_ES-davefx-medium`. Define `PIPER_BIN_PATH` (ruta al ejecutable `piper` dentro de la carpeta
    descomprimida) y `PIPER_VOICE_PATH` (ruta al `.onnx`) en tu `.env`.
 
+## Fashion Mode (armario y outfits)
+
+Módulo aislado y opcional para gestionar tu armario por WhatsApp: mandas fotos de tus prendas, el
+bot las clasifica (tipo, categoría, color, estilo) y las guarda organizadas. Completamente separado
+del resto del bot — recordatorios, rutinas y tareas no se ven afectados exista o no este módulo.
+
+**Estado actual**: implementado de punta a punta - activar/salir del modo, agregar prendas por foto
+(una por una, o **en lote mandando un PDF** con varias fotos - ver abajo) con clasificación
+asistida (microservicio de visión, ver abajo) o manual, ver tu armario con filtros y paginación,
+editar/marcar favorito/eliminar prendas, y el motor de recomendación de outfits (`outfit para una
+boda`) con filtrado local + DeepSeek solo sobre los candidatos reducidos, guardado de outfits
+favoritos y control de uso de IA. Pendiente: batería de tests automatizados (el proyecto no tiene
+suite de tests todavía, no es algo específico de este módulo).
+
+**Agregar prendas desde un PDF**: dentro de Fashion Mode (o directamente al escribir "agregar
+prenda"), en vez de mandar una foto podés mandar un PDF con varias fotos de prendas pegadas adentro
+- el bot extrae cada imagen (vía el microservicio de visión, ver `vision-service/README.md`'s
+`/extract-pdf`), las clasifica una por una igual que a una foto suelta, y te muestra un resumen de
+todo el lote para revisar antes de guardar:
+
+```
+📄 Encontré 4 prenda(s):
+
+1. Camisa - blanco
+2. Jeans - azul
+3. ⚠️ no se pudo clasificar automáticamente
+4. Tenis - blanco
+
+✅ "guardar todas" - guarda las que se pudieron clasificar
+🔢 escribe el número de una prenda para corregirla (ej. "3")
+❌ "cancelar" - descarta todo el lote, no guarda nada
+```
+
+Solo extrae imágenes que ya están embebidas como fotos dentro del PDF (no renderiza páginas
+completas) - sirve para un PDF armado pegando fotos, no para un PDF de puro texto/vectores.
+Controlado por `FASHION_MAX_PDF_SIZE_MB` (tamaño máximo del PDF) y `FASHION_MAX_PDF_IMAGES` (tope
+de fotos procesadas por lote, para no saturar RAM ni mandar demasiado de una vez).
+
+- 🔒 **Apagado por defecto**: `FASHION_MODE_ENABLED=false` dejando todo el bot exactamente como
+  hoy. Actívalo solo cuando tengas Spaces y (opcionalmente) el servicio de visión configurados.
+- 👔 **Activar**: escribe `fashion`, `moda`, `outfit` o `armario` en cualquier momento. `salir`
+  (o `cancelar` a mitad de un flujo) para volver al chat normal — nunca toca tu historial de
+  conversación general.
+- 📸 **Agregar prenda**: dentro del modo, "agregar prenda" y mandas una foto. Si el servicio de
+  visión (ver abajo) está corriendo, la clasifica automáticamente y te pide confirmar o corregir;
+  si no, te pregunta tipo/categoría/color con opciones numeradas — nunca bloquea el flujo.
+- 👗 **Consultar**: `armario`, `armario camisas`, `armario azul`, `armario favoritos` — filtros
+  resueltos localmente, sin gastar IA. Paginado de a 10.
+- 🖼️ **Almacenamiento**: las fotos originales se suben a DigitalOcean Spaces (bucket público-solo-
+  lectura) — configura `DO_SPACES_*` en `.env` (ver tabla de variables abajo). El Secret Access Key
+  nunca va en el código ni se comparte por chat, solo en tu `.env`.
+- 🧠 **Clasificación por IA — local y gratis**: DeepSeek (el proveedor de IA configurado para el
+  resto del bot) no tiene visión, así que Fashion Mode usa un microservicio Python separado
+  (`vision-service/`, modelo CLIP corriendo en tu propio servidor, sin ninguna API paga) - ver
+  `vision-service/README.md` para instalación y, muy importante, cómo verificar el uso de RAM en tu
+  servidor antes de dejarlo corriendo en producción. Si ese servicio no está corriendo, Fashion Mode
+  simplemente pide clasificar la prenda a mano.
+
 ## Cómo agregar una nueva tool
 
 1. Crea `src/agent/tools/mi-tool.tool.ts` exportando un objeto `Tool`.
@@ -243,11 +321,16 @@ src/
   agent/         provider.ts, ai-agent.ts, tool-registry.ts, routine-setup.ts (rutina + sus
                  2 recordatorios), tools/
   audio/         ffmpeg.ts (conversión), stt.ts (Vosk), tts.ts (Piper) - todo local, sin IA
+  fashion/       Fashion Mode (armario/outfits) - aislado del resto: router.ts + flows/ (máquina
+                 de estados por chat, sin IA), taxonomy.ts (categorías controladas), storage/
+                 (DigitalOcean Spaces), vision/ (llama al microservicio Python de vision-service/)
   scheduler/     task-scheduler.ts (recordatorios, con recurrencia, cruza todos los usuarios)
   server/        API Express + panel + auth (cada request se resuelve a su propio usuario por token)
   util/          fechas (datetime.ts), jid.ts, human-delay.ts (pausa "escribiendo")
 admin-panel/     panel admin (React + Vite + Tailwind), compila a public/
 public/          estatico servido por Express (build del panel)
+vision-service/  microservicio Python separado (Fashion Mode) - clasificación de fotos por CLIP,
+                 local y gratis, ver vision-service/README.md
 data/            app.db (SQLite, no se sube al repo)
 models/          modelo de Vosk + voces de Piper (no se sube al repo, ver sección Audio)
 bin/             binario de Piper si lo instalaste con el script de deploy (no se sube al repo)
@@ -291,6 +374,32 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now canix
 sudo journalctl -u canix -f   # logs en vivo (para escanear el QR la primera vez)
 ```
+
+### Fashion Mode: microservicio de visión (opcional)
+
+Solo hace falta si vas a activar `FASHION_MODE_ENABLED=true` con clasificación automática de fotos
+(el módulo funciona igual sin esto, pero pidiéndote los datos a mano - ver "Fashion Mode" más
+abajo). Es un proceso Python aparte, separado del bot de Node:
+
+```bash
+# Despues de ubuntu-02-deploy.sh (necesita /opt/canix ya instalado):
+deploy/ubuntu-05-setup-vision.sh          # venv + dependencias + precarga el modelo (revisa RAM libre al final)
+sudo deploy/ubuntu-06-setup-vision-service.sh   # lo deja como servicio systemd, arranca solo
+```
+
+1. `ubuntu-05-setup-vision.sh` crea el venv en `vision-service/.venv`, instala `torch`/`transformers`
+   (puede tardar varios minutos), y precarga el modelo una vez para detectar ahora - no en medio de
+   un mensaje real de un usuario - si la descarga falla o si la RAM libre queda muy ajustada
+   (imprime `free -h` al final; ver "Uso de RAM" en `vision-service/README.md` si el margen es poco).
+2. `sudo ubuntu-06-setup-vision-service.sh` instala `deploy/canix-vision.service`, lo habilita y lo
+   arranca. Verifica que responde: `curl http://127.0.0.1:8008/health` → `{"ok":true,"model_ready":true}`.
+3. Recién ahí, en `/opt/canix/.env`: `FASHION_MODE_ENABLED=true`, y `sudo systemctl restart canix`.
+
+Si en algún momento el servicio de visión se cae o no arrancó, Fashion Mode no se rompe - solo deja
+de clasificar fotos automáticamente y te pregunta el tipo/color/estilo a mano.
+
+- `sudo systemctl restart canix-vision` / `stop` / `sudo journalctl -u canix-vision -f` (logs en vivo).
+- Para probarlo en tu máquina Windows antes de tocar el servidor: `vision-service\dev.cmd`.
 
 ### Notas para producción
 
@@ -389,6 +498,15 @@ reducen mucho ese riesgo:
 | `VOSK_MODEL_PATH` | Carpeta del modelo de Vosk (transcripción de audios). Ver sección Audio | `./models/vosk-es` |
 | `PIPER_BIN_PATH` | Ruta al binario de Piper (respuesta por voz). Vacío = desactivado | — |
 | `PIPER_VOICE_PATH` | Ruta al modelo de voz `.onnx` de Piper | — |
+| `FASHION_MODE_ENABLED` | Interruptor del módulo Fashion Mode. En `false`, el bot se comporta exactamente igual que sin este módulo | `false` |
+| `FASHION_MAX_IMAGE_SIZE_MB` | Tamaño máximo aceptado para una foto de prenda | `8` |
+| `FASHION_MAX_PDF_SIZE_MB` | Tamaño máximo aceptado para un PDF de importación en lote | `15` |
+| `FASHION_MAX_PDF_IMAGES` | Tope de fotos procesadas de un mismo PDF | `12` |
+| `DO_SPACES_ENDPOINT` / `DO_SPACES_REGION` / `DO_SPACES_BUCKET` | Config de DigitalOcean Spaces (fotos de prendas) | — |
+| `DO_SPACES_ACCESS_KEY_ID` / `DO_SPACES_SECRET_ACCESS_KEY` | Credenciales de Spaces — el secret NUNCA va en el código ni se comparte | — |
+| `FASHION_VISION_SERVICE_URL` | URL del microservicio local de visión (ver `vision-service/README.md`) | `http://127.0.0.1:8008` |
+| `FASHION_VISION_TIMEOUT_MS` | Timeout de la llamada al servicio de visión antes de caer a clasificación manual | `15000` |
+| `FASHION_VISION_MIN_CONFIDENCE` | Confianza mínima para aceptar un campo detectado automáticamente | `0.35` |
 
 ## Roadmap (ideas para seguir creciendo)
 

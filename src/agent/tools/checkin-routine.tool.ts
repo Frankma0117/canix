@@ -3,6 +3,7 @@ import { todosRepo } from '../../db/repositories/todos.repo.js';
 import { habitLogsRepo } from '../../db/repositories/habit-logs.repo.js';
 import { todayLocal } from '../../util/datetime.js';
 import { pickCelebrationSticker } from '../../util/stickers.js';
+import { resolveActingUser } from './act-on-behalf.js';
 
 export const checkinRoutineTool: Tool = {
   name: 'checkin_routine',
@@ -14,14 +15,22 @@ export const checkinRoutineTool: Tool = {
       done: { type: 'boolean', description: 'true si se hizo, false si no. Default true.' },
       date: { type: 'string', description: "Fecha 'YYYY-MM-DD' (default: hoy)." },
       note: { type: 'string', description: 'Nota opcional.' },
+      target_user: {
+        type: 'string',
+        description: 'Solo administrador: nombre o número de otra persona con acceso, para marcar SU rutina en vez de la tuya.',
+      },
     },
     required: ['id'],
     additionalProperties: false,
   },
 
   async execute(args, ctx) {
+    const acting = resolveActingUser(ctx, args.target_user ? String(args.target_user) : undefined);
+    if ('error' in acting) return acting.error;
+    const { userId, targetJid } = acting;
+
     const id = Number(args.id);
-    const todo = todosRepo.getById(ctx.userId, id);
+    const todo = todosRepo.getById(userId, id);
     if (!todo || todo.scope !== 'routine') return `No encontré la rutina #${id}.`;
 
     const date = args.date ? String(args.date) : todayLocal();
@@ -34,7 +43,7 @@ export const checkinRoutineTool: Tool = {
       // Only celebrate an actual completion - never send a "congrats" sticker for a checkin that
       // marks the routine as NOT done (see util/stickers.ts). Best-effort, never blocks the reply.
       pickCelebrationSticker()
-        .then((webp) => (webp ? ctx.wa.sendSticker(ctx.ownerJid, webp) : undefined))
+        .then((webp) => (webp ? ctx.wa.sendSticker(targetJid, webp) : undefined))
         .catch(() => {});
     }
 

@@ -57,6 +57,21 @@ export const contactsRepo = {
     return contact.jid;
   },
 
+  /** Partial update for a contact's editable fields (name/notes/username) - NOT jid, which is the
+   *  contact's identity (see add_contact to re-save under a different number, which just upserts
+   *  a separate row keyed on (user_id, jid)). */
+  update(userId: number, id: number, fields: { name?: string; notes?: string | null; username?: string | null }): void {
+    const current = this.getById(userId, id);
+    if (!current) return;
+    db.prepare('UPDATE contacts SET name = ?, notes = ?, username = ? WHERE id = ? AND user_id = ?').run(
+      fields.name ?? current.name,
+      fields.notes === undefined ? current.notes : fields.notes,
+      fields.username === undefined ? current.username : fields.username,
+      id,
+      userId,
+    );
+  },
+
   /** Called from wa-manager.ts when WhatsApp reveals a phone<->lid pairing - applies to every
    *  user's contact row for that phone number, since the mapping is a fact about the number itself. */
   setLidForPhoneJid(phoneJid: string, lid: string): void {

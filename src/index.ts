@@ -11,6 +11,8 @@ import { legacyAdminToken } from './server/auth.js';
 import { usersRepo } from './db/repositories/users.repo.js';
 import { ensureDailyAgendaReminder } from './agent/agenda.js';
 import { ensureWeeklyReportReminder } from './agent/weekly-report.js';
+import { ensureDailyResetReminder } from './agent/daily-reset.js';
+import { ensureDailyDedupReminder } from './agent/dedup.js';
 
 quietLibsignalLogs();
 
@@ -35,6 +37,8 @@ async function main() {
   for (const user of usersRepo.listAll()) {
     ensureDailyAgendaReminder(user.id, user.jid);
     ensureWeeklyReportReminder(user.id, user.jid);
+    ensureDailyResetReminder(user.id, user.jid);
+    ensureDailyDedupReminder(user.id, user.jid);
   }
 
   // Backfill: every user needs their own panel_token now that the web panel is per-client instead

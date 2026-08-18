@@ -1,5 +1,5 @@
 import { db } from '../pool.js';
-import type { Reminder, RecurrenceFreq, ReminderStatus, ReminderKind } from '../../types/index.js';
+import type { Reminder, DueReminder, RecurrenceFreq, ReminderStatus, ReminderKind } from '../../types/index.js';
 
 export const remindersRepo = {
   listAll(userId: number, status?: ReminderStatus): Reminder[] {
@@ -32,11 +32,19 @@ export const remindersRepo = {
     return db.prepare('SELECT * FROM reminders WHERE todo_id = ?').all(todoId) as Reminder[];
   },
 
-  /** Pending reminders whose run_at has already passed (or equals now) - across all users, for the scheduler. */
-  listDue(nowWall: string): Reminder[] {
+  /** Pending reminders whose run_at has already passed (or equals now) - across all users, for the
+   *  scheduler. Joins the owning user's paused_until too (aliased user_paused_until) so tick() can
+   *  see both pause sources without an extra query per reminder - deliberately NOT filtered out
+   *  here, since the scheduler needs to see paused-but-due rows to decide how to skip them. */
+  listDue(nowWall: string): DueReminder[] {
     return db
-      .prepare(`SELECT * FROM reminders WHERE status = 'pending' AND run_at <= ? ORDER BY run_at`)
-      .all(nowWall) as Reminder[];
+      .prepare(
+        `SELECT r.*, u.paused_until AS user_paused_until
+         FROM reminders r JOIN users u ON u.id = r.user_id
+         WHERE r.status = 'pending' AND r.run_at <= ?
+         ORDER BY r.run_at`,
+      )
+      .all(nowWall) as DueReminder[];
   },
 
   create(
@@ -97,7 +105,9 @@ export const remindersRepo = {
     }
   },
 
-  /** Partial update for a plain reminder's editable fields (message/time/recurrence/target/category). */
+  /** Partial update for a reminder's editable fields (message/time/recurrence/target/category, plus
+   *  the flexible-window and interval-specific fields when they apply to that reminder's kind - see
+   *  edit-reminder.tool.ts, which is the only caller that ever passes those). */
   update(
     userId: number,
     id: number,
@@ -108,13 +118,19 @@ export const remindersRepo = {
       categoryId?: number | null;
       recurrenceFreq?: RecurrenceFreq;
       recurrenceInterval?: number;
+      windowStart?: string;
+      windowEnd?: string;
+      intervalSeconds?: number;
+      repeatCount?: number;
+      withAudio?: boolean;
     },
   ): void {
     const current = this.getById(userId, id);
     if (!current) return;
     db.prepare(
       `UPDATE reminders SET message = ?, run_at = ?, target_jid = ?, category_id = ?,
-       recurrence_freq = ?, recurrence_interval = ?, status = 'pending' WHERE id = ? AND user_id = ?`,
+       recurrence_freq = ?, recurrence_interval = ?, window_start = ?, window_end = ?,
+       interval_seconds = ?, repeat_count = ?, with_audio = ?, status = 'pending' WHERE id = ? AND user_id = ?`,
     ).run(
       fields.message ?? current.message,
       fields.runAt ?? current.run_at,
@@ -122,9 +138,19 @@ export const remindersRepo = {
       fields.categoryId === undefined ? current.category_id : fields.categoryId,
       fields.recurrenceFreq ?? current.recurrence_freq,
       fields.recurrenceInterval ?? current.recurrence_interval,
+      fields.windowStart ?? current.window_start,
+      fields.windowEnd ?? current.window_end,
+      fields.intervalSeconds ?? current.interval_seconds,
+      fields.repeatCount ?? current.repeat_count,
+      fields.withAudio === undefined ? current.with_audio : fields.withAudio ? 1 : 0,
       id,
       userId,
     );
+  },
+
+  /** Pauses (or clears, with null) a single reminder - see pause-reminder.tool.ts / pause-routine.tool.ts. */
+  setPausedUntil(userId: number, id: number, until: string | null): void {
+    db.prepare('UPDATE reminders SET paused_until = ? WHERE id = ? AND user_id = ?').run(until, id, userId);
   },
 
   /** Reschedules a recurring reminder to its next run_at, keeping it pending. */

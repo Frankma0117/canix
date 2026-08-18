@@ -5,6 +5,7 @@ import { contactsRepo } from '../../db/repositories/contacts.repo.js';
 import { linksRepo } from '../../db/repositories/links.repo.js';
 import { normalizeDate, parseWall, nowLocal } from '../../util/datetime.js';
 import { phoneToJid, isJid } from '../../util/jid.js';
+import { resolveActingUser } from './act-on-behalf.js';
 import type { RecurrenceFreq } from '../../types/index.js';
 
 const FREQS: RecurrenceFreq[] = ['none', 'daily', 'weekly', 'monthly', 'yearly'];
@@ -43,12 +44,20 @@ export const scheduleReminderTool: Tool = {
         description: 'Cada cuántas unidades de recurrence_freq se repite (ej. 2 = cada 2 semanas). Default 1.',
       },
       link_id: { type: 'number', description: 'Id de un link ya guardado que este recordatorio referencia (opcional).' },
+      target_user: {
+        type: 'string',
+        description: 'Solo administrador: nombre o número de otra persona con acceso, para agendárselo a ella en vez de a ti.',
+      },
     },
     required: ['run_at', 'message'],
     additionalProperties: false,
   },
 
   async execute(args, ctx) {
+    const acting = resolveActingUser(ctx, args.target_user ? String(args.target_user) : undefined);
+    if ('error' in acting) return acting.error;
+    const { userId, targetJid: actingJid } = acting;
+
     const runAt = normalizeDate(String(args.run_at ?? ''));
     if (parseWall(runAt) <= parseWall(nowLocal())) {
       return 'El momento debe ser en el futuro.';
@@ -60,7 +69,7 @@ export const scheduleReminderTool: Tool = {
       if (isJid(raw)) {
         targetJid = raw;
       } else {
-        const matches = contactsRepo.findByName(ctx.userId, raw);
+        const matches = contactsRepo.findByName(userId, raw);
         if (matches.length === 1) targetJid = contactsRepo.sendTarget(matches[0]);
         else if (/^[\d\s()+-]{6,}$/.test(raw)) targetJid = phoneToJid(raw);
         else if (matches.length > 1) return `Hay varios contactos que coinciden con "${raw}", sé más específico.`;
@@ -70,12 +79,12 @@ export const scheduleReminderTool: Tool = {
 
     let categoryId: number | null = null;
     if (args.category) {
-      categoryId = categoriesRepo.findOrCreate(ctx.userId, String(args.category)).id;
+      categoryId = categoriesRepo.findOrCreate(userId, String(args.category)).id;
     }
 
     let linkId: number | null = null;
     if (args.link_id !== undefined) {
-      const link = linksRepo.getById(ctx.userId, Number(args.link_id));
+      const link = linksRepo.getById(userId, Number(args.link_id));
       if (!link) return `No encontré el link #${args.link_id}.`;
       linkId = link.id;
     }
@@ -85,10 +94,10 @@ export const scheduleReminderTool: Tool = {
       : 'none';
     const interval = Number(args.recurrence_interval) > 0 ? Number(args.recurrence_interval) : 1;
 
-    const id = remindersRepo.create(ctx.userId, {
+    const id = remindersRepo.create(userId, {
       message: String(args.message ?? ''),
       runAt,
-      targetJid: targetJid ?? ctx.ownerJid,
+      targetJid: targetJid ?? actingJid,
       categoryId,
       recurrenceFreq: freq,
       recurrenceInterval: interval,

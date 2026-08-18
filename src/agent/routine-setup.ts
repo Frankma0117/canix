@@ -142,3 +142,18 @@ export function updateRoutineWithReminders(
 
   return true;
 }
+
+/**
+ * Pauses (or, with `until: null`, resumes) a routine's notifications by setting paused_until on
+ * BOTH its linked reminders (routine_reminder + routine_checkin) together - a routine's pause is
+ * one shared concept, not two independent ones, so both rows always move in lockstep. Returns
+ * false if the routine doesn't exist (or isn't a routine).
+ */
+export function setRoutinePaused(userId: number, id: number, until: string | null): boolean {
+  const todo = todosRepo.getById(userId, id);
+  if (!todo || todo.scope !== 'routine') return false;
+
+  const linked = remindersRepo.listByTodo(id).filter((r) => r.user_id === userId);
+  for (const r of linked) remindersRepo.setPausedUntil(userId, r.id, until);
+  return true;
+}

@@ -1,6 +1,7 @@
 import type { Tool } from '../tool-registry.js';
 import { mealPlansRepo } from '../../db/repositories/meal-plans.repo.js';
 import { normalizeDate } from '../../util/datetime.js';
+import { resolveActingUser } from './act-on-behalf.js';
 import type { MealSlot } from '../../types/index.js';
 
 const SLOTS: MealSlot[] = ['desayuno', 'almuerzo', 'cena', 'onces'];
@@ -17,12 +18,20 @@ export const planMealTool: Tool = {
       meal_slot: { type: 'string', enum: SLOTS, description: 'Cuál comida.' },
       title: { type: 'string', description: 'Qué comer (ej. "arroz con pollo y ensalada").' },
       notes: { type: 'string', description: 'Notas opcionales (ej. cantidades, receta a seguir).' },
+      target_user: {
+        type: 'string',
+        description: 'Solo administrador: nombre o número de otra persona con acceso, para planeárselo a ella en vez de a ti.',
+      },
     },
     required: ['date', 'meal_slot', 'title'],
     additionalProperties: false,
   },
 
   async execute(args, ctx) {
+    const acting = resolveActingUser(ctx, args.target_user ? String(args.target_user) : undefined);
+    if ('error' in acting) return acting.error;
+    const { userId } = acting;
+
     const date = normalizeDate(String(args.date ?? '')).slice(0, 10);
     const mealSlot = SLOTS.includes(args.meal_slot as MealSlot) ? (args.meal_slot as MealSlot) : null;
     if (!mealSlot) return `Error: meal_slot debe ser uno de: ${SLOTS.join(', ')}.`;
@@ -30,7 +39,7 @@ export const planMealTool: Tool = {
     const title = String(args.title ?? '').trim();
     if (!title) return 'Error: falta qué comer.';
 
-    const id = mealPlansRepo.create(ctx.userId, { planDate: date, mealSlot, title, notes: args.notes ? String(args.notes) : null });
+    const id = mealPlansRepo.create(userId, { planDate: date, mealSlot, title, notes: args.notes ? String(args.notes) : null });
     return `Plan #${id}: ${mealSlot} del ${date} — ${title}.`;
   },
 };

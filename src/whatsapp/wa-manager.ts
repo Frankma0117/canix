@@ -26,6 +26,15 @@ export type IncomingHandler = (msg: {
   text: string;
   /** True when `text` came from transcribing a voice note rather than being typed. */
   fromAudio?: boolean;
+  /** The full WAMessage, present only when it carries an image - deliberately lazy: nothing here
+   *  downloads the image bytes, only a caller that actually needs them (Fashion Mode mid-flow, see
+   *  fashion/image/image-intake.ts) calls downloadMediaMessage() on it. Every other path ignores
+   *  it exactly like before this field existed (only imageMessage.caption, via `text`, is used). */
+  imageMessage?: WAMessage;
+  /** Same laziness as imageMessage, for a document attachment (Fashion Mode's "send a PDF full of
+   *  garment photos" bulk import, see fashion/image/pdf-intake.ts) - only downloaded if Fashion
+   *  Mode actually consumes it as a PDF. */
+  documentMessage?: WAMessage;
 }) => Promise<void>;
 
 /**
@@ -209,6 +218,16 @@ export class WaManager {
           m.message?.imageMessage?.caption ??
           '';
         let fromAudio = false;
+        // Present only when this message carries an image - see IncomingHandler's comment. Passed
+        // through as-is (never downloaded here); a bare image with no caption used to be silently
+        // dropped by the `continue` below - now it reaches the handler, which restores that same
+        // silent-drop behavior itself whenever Fashion Mode doesn't consume it (flag off, or the
+        // user isn't actually waiting on one) - see bot-manager.ts.
+        const imageMessage = m.message?.imageMessage ? m : undefined;
+        // Same idea for documents (Fashion Mode's PDF bulk-import) - passed through untouched for
+        // anything that isn't a fashion PDF, exactly like a document was ignored before this field
+        // existed.
+        const documentMessage = m.message?.documentMessage ? m : undefined;
 
         if (!text.trim() && m.message?.audioMessage) {
           const transcribed = await this.transcribeIncomingAudio(m);
@@ -221,7 +240,7 @@ export class WaManager {
           }
         }
 
-        if (!text.trim()) continue;
+        if (!text.trim() && !imageMessage && !documentMessage) continue;
 
         const name = m.pushName || undefined;
 
@@ -233,7 +252,7 @@ export class WaManager {
         });
 
         try {
-          await this.handler?.({ jid, name, text: text.trim(), fromAudio });
+          await this.handler?.({ jid, name, text: text.trim(), fromAudio, imageMessage, documentMessage });
         } catch (err) {
           console.error('[WA] Error procesando mensaje:', (err as Error).message);
         }
@@ -353,6 +372,17 @@ export class WaManager {
     await this.ensurePrivacyToken(jid);
     console.log('[WA] Enviando sticker a %s', jid);
     await this.sock.sendMessage(jid, { sticker: webp });
+  }
+
+  /** Sends an image by its public URL (Baileys/WhatsApp fetches it directly - no need to
+   *  download+reupload) with an optional caption. Used by Fashion Mode to show a recommended
+   *  outfit's actual garment photos (see fashion/flows/outfit.flow.ts). Best-effort at the call
+   *  site - never let an image failing to send block the text summary that goes with it. */
+  async sendImage(jid: string, url: string, caption?: string): Promise<void> {
+    if (!this.sock) throw new Error('WhatsApp no esta conectado');
+    await this.ensurePrivacyToken(jid);
+    console.log('[WA] Enviando imagen a %s', jid);
+    await this.sock.sendMessage(jid, { image: { url }, caption });
   }
 
   /** Briefly shows "typing..." (feedback to the user). */

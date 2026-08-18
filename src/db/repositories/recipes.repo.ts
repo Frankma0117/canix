@@ -17,6 +17,24 @@ export const recipesRepo = {
     return Number(info.lastInsertRowid);
   },
 
+  /** Partial update for a recipe's editable fields. */
+  update(
+    userId: number,
+    id: number,
+    fields: { title?: string; ingredients?: string; instructions?: string; categoryId?: number | null },
+  ): void {
+    const current = this.getById(userId, id);
+    if (!current) return;
+    db.prepare('UPDATE recipes SET title = ?, ingredients = ?, instructions = ?, category_id = ? WHERE id = ? AND user_id = ?').run(
+      fields.title ?? current.title,
+      fields.ingredients ?? current.ingredients,
+      fields.instructions ?? current.instructions,
+      fields.categoryId === undefined ? current.category_id : fields.categoryId,
+      id,
+      userId,
+    );
+  },
+
   remove(userId: number, id: number): void {
     db.prepare('DELETE FROM recipes WHERE id = ? AND user_id = ?').run(id, userId);
   },

@@ -1,0 +1,19 @@
+[Unit]
+Description=Cania - Fashion Mode vision service (CLIP, local)
+After=network.target
+
+[Service]
+Type=simple
+User=canix
+WorkingDirectory=/opt/canix/vision-service
+ExecStart=/opt/canix/vision-service/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8008
+Restart=on-failure
+RestartSec=5
+# Reduce el pico de RAM de PyTorch a costa de inferencia un poco mas lenta - ver la seccion
+# "Uso de RAM" de vision-service/README.md antes de activar Fashion Mode en produccion.
+Environment=OMP_NUM_THREADS=1
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

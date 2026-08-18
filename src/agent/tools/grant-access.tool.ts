@@ -3,6 +3,8 @@ import { usersRepo } from '../../db/repositories/users.repo.js';
 import { phoneToJid } from '../../util/jid.js';
 import { ensureDailyAgendaReminder } from '../agenda.js';
 import { ensureWeeklyReportReminder } from '../weekly-report.js';
+import { ensureDailyResetReminder } from '../daily-reset.js';
+import { ensureDailyDedupReminder } from '../dedup.js';
 import { env } from '../../config/env.js';
 
 export const grantAccessTool: Tool = {
@@ -16,6 +18,7 @@ export const grantAccessTool: Tool = {
     properties: {
       phone: { type: 'string', description: 'Número de WhatsApp con indicativo de país (ej. 573001234567).' },
       name: { type: 'string', description: 'Nombre de la persona.' },
+      username: { type: 'string', description: 'Su @username público de WhatsApp, si lo saben (opcional, solo etiqueta de referencia).' },
     },
     required: ['phone', 'name'],
     additionalProperties: false,
@@ -26,11 +29,14 @@ export const grantAccessTool: Tool = {
     const phone = String(args.phone ?? '').trim();
     const name = String(args.name ?? '').trim();
     if (!phone || !name) return 'Error: falta el número o el nombre.';
+    const username = args.username ? String(args.username).trim() : null;
 
     const jid = phoneToJid(phone);
-    const user = usersRepo.create({ jid, name, role: 'user' });
+    const user = usersRepo.create({ jid, name, role: 'user', username });
     ensureDailyAgendaReminder(user.id, user.jid);
     ensureWeeklyReportReminder(user.id, user.jid);
+    ensureDailyResetReminder(user.id, user.jid);
+    ensureDailyDedupReminder(user.id, user.jid);
     const panelToken = usersRepo.ensurePanelToken(user.id);
 
     // Best-effort right away: confirm the number is real, and cache its lid so the bot can reach
@@ -46,9 +52,22 @@ export const grantAccessTool: Tool = {
 
     // Their own panel token - separate from yours, only ever shows their own data (see server/auth.ts).
     const panelLine = env.panelUrl ? `${env.panelUrl} con este token: ${panelToken}` : `este token: ${panelToken}`;
-    await ctx.wa
-      .sendText(jid, `¡Hola ${user.name}! Ya tienes acceso a este asistente. Si quieres, también puedes entrar al panel web en ${panelLine}`)
-      .catch((err) => console.error('[TOOL] grant_access: no se pudo avisar el token del panel a %s:', jid, (err as Error).message));
+
+    // Report the DM's actual delivery outcome instead of always claiming success - this is often
+    // the very first message the bot sends this jid (a genuinely cold contact), so a silent failure
+    // here used to look identical to success, which was very plausibly behind "no me deja avisarle
+    // a alguien que nunca me ha escrito" (see the WA cold-send race explained in wa-manager.ts's
+    // ensurePrivacyToken comment - already mitigated best-effort there, but not guaranteed).
+    try {
+      await ctx.wa.sendText(jid, `¡Hola ${user.name}! Ya tienes acceso a este asistente. Si quieres, también puedes entrar al panel web en ${panelLine}`);
+    } catch (err) {
+      console.error('[TOOL] grant_access: no se pudo avisar el token del panel a %s:', jid, (err as Error).message);
+      return (
+        `Le di acceso a "${user.name}" (#${user.id}), pero no pude avisarle el token del panel por WhatsApp ahora mismo ` +
+        '(puede pasar si nunca te ha escrito). Su token es: ' +
+        `${panelToken} - pásaselo tú, o pídele que te escriba primero y usa regenerate_panel_token para reenviárselo después.`
+      );
+    }
 
     return `Listo, "${user.name}" ya tiene acceso al bot con su propia configuración (#${user.id}) y le avisé su token del panel.`;
   },

@@ -19,6 +19,12 @@ export interface User {
   // Random per-user token for the web panel (see server/auth.ts) - each granted user gets their
   // own, scoped to only their own data, instead of everyone sharing one admin-only token.
   panel_token: string | null;
+  // WhatsApp's public @username handle, if known - reference/search label only, same limitation as
+  // Contact.username (see contacts.repo.ts's getByUsername).
+  username: string | null;
+  // Set = every scheduled notification for this person is silenced until this moment (see
+  // pause-notifications.tool.ts / task-scheduler.ts). NULL = not paused.
+  paused_until: string | null;
   created_at: string;
 }
 
@@ -72,8 +78,17 @@ export type ReminderKind =
   | 'weekly_report'
   // Short-cycle repeating alert (e.g. "avísame cada 30s, 5 veces, para cambiar de serie") - see
   // interval_seconds/repeat_count/fired_count below and schedule-interval-reminder.tool.ts. Stop
-  // it early with cancel_reminder/delete_reminder like any other pending reminder.
-  | 'interval';
+  // it early with cancel_reminder/delete_reminder like any other pending reminder. NOT pausable
+  // (see pause-reminder.tool.ts) - a short-cycle timer has no sensible "resume days later" meaning.
+  | 'interval'
+  // One per user, auto-created on bootstrap/grant_access: silently clears that day's conversation
+  // history (messages table only - never touches todos/reminders/etc.) once a day at
+  // DAILY_RESET_TIME. Never sends a WhatsApp message - see agent/daily-reset.ts.
+  | 'daily_reset'
+  // One per user, auto-created on bootstrap/grant_access: silently merges/removes duplicate
+  // routines and reminders once a day at DAILY_DEDUP_TIME. Never sends a WhatsApp message - see
+  // agent/dedup.ts.
+  | 'daily_dedup';
 
 export interface Reminder {
   id: number;
@@ -104,7 +119,17 @@ export interface Reminder {
   // Only used for kind === 'interval': also send a local-TTS voice note alongside the text on each
   // fire (no AI/tokens - see audio/tts.ts). Silently a no-op if Piper isn't configured.
   with_audio: number;
+  // Set = this specific reminder is silenced until this moment (see pause-reminder.tool.ts /
+  // pause-routine.tool.ts). NULL = not paused. A user-level pause (users.paused_until) also
+  // silences this row even when this column itself is NULL - see task-scheduler.ts.
+  paused_until: string | null;
   created_at: string;
+}
+
+/** Row shape of remindersRepo.listDue()'s join - the owning user's pause state alongside the
+ *  reminder's own, so task-scheduler.ts can check both without an extra query per reminder. */
+export interface DueReminder extends Reminder {
+  user_paused_until: string | null;
 }
 
 export type TodoScope = 'today' | 'later' | 'routine';
@@ -190,6 +215,89 @@ export interface Recipe {
   ingredients: string;
   instructions: string;
   category_id: number | null;
+  created_at: string;
+}
+
+/** Fashion Mode (armario/outfits) - see src/fashion/. Taxonomy values (type/category/style/etc.)
+ *  are validated at the app layer against src/fashion/taxonomy.ts, not a DB CHECK constraint, so
+ *  new categories are a one-line code change instead of a migration. */
+export interface Garment {
+  id: number;
+  user_id: number;
+  public_id: string;
+  storage_key: string;
+  image_url: string;
+  thumbnail_key: string | null;
+  thumbnail_url: string | null;
+  type: string;
+  category: string;
+  subcategory: string | null;
+  gender: string | null;
+  color: string | null;
+  secondary_colors: string | null; // JSON array
+  pattern: string | null;
+  material: string | null;
+  fit: string | null;
+  style: string | null; // JSON array
+  formality: string | null;
+  season: string | null; // JSON array
+  weather: string | null; // JSON array
+  occasions: string | null; // JSON array
+  brand: string | null;
+  size: string | null;
+  condition: string | null;
+  warmth: string | null;
+  water_resistance: string | null;
+  is_active: number;
+  favorite: number;
+  notes: string | null;
+  ai_metadata: string | null; // JSON: raw vision-service response, audit/debug only
+  created_at: string;
+  updated_at: string;
+}
+
+/** One row per user (1:1) - Fashion Mode's own conversational state (FASHION_HOME,
+ *  FASHION_ADD_GARMENT_WAITING_IMAGE, etc. - see src/fashion/types.ts). */
+export interface FashionSession {
+  user_id: number;
+  state: string;
+  data: string; // JSON
+  updated_at: string;
+}
+
+/** A saved combination of garments - only persisted when the user explicitly saves one (see
+ *  fashion/flows/outfit.flow.ts). */
+export interface Outfit {
+  id: number;
+  user_id: number;
+  name: string | null;
+  occasion: string | null;
+  formality: string | null;
+  season: string | null;
+  style: string | null;
+  notes: string | null;
+  favorite: number;
+  ai_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OutfitGarment {
+  id: number;
+  outfit_id: number;
+  garment_id: number;
+  role: string; // matches src/fashion/taxonomy.ts's GarmentType
+}
+
+/** Token/cost visibility for Fashion Mode's AI calls (see fashion/outfit/recommendation.service.ts
+ *  and fashion/outfit/intent.ts) - separate from the general [LLM] console log in ai-agent.ts. */
+export interface AiUsage {
+  id: number;
+  user_id: number | null;
+  operation: string;
+  model: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
   created_at: string;
 }
 

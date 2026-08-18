@@ -1,6 +1,7 @@
 import type { Tool } from '../tool-registry.js';
 import { contactsRepo } from '../../db/repositories/contacts.repo.js';
 import { phoneToJid } from '../../util/jid.js';
+import { resolveActingUser } from './act-on-behalf.js';
 
 export const addContactTool: Tool = {
   name: 'add_contact',
@@ -17,19 +18,27 @@ export const addContactTool: Tool = {
       phone: { type: 'string', description: 'Número de WhatsApp con indicativo de país (ej. 573001234567).' },
       username: { type: 'string', description: 'Su @username de WhatsApp, si lo tiene (sin el @). Opcional.' },
       notes: { type: 'string', description: 'Nota opcional sobre este contacto.' },
+      target_user: {
+        type: 'string',
+        description: 'Solo administrador: nombre o número de otra persona con acceso, para guardárselo a ella en vez de a ti.',
+      },
     },
     required: ['name', 'phone'],
     additionalProperties: false,
   },
 
   async execute(args, ctx) {
+    const acting = resolveActingUser(ctx, args.target_user ? String(args.target_user) : undefined);
+    if ('error' in acting) return acting.error;
+    const { userId } = acting;
+
     const name = String(args.name ?? '').trim();
     const phone = String(args.phone ?? '').trim();
     if (!name || !phone) return 'Error: falta nombre o número.';
     const username = args.username ? String(args.username).trim().replace(/^@/, '') : null;
 
     const jid = phoneToJid(phone);
-    const contact = contactsRepo.upsert(ctx.userId, name, jid, args.notes ? String(args.notes) : null, username);
+    const contact = contactsRepo.upsert(userId, name, jid, args.notes ? String(args.notes) : null, username);
 
     // Best-effort right away: confirm the number is real, and cache its lid if it has one, so
     // sending to them later (even if they never write first) works from the get-go.

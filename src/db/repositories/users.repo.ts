@@ -44,17 +44,25 @@ export const usersRepo = {
   },
 
   /** Grants access. Idempotent: re-granting an already-registered jid just returns the existing user. */
-  create(fields: { jid: string; name: string | null; role?: UserRole }): User {
-    db.prepare(`INSERT INTO users (jid, name, role) VALUES (?, ?, ?) ON CONFLICT(jid) DO NOTHING`).run(
-      fields.jid,
-      fields.name,
-      fields.role ?? 'user',
-    );
+  create(fields: { jid: string; name: string | null; role?: UserRole; username?: string | null }): User {
+    db.prepare(
+      `INSERT INTO users (jid, name, role, username) VALUES (?, ?, ?, ?) ON CONFLICT(jid) DO NOTHING`,
+    ).run(fields.jid, fields.name, fields.role ?? 'user', fields.username ?? null);
     return this.getByJidOrLid(fields.jid)!;
   },
 
   setLid(jid: string, lid: string): void {
     db.prepare('UPDATE users SET lid = ? WHERE jid = ?').run(lid, jid);
+  },
+
+  setUsername(id: number, username: string | null): void {
+    db.prepare('UPDATE users SET username = ? WHERE id = ?').run(username, id);
+  },
+
+  /** Pauses (or clears, with null) every scheduled notification for this user - see
+   *  pause-notifications.tool.ts / task-scheduler.ts. */
+  setPausedUntil(id: number, until: string | null): void {
+    db.prepare('UPDATE users SET paused_until = ? WHERE id = ?').run(until, id);
   },
 
   /** Restricts a user to only the given tool names, or pass null to clear the restriction (full access). */

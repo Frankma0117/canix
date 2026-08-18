@@ -14,7 +14,9 @@ export const listUsersTool: Tool = {
       .map((u) => {
         const allowed = usersRepo.getAllowedTools(u);
         const restriction = u.role === 'admin' ? ' — administrador' : allowed ? ` — restringido a: ${allowed.join(', ')}` : '';
-        return `#${u.id} ${u.name ?? '(sin nombre)'}${restriction}`;
+        const usernameNote = u.username ? ` @${u.username}` : '';
+        const pausedNote = u.paused_until ? ` — 🔕 pausado hasta ${u.paused_until.slice(0, 10)}` : '';
+        return `#${u.id} ${u.name ?? '(sin nombre)'}${usernameNote} (${u.jid})${restriction}${pausedNote}`;
       })
       .join('\n');
   },

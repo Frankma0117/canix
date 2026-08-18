@@ -168,6 +168,101 @@ export function initSchema(): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- Fashion Mode (armario/outfits, ver src/fashion/): una prenda registrada por foto. La
+    -- taxonomia (type/category/style/etc.) vive en código (src/fashion/taxonomy.ts), no aquí
+    -- adrede - así agregar una categoría nueva es un cambio de un array, no una migración.
+    CREATE TABLE IF NOT EXISTS garments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      public_id TEXT NOT NULL UNIQUE,
+      storage_key TEXT NOT NULL,
+      image_url TEXT NOT NULL,
+      thumbnail_key TEXT,
+      thumbnail_url TEXT,
+      type TEXT NOT NULL,
+      category TEXT NOT NULL,
+      subcategory TEXT,
+      gender TEXT,
+      color TEXT,
+      secondary_colors TEXT,
+      pattern TEXT,
+      material TEXT,
+      fit TEXT,
+      style TEXT,
+      formality TEXT,
+      season TEXT,
+      weather TEXT,
+      occasions TEXT,
+      brand TEXT,
+      size TEXT,
+      condition TEXT,
+      warmth TEXT,
+      water_resistance TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      favorite INTEGER NOT NULL DEFAULT 0,
+      notes TEXT,
+      ai_metadata TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Fashion Mode's own conversational state machine - one row per user (1:1), kept fully
+    -- separate from the users table so this module never needs to touch the core auth table.
+    CREATE TABLE IF NOT EXISTS fashion_sessions (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      state TEXT NOT NULL DEFAULT 'FASHION_IDLE',
+      data TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- A saved outfit (a combination of garments) - only persisted when the user explicitly saves
+    -- one (see outfit.flow.ts). "role" on outfit_garments matches src/fashion/taxonomy.ts's
+    -- GarmentType (TOP/BOTTOM/FULL_BODY/OUTERWEAR/FOOTWEAR/ACCESSORY) - reused directly instead of
+    -- inventing a parallel enum, since a garment's role in an outfit is exactly its own type.
+    CREATE TABLE IF NOT EXISTS outfits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT,
+      occasion TEXT,
+      formality TEXT,
+      season TEXT,
+      style TEXT,
+      notes TEXT,
+      favorite INTEGER NOT NULL DEFAULT 0,
+      ai_reason TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS outfit_garments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      outfit_id INTEGER NOT NULL REFERENCES outfits(id) ON DELETE CASCADE,
+      garment_id INTEGER NOT NULL REFERENCES garments(id) ON DELETE CASCADE,
+      role TEXT NOT NULL,
+      UNIQUE(outfit_id, garment_id)
+    );
+
+    -- Token/cost visibility for Fashion Mode's AI calls (intent classification + outfit
+    -- recommendation) - separate from the general [LLM] console log in ai-agent.ts, so "cuánto
+    -- está gastando Fashion Mode" can be answered on its own instead of mixed with normal chat use.
+    CREATE TABLE IF NOT EXISTS ai_usage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      operation TEXT NOT NULL,
+      model TEXT,
+      input_tokens INTEGER,
+      output_tokens INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_garments_user ON garments(user_id);
+    CREATE INDEX IF NOT EXISTS idx_garments_user_type ON garments(user_id, type);
+    CREATE INDEX IF NOT EXISTS idx_garments_user_favorite ON garments(user_id, favorite);
+    CREATE INDEX IF NOT EXISTS idx_outfits_user ON outfits(user_id);
+    CREATE INDEX IF NOT EXISTS idx_outfit_garments_outfit ON outfit_garments(outfit_id);
+    CREATE INDEX IF NOT EXISTS idx_outfit_garments_garment ON outfit_garments(garment_id);
+    CREATE INDEX IF NOT EXISTS idx_ai_usage_user ON ai_usage(user_id);
+
     CREATE INDEX IF NOT EXISTS idx_exercises_todo ON exercises(todo_id);
     CREATE INDEX IF NOT EXISTS idx_exercises_user ON exercises(user_id);
     CREATE INDEX IF NOT EXISTS idx_meal_plans_user_date ON meal_plans(user_id, plan_date);
@@ -224,6 +319,17 @@ export function initSchema(): void {
   // username->jid USync resolution isn't wired up yet (see contacts.repo.ts's getByUsername), so
   // sending still always needs a real phone number under the hood.
   ensureColumn('contacts', 'username', 'username TEXT');
+  // Same @username label as contacts.username, but for a person who has bot access themselves (see
+  // grant-access.tool.ts) - reference/search only, same limitation (no username->jid resolution).
+  ensureColumn('users', 'username', 'username TEXT');
+  // Pausing notifications: NULL = not paused. On `users`, pauses EVERYTHING for that person (see
+  // pause-notifications.tool.ts). On `reminders`, pauses just that one row - a paused routine sets
+  // this on both its linked routine_reminder/routine_checkin rows together (see routine-setup.ts's
+  // pauseRoutine). Recurring reminders silently fast-forward past a pause (no backlog on resume);
+  // one-off reminders just sit pending and fire on the first tick once the pause lifts (see
+  // task-scheduler.ts). Both 'YYYY-MM-DD HH:mm:ss' local wall time, same format as run_at.
+  ensureColumn('users', 'paused_until', 'paused_until TEXT');
+  ensureColumn('reminders', 'paused_until', 'paused_until TEXT');
 }
 
 /** Adds a column to `table` if it doesn't already exist (table/column names here are always our own constants, never user input). */

@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1112.0",
     "@hapi/boom": "^10.0.1",
     "baileys": "^7.0.0-rc.9",
     "better-sqlite3": "^11.8.1",

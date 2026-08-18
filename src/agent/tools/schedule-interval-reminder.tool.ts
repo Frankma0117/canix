@@ -2,9 +2,8 @@ import type { Tool } from '../tool-registry.js';
 import { remindersRepo } from '../../db/repositories/reminders.repo.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
 import { nowLocal, addSeconds } from '../../util/datetime.js';
-
-const MIN_INTERVAL_SECONDS = 20; // below this it wouldn't reliably fire more often than the scheduler's own 30s tick anyway
-const MAX_REPEAT_COUNT = 100; // safety ceiling against an accidentally-infinite spam loop
+import { MIN_INTERVAL_SECONDS, MAX_REPEAT_COUNT } from './reminder-limits.js';
+import { resolveActingUser } from './act-on-behalf.js';
 
 export const scheduleIntervalReminderTool: Tool = {
   name: 'schedule_interval_reminder',
@@ -28,12 +27,20 @@ export const scheduleIntervalReminderTool: Tool = {
         description: 'Si además de texto se debe intentar mandar una nota de voz en cada aviso (si hay TTS local configurado). Default false.',
       },
       category: { type: 'string', description: 'Categoría opcional.' },
+      target_user: {
+        type: 'string',
+        description: 'Solo administrador: nombre o número de otra persona con acceso, para agendárselo a ella en vez de a ti.',
+      },
     },
     required: ['message', 'interval_seconds', 'repeat_count'],
     additionalProperties: false,
   },
 
   async execute(args, ctx) {
+    const acting = resolveActingUser(ctx, args.target_user ? String(args.target_user) : undefined);
+    if ('error' in acting) return acting.error;
+    const { userId, targetJid } = acting;
+
     const message = String(args.message ?? '').trim();
     if (!message) return 'Error: falta el mensaje a repetir.';
 
@@ -51,12 +58,12 @@ export const scheduleIntervalReminderTool: Tool = {
     const runAt = addSeconds(nowLocal(), Math.max(startDelay, 1));
 
     let categoryId: number | null = null;
-    if (args.category) categoryId = categoriesRepo.findOrCreate(ctx.userId, String(args.category)).id;
+    if (args.category) categoryId = categoriesRepo.findOrCreate(userId, String(args.category)).id;
 
-    const id = remindersRepo.create(ctx.userId, {
+    const id = remindersRepo.create(userId, {
       message,
       runAt,
-      targetJid: ctx.ownerJid,
+      targetJid,
       categoryId,
       recurrenceFreq: 'none', // interval reminders manage their own cadence, not the daily/weekly/etc. system
       recurrenceInterval: 1,

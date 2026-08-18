@@ -2,6 +2,7 @@ import { todosRepo } from '../db/repositories/todos.repo.js';
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { todayLocal, weekdayName, dateOnly, nowLocal, addDays } from '../util/datetime.js';
+import { dailyAgendaIntro } from '../util/motivational.js';
 import { env } from '../config/env.js';
 
 interface AgendaItem {
@@ -17,8 +18,12 @@ interface AgendaItem {
  * checked in today shows as done instead of being asked about again (point behind why the bot
  * used to nag after an early check-in), and a routine whose time already passed without a
  * check-in is flagged so the user can ask to move it to another slot the same day (edit_routine).
+ * `withIntro` prepends a rotating motivational phrase (see util/motivational.ts) - only the
+ * automatic morning ping (kind: 'daily_agenda' in task-scheduler.ts) passes it; the on-demand
+ * get_today_agenda tool and the system-prompt context both keep the plain default so a randomized
+ * phrase doesn't add pointless variance where the user never actually reads it as a chat message.
  */
-export function buildAgendaMessage(userId: number): string {
+export function buildAgendaMessage(userId: number, opts: { withIntro?: boolean } = {}): string {
   const today = todayLocal();
   const now = nowLocal();
   const items: AgendaItem[] = [];
@@ -28,8 +33,10 @@ export function buildAgendaMessage(userId: number): string {
     if (!r.reminder_time) continue;
     const log = habitLogsRepo.getForDate(r.id, today);
     const runAt = `${today} ${r.reminder_time}:00`;
+    const paused = remindersRepo.listByTodo(r.id).some((rem) => rem.paused_until && rem.paused_until > now);
     let note = '';
-    if (log?.done) note = ' — ✅ ya cumplida hoy';
+    if (paused) note = ' — ⏸️ pausada';
+    else if (log?.done) note = ' — ✅ ya cumplida hoy';
     else if (runAt < now) note = ' — ⚠️ ya pasó la hora y no está marcada (puedo reprogramarla con edit_routine si quieres)';
     items.push({ time: r.reminder_time, label: `${r.title} (rutina)${note}` });
   }
@@ -49,7 +56,9 @@ export function buildAgendaMessage(userId: number): string {
 
   const todosToday = todosRepo.list(userId, { scope: 'today', status: 'pending' });
 
-  const lines: string[] = [`📋 Tu día de hoy (${today}, ${weekdayName(today)}):`];
+  const lines: string[] = [];
+  if (opts.withIntro) lines.push(dailyAgendaIntro(), '');
+  lines.push(`📋 Tu día de hoy (${today}, ${weekdayName(today)}):`);
 
   if (items.length === 0 && todosToday.length === 0) {
     lines.push('', 'No tienes nada agendado para hoy. 🎉');

@@ -5,6 +5,7 @@ import { contactsRepo } from '../../db/repositories/contacts.repo.js';
 import { normalizeDate, parseWall, nowLocal, addDays, addMonths } from '../../util/datetime.js';
 import { phoneToJid, isJid } from '../../util/jid.js';
 import { importantDateMessage, importantDateNoticeMessage } from '../../util/motivational.js';
+import { resolveActingUser } from './act-on-behalf.js';
 import type { RecurrenceFreq } from '../../types/index.js';
 
 export const scheduleImportantDateTool: Tool = {
@@ -33,12 +34,20 @@ export const scheduleImportantDateTool: Tool = {
         type: 'string',
         description: 'A quién avisarle: nombre de un contacto o número. Si se omite, es para mí.',
       },
+      target_user: {
+        type: 'string',
+        description: 'Solo administrador: nombre o número de otra persona con acceso, para agendársela a ella en vez de a ti.',
+      },
     },
     required: ['title', 'date'],
     additionalProperties: false,
   },
 
   async execute(args, ctx) {
+    const acting = resolveActingUser(ctx, args.target_user ? String(args.target_user) : undefined);
+    if ('error' in acting) return acting.error;
+    const { userId, targetJid: actingJid } = acting;
+
     const title = String(args.title ?? '').trim();
     if (!title) return 'Error: falta el título de la fecha importante.';
 
@@ -60,7 +69,7 @@ export const scheduleImportantDateTool: Tool = {
       if (isJid(raw)) {
         targetJid = raw;
       } else {
-        const matches = contactsRepo.findByName(ctx.userId, raw);
+        const matches = contactsRepo.findByName(userId, raw);
         if (matches.length === 1) targetJid = contactsRepo.sendTarget(matches[0]);
         else if (/^[\d\s()+-]{6,}$/.test(raw)) targetJid = phoneToJid(raw);
         else if (matches.length > 1) return `Hay varios contactos que coinciden con "${raw}", sé más específico.`;
@@ -69,11 +78,11 @@ export const scheduleImportantDateTool: Tool = {
     }
 
     let categoryId: number | null = null;
-    if (args.category) categoryId = categoriesRepo.findOrCreate(ctx.userId, String(args.category)).id;
+    if (args.category) categoryId = categoriesRepo.findOrCreate(userId, String(args.category)).id;
 
-    const finalTargetJid = targetJid ?? ctx.ownerJid;
+    const finalTargetJid = targetJid ?? actingJid;
 
-    const mainId = remindersRepo.create(ctx.userId, {
+    const mainId = remindersRepo.create(userId, {
       message: importantDateMessage(title),
       runAt,
       targetJid: finalTargetJid,
@@ -90,7 +99,7 @@ export const scheduleImportantDateTool: Tool = {
     if (advanceDays > 0) {
       const noticeRunAt = addDays(runAt, -advanceDays);
       if (parseWall(noticeRunAt) > parseWall(nowLocal())) {
-        const noticeId = remindersRepo.create(ctx.userId, {
+        const noticeId = remindersRepo.create(userId, {
           message: importantDateNoticeMessage(title, advanceDays),
           runAt: noticeRunAt,
           targetJid: finalTargetJid,

@@ -1,6 +1,7 @@
 import type { Tool } from '../tool-registry.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
 import { createRoutineWithReminders } from '../routine-setup.js';
+import { resolveActingUser } from './act-on-behalf.js';
 import type { RecurrenceFreq } from '../../types/index.js';
 
 const TIME_RE = /^\d{1,2}:\d{2}$/;
@@ -26,12 +27,20 @@ export const createRoutineTool: Tool = {
         type: 'number',
         description: 'Minutos que dura. Al pasar este tiempo desde reminder_time, el bot pregunta si se cumplió.',
       },
+      target_user: {
+        type: 'string',
+        description: 'Solo administrador: nombre o número de otra persona con acceso, para crearle la rutina a ella en vez de a ti.',
+      },
     },
     required: ['title', 'reminder_time', 'duration_minutes'],
     additionalProperties: false,
   },
 
   async execute(args, ctx) {
+    const acting = resolveActingUser(ctx, args.target_user ? String(args.target_user) : undefined);
+    if ('error' in acting) return acting.error;
+    const { userId, targetJid } = acting;
+
     const title = String(args.title ?? '').trim();
     if (!title) return 'Error: falta el nombre de la rutina.';
 
@@ -42,10 +51,10 @@ export const createRoutineTool: Tool = {
     if (!durationMinutes || durationMinutes <= 0) return 'Error: duration_minutes debe ser un número mayor a 0.';
 
     let categoryId: number | null = null;
-    if (args.category) categoryId = categoriesRepo.findOrCreate(ctx.userId, String(args.category)).id;
+    if (args.category) categoryId = categoriesRepo.findOrCreate(userId, String(args.category)).id;
 
     const freq: RecurrenceFreq = args.frequency === 'weekly' ? 'weekly' : 'daily';
-    const id = createRoutineWithReminders(ctx.userId, ctx.ownerJid, {
+    const id = createRoutineWithReminders(userId, targetJid, {
       title,
       categoryId,
       freq,

@@ -1,6 +1,7 @@
 import type { Tool } from '../tool-registry.js';
 import { recipesRepo } from '../../db/repositories/recipes.repo.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
+import { resolveActingUser } from './act-on-behalf.js';
 
 export const saveRecipeTool: Tool = {
   name: 'save_recipe',
@@ -14,21 +15,29 @@ export const saveRecipeTool: Tool = {
       ingredients: { type: 'string', description: 'Lista de ingredientes.' },
       instructions: { type: 'string', description: 'Pasos para prepararlo.' },
       category: { type: 'string', description: 'Categoría opcional.' },
+      target_user: {
+        type: 'string',
+        description: 'Solo administrador: nombre o número de otra persona con acceso, para guardársela a ella en vez de a ti.',
+      },
     },
     required: ['title', 'ingredients', 'instructions'],
     additionalProperties: false,
   },
 
   async execute(args, ctx) {
+    const acting = resolveActingUser(ctx, args.target_user ? String(args.target_user) : undefined);
+    if ('error' in acting) return acting.error;
+    const { userId } = acting;
+
     const title = String(args.title ?? '').trim();
     const ingredients = String(args.ingredients ?? '').trim();
     const instructions = String(args.instructions ?? '').trim();
     if (!title || !ingredients || !instructions) return 'Error: falta título, ingredientes o instrucciones.';
 
     let categoryId: number | null = null;
-    if (args.category) categoryId = categoriesRepo.findOrCreate(ctx.userId, String(args.category)).id;
+    if (args.category) categoryId = categoriesRepo.findOrCreate(userId, String(args.category)).id;
 
-    const id = recipesRepo.create(ctx.userId, { title, ingredients, instructions, categoryId });
+    const id = recipesRepo.create(userId, { title, ingredients, instructions, categoryId });
     return `Receta #${id} "${title}" guardada.`;
   },
 };

@@ -49,6 +49,24 @@ export const linksRepo = {
     return Number(info.lastInsertRowid);
   },
 
+  /** Partial update for a link's editable fields (url/title/description/category). */
+  update(
+    userId: number,
+    id: number,
+    fields: { url?: string; title?: string | null; description?: string | null; categoryId?: number | null },
+  ): void {
+    const current = this.getById(userId, id);
+    if (!current) return;
+    db.prepare('UPDATE links SET url = ?, title = ?, description = ?, category_id = ? WHERE id = ? AND user_id = ?').run(
+      fields.url ?? current.url,
+      fields.title === undefined ? current.title : fields.title,
+      fields.description === undefined ? current.description : fields.description,
+      fields.categoryId === undefined ? current.category_id : fields.categoryId,
+      id,
+      userId,
+    );
+  },
+
   /** Picks a random link from a category, favoring ones used least recently. */
   pickRandom(userId: number, categoryId: number): Link | undefined {
     return db

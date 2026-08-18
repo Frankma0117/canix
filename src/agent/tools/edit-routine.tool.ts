@@ -1,6 +1,7 @@
 import type { Tool } from '../tool-registry.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
 import { updateRoutineWithReminders } from '../routine-setup.js';
+import { resolveActingUser } from './act-on-behalf.js';
 import type { RecurrenceFreq } from '../../types/index.js';
 
 const TIME_RE = /^\d{1,2}:\d{2}$/;
@@ -20,16 +21,24 @@ export const editRoutineTool: Tool = {
       frequency: { type: 'string', enum: ['daily', 'weekly'], description: 'Nueva frecuencia (opcional).' },
       reminder_time: { type: 'string', description: "Nueva hora de aviso 'HH:mm' (opcional)." },
       duration_minutes: { type: 'number', description: 'Nueva duración en minutos (opcional).' },
+      target_user: {
+        type: 'string',
+        description: 'Solo administrador: nombre o número de otra persona con acceso, para editar SU rutina en vez de la tuya.',
+      },
     },
     required: ['id'],
     additionalProperties: false,
   },
 
   async execute(args, ctx) {
+    const acting = resolveActingUser(ctx, args.target_user ? String(args.target_user) : undefined);
+    if ('error' in acting) return acting.error;
+    const { userId } = acting;
+
     const id = Number(args.id);
 
     let categoryId: number | null | undefined;
-    if (args.category) categoryId = categoriesRepo.findOrCreate(ctx.userId, String(args.category)).id;
+    if (args.category) categoryId = categoriesRepo.findOrCreate(userId, String(args.category)).id;
 
     let reminderTime: string | undefined;
     if (args.reminder_time !== undefined) {
@@ -45,7 +54,7 @@ export const editRoutineTool: Tool = {
 
     const freq: RecurrenceFreq | undefined = args.frequency === 'weekly' ? 'weekly' : args.frequency === 'daily' ? 'daily' : undefined;
 
-    const ok = updateRoutineWithReminders(ctx.userId, id, {
+    const ok = updateRoutineWithReminders(userId, id, {
       title: args.title ? String(args.title) : undefined,
       categoryId,
       freq,
