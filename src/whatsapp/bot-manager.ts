@@ -23,7 +23,7 @@ const ERROR_REPLY =
   'momento - si te sigue pasando seguido, avísale al administrador.';
 
 const RESET_ALL_WARNING =
-  '⚠️ Esto borra TODO tu contenido: recordatorios, rutinas, contactos, links, categorías, ' +
+  '⚠️ Esto borra TODO tu contenido: recordatorios, rutinas, contactos, links, notas, categorías, ' +
   'premios/castigos e historial de chat - no se puede deshacer (tu acceso al bot no se toca). ' +
   'Si estás seguro, escribe exactamente:\n\n/reset todo confirmar';
 
@@ -32,7 +32,7 @@ const HELP_TEXT =
   '/menu - menú completo de todo lo que puedo hacer, organizado por categorías.\n' +
   '/reset - borra el historial de esta conversación (empezamos a "hablar" de cero, tu ' +
   'información sigue intacta).\n' +
-  '/reset todo - borra TODA tu información (recordatorios, rutinas, contactos, links, ' +
+  '/reset todo - borra TODA tu información (recordatorios, rutinas, contactos, links, notas, ' +
   'categorías, premios/castigos e historial) y empieza de cero. Pide confirmación antes de ' +
   'hacerlo, no se puede deshacer.\n' +
   '/ayuda - muestra este mensaje.\n\n' +

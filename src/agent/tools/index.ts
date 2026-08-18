@@ -62,6 +62,10 @@ import { editContactTool } from './edit-contact.tool.js';
 import { editMealPlanTool } from './edit-meal-plan.tool.js';
 import { editRecipeTool } from './edit-recipe.tool.js';
 import { showMenuTool } from './show-menu.tool.js';
+import { addNoteTool } from './add-note.tool.js';
+import { listNotesTool } from './list-notes.tool.js';
+import { editNoteTool } from './edit-note.tool.js';
+import { deleteNoteTool } from './delete-note.tool.js';
 
 /** Registers every tool the agent can use. Called once at boot. */
 export function registerTools(): void {
@@ -128,4 +132,8 @@ export function registerTools(): void {
   registry.register(editMealPlanTool);
   registry.register(editRecipeTool);
   registry.register(showMenuTool);
+  registry.register(addNoteTool);
+  registry.register(listNotesTool);
+  registry.register(editNoteTool);
+  registry.register(deleteNoteTool);
 }

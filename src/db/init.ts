@@ -50,6 +50,19 @@ export function initSchema(): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- Notas importantes: texto libre para consultar después (una idea, un dato, algo que le
+    -- dijeron) - a diferencia de todos/reminders, no tienen fecha, hora ni estado. Reusa la misma
+    -- tabla de categorías que ya usan links/todos, no una propia.
+    CREATE TABLE IF NOT EXISTS notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+      title TEXT,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     -- LID: WhatsApp's privacy-preserving id (@lid), stored alongside the phone-number jid so
     -- messages can still be sent reliably when a contact only resolves via lid (see wa-manager.ts).
     CREATE TABLE IF NOT EXISTS contacts (

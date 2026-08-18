@@ -19,7 +19,7 @@ interface MenuCategory {
   detail: string;
 }
 
-const NUMBER_EMOJI = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+const NUMBER_EMOJI = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 
 const NAV_FOOTER = '\n\n↩️ /menu - volver al menú principal';
 
@@ -67,8 +67,20 @@ const CORE_CATEGORIES: MenuCategory[] = [
       `- Ver tu lista de pendientes`,
   },
   {
-    key: 'links',
+    key: 'notas',
     number: 4,
+    emoji: '📝',
+    title: 'Notas importantes',
+    aliases: ['nota', 'notas'],
+    detail:
+      `📝 *Notas importantes*\n\n` +
+      `- Guardar info suelta para consultar después: "anota que...", "guarda esta nota" (sin fecha ni hora - para eso son los recordatorios/tareas)\n` +
+      `- Buscarlas por categoría o por texto\n` +
+      `- Editar o eliminar`,
+  },
+  {
+    key: 'links',
+    number: 5,
     emoji: '🔗',
     title: 'Links',
     aliases: ['link', 'links', 'enlace', 'enlaces'],
@@ -81,7 +93,7 @@ const CORE_CATEGORIES: MenuCategory[] = [
   },
   {
     key: 'contactos',
-    number: 5,
+    number: 6,
     emoji: '👤',
     title: 'Contactos',
     aliases: ['contacto', 'contactos'],
@@ -93,7 +105,7 @@ const CORE_CATEGORIES: MenuCategory[] = [
   },
   {
     key: 'comidas',
-    number: 6,
+    number: 7,
     emoji: '🍽️',
     title: 'Comidas y recetas',
     aliases: ['comida', 'comidas', 'receta', 'recetas'],
@@ -106,7 +118,7 @@ const CORE_CATEGORIES: MenuCategory[] = [
   },
   {
     key: 'premios',
-    number: 7,
+    number: 8,
     emoji: '🏆',
     title: 'Premios y castigos',
     aliases: ['premio', 'premios', 'castigo', 'castigos'],
@@ -117,7 +129,7 @@ const CORE_CATEGORIES: MenuCategory[] = [
   },
   {
     key: 'resumenes',
-    number: 8,
+    number: 9,
     emoji: '📊',
     title: 'Resúmenes automáticos',
     aliases: ['resumen', 'resumenes', 'resúmenes', 'reporte', 'reportes'],
@@ -129,7 +141,7 @@ const CORE_CATEGORIES: MenuCategory[] = [
   },
   {
     key: 'panel',
-    number: 9,
+    number: 10,
     emoji: '🌐',
     title: 'Panel web',
     aliases: ['panel', 'web'],

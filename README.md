@@ -25,6 +25,11 @@ simplificada para uso personal: sin multi-negocio, con SQLite en vez de MySQL.
   recurrentes con seguimiento diario/semanal y racha). Se pueden **editar** (título, categoría,
   fecha, hora, duración) sin borrarlas y volver a crearlas - por chat (`edit_todo`/`edit_routine`,
   editar una rutina conserva su historial/racha) o desde el panel.
+- 📝 **Notas importantes**: información suelta que quieres poder recuperar después (una idea, un
+  dato, algo que te dijeron) - a diferencia de una tarea o recordatorio, no tiene fecha ni hora ni
+  se marca como cumplida. "Anota que el wifi de la oficina es tal clave", y después "busca mis
+  notas sobre wifi" o "muéstrame mis notas de trabajo" (categoría opcional, misma tabla de
+  categorías que usan los links).
 - 🌅 **Agenda del día**: cada mañana (hora configurable, `MORNING_SUMMARY_TIME`) te llega
   automáticamente el orden del día completo - rutinas, recordatorios y tareas de hoy, empezando
   por lo primero. Pregúntalo en cualquier momento ("¿qué tengo hoy?", "¿cómo va mi día?") y también
