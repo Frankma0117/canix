@@ -12,6 +12,11 @@ RestartSec=5
 # Reduce el pico de RAM de PyTorch a costa de inferencia un poco mas lenta - ver la seccion
 # "Uso de RAM" de vision-service/README.md antes de activar Fashion Mode en produccion.
 Environment=OMP_NUM_THREADS=1
+# 'canix' es un usuario de sistema (useradd -r, ver ubuntu-06-setup-vision-service.sh) sin carpeta
+# home creada - sin esto, HOME cae en /home/canix (no existe, y 'canix' no puede crearla bajo
+# /home) y transformers falla al intentar cachear el modelo CLIP ahi (~/.cache/huggingface).
+# Se apunta a WorkingDirectory, que ya es de 'canix' (chown -R en el setup) y existe seguro.
+Environment=HOME=/opt/canix/vision-service
 StandardOutput=journal
 StandardError=journal
 

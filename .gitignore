@@ -18,3 +18,9 @@ public/index.html
 # Modelos/binarios de audio (se descargan aparte, ver README > Audio)
 models/
 bin/
+
+# Microservicio de vision (Fashion Mode): venv de Python + cache de modelos, se generan en el
+# server (ver deploy/ubuntu-05-setup-vision.sh) - sin esto, deploy.sh los ve como "cambios sin
+# commitear" y se niega a hacer git pull en cualquier corrida futura.
+vision-service/.venv/
+vision-service/.cache/
