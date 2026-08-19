@@ -218,9 +218,10 @@ en vez de mandar audio) — no rompe nada del resto del bot.
 ### Instalación automática (servidor Ubuntu)
 
 ```bash
-./deploy.sh --with-audio
+./deploy.sh
 ```
 
+`./deploy.sh` ya incluye esto por defecto (junto con todo lo demás — código, dependencias, visión).
 Descarga el modelo de Vosk en español, el binario de Piper (última versión, linux x64) y una voz
 en español, todo en `/opt/canix/models` y `/opt/canix/bin`, escribe las 3 variables resultantes
 directo en `.env` y reinicia el bot — sin pasos manuales. Seguro de re-correr (omite lo que ya esté
@@ -368,21 +369,25 @@ cd /opt/canix
 ```
 
 Qué hace: instala Node 20+ si falta, `git pull`, `npm ci` (backend y panel admin), build del
-panel, copia `.env.example` a `.env` si no existe, aplica migraciones (`npm run db:init`), y
+panel, copia `.env.example` a `.env` si no existe, aplica migraciones (`npm run db:init`),
+transcripción/voz local (Vosk + Piper), el microservicio de visión de Fashion Mode (CLIP), y
 (re)inicia el bot - detecta solo si ya lo tenés corriendo con PM2 o systemd y usa ese mismo, o si
 es la primera vez lo deja andando con PM2 (más simple para empezar). Al final imprime estado y
 logs recientes (ahí sale el QR de WhatsApp la primera vez).
+
+**Un solo comando cubre todo de ahora en adelante** - no hace falta acordarse de flags ni correr
+scripts sueltos, `./deploy.sh` ya los encadena todos (audio y visión incluidos).
 
 Es **idempotente y no destructivo a propósito**: nunca toca `.env`, `data/` ni `auth_info/`, y si
 encuentra cambios sin commitear en el repo del servidor se detiene ANTES de hacer `git pull` en vez
 de arriesgarse a pisarlos. Volver a correrlo no reinstala ni redescarga nada que ya esté listo.
 
-Flags opcionales (podés agregarlos en cualquier corrida, no solo la primera):
+Flags opcionales, para saltarte alguna parte (podés agregarlos en cualquier corrida):
 
 ```bash
-./deploy.sh --with-audio     # + transcripción/voz local (Vosk + Piper)
-./deploy.sh --with-vision    # + microservicio de visión de Fashion Mode (clasificación de fotos)
-./deploy.sh --with-all       # los dos de una
+./deploy.sh --no-audio       # todo menos transcripción/voz local (Vosk + Piper)
+./deploy.sh --no-vision      # todo menos el microservicio de visión de Fashion Mode
+./deploy.sh --minimal        # ninguno de los dos (el deploy mínimo de antes)
 ```
 
 **Importante**: `deploy.sh` hace `git pull`, así que solo despliega lo que ya esté pusheado a
@@ -430,8 +435,9 @@ sudo journalctl -u canix -f   # logs en vivo (para escanear el QR la primera vez
 
 Solo hace falta si vas a activar `FASHION_MODE_ENABLED=true` con clasificación automática de fotos
 (el módulo funciona igual sin esto, pero pidiéndote los datos a mano - ver "Fashion Mode" más
-abajo). Es un proceso Python aparte, separado del bot de Node. Atajo: `./deploy.sh --with-vision`
-hace exactamente los dos pasos de abajo por vos.
+abajo). Es un proceso Python aparte, separado del bot de Node. `./deploy.sh` ya hace esto por
+defecto (los dos pasos de abajo), o `deploy/vision-quickstart.sh` si el bot ya está desplegado y
+solo falta/falló la parte de visión.
 
 ```bash
 # Despues de ubuntu-02-deploy.sh (necesita /opt/canix ya instalado):

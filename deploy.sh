@@ -14,10 +14,15 @@
 #     respeta - nunca cambia de uno a otro por su cuenta.
 #
 # Uso:
-#   ./deploy.sh                              # código + deps + build + migraciones + reinicio
-#   ./deploy.sh --with-audio                 # + transcripción/voz local (Vosk + Piper)
-#   ./deploy.sh --with-vision                # + microservicio de visión de Fashion Mode (CLIP)
-#   ./deploy.sh --with-audio --with-vision   # todo de una (o --with-all)
+#   ./deploy.sh                 # TODO: código + deps + build + migraciones + audio + visión + reinicio
+#   ./deploy.sh --no-audio      # todo menos transcripción/voz local (Vosk + Piper)
+#   ./deploy.sh --no-vision     # todo menos el microservicio de visión de Fashion Mode (CLIP)
+#   ./deploy.sh --no-audio --no-vision   # el deploy minimo de antes (o --minimal)
+#
+# Un solo comando cubre todo de ahora en adelante - no hace falta acordarse de correr los scripts
+# de deploy/*.sh sueltos ni de pasar flags, este ya los encadena todos. --with-audio/--with-vision/
+# --with-all se siguen aceptando (ya son el default, así que no hacen nada, pero no rompen scripts
+# o alias viejos que ya los usen).
 #
 # IMPORTANTE: esto hace `git pull`, así que solo despliega lo que ya esté pusheado a GitHub - si
 # acabas de terminar cambios en tu máquina, súbelos primero (`git push`) o este script no los verá.
@@ -26,19 +31,20 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-WITH_AUDIO=false
-WITH_VISION=false
+WITH_AUDIO=true
+WITH_VISION=true
 for arg in "$@"; do
   case "$arg" in
-    --with-audio) WITH_AUDIO=true ;;
-    --with-vision) WITH_VISION=true ;;
-    --with-all|--all) WITH_AUDIO=true; WITH_VISION=true ;;
+    --with-audio|--with-vision|--with-all|--all) : ;; # ya son el default, se aceptan sin efecto
+    --no-audio) WITH_AUDIO=false ;;
+    --no-vision) WITH_VISION=false ;;
+    --minimal) WITH_AUDIO=false; WITH_VISION=false ;;
     -h|--help)
-      sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *)
-      echo "Argumento desconocido: $arg (usa --with-audio, --with-vision, --with-all, --help)"
+      echo "Argumento desconocido: $arg (usa --no-audio, --no-vision, --minimal, --help)"
       exit 1
       ;;
   esac
@@ -181,6 +187,6 @@ if [ "$WITH_VISION" = true ] && ! grep -q '^FASHION_MODE_ENABLED=true' .env 2>/d
   echo "FASHION_MODE_ENABLED=true y corre ./deploy.sh de nuevo para reiniciar con el flag activo."
 fi
 if [ "$WITH_VISION" = false ]; then
-  echo "Tip: './deploy.sh --with-vision' instala clasificación automática de fotos para Fashion Mode"
-  echo "(ver vision-service/README.md) - opcional, Fashion Mode funciona igual sin esto (a mano)."
+  echo "Corriste con --no-vision: la clasificación automática de fotos de Fashion Mode quedó sin"
+  echo "instalar. Corre './deploy.sh' (sin flags) cuando quieras agregarla."
 fi
