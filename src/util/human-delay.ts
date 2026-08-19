@@ -17,3 +17,30 @@ export function typingDelayMs(replyText: string): number {
 export function readingPauseMs(): number {
   return Math.round(300 + Math.random() * 500);
 }
+
+/**
+ * Fires `onTick` on a timer while `work` is still pending, capped at `maxTicks` - used to send
+ * "still working on it" updates for a slow AI turn (multi-iteration tool calls, a flaky provider
+ * retry) instead of leaving the user staring at a typing indicator that WhatsApp itself lets
+ * expire after a while. Never delays or otherwise touches `work` itself - just observes it.
+ */
+export async function withWorkingUpdates<T>(
+  work: Promise<T>,
+  onTick: () => void | Promise<void>,
+  opts: { intervalMs: number; maxTicks: number },
+): Promise<T> {
+  let done = false;
+  work.finally(() => {
+    done = true;
+  });
+
+  void (async () => {
+    for (let i = 0; i < opts.maxTicks; i++) {
+      await sleep(opts.intervalMs);
+      if (done) return;
+      await onTick();
+    }
+  })();
+
+  return work;
+}

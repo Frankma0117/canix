@@ -12,8 +12,16 @@ import { ensureDailyDedupReminder } from '../agent/dedup.js';
 import { legacyAdminToken } from '../server/auth.js';
 import { renderMainMenu, resolveMenuCategory, renderCategoryDetail, renderUnknownCategory } from '../agent/menu.js';
 import { env } from '../config/env.js';
-import { sleep, typingDelayMs, readingPauseMs } from '../util/human-delay.js';
+import { sleep, typingDelayMs, readingPauseMs, withWorkingUpdates } from '../util/human-delay.js';
+import { workingUpdateMessage } from '../util/motivational.js';
 import { synthesizeVoiceNote } from '../audio/tts.js';
+
+/** How long a turn can run before the user gets a "still working on it" ping, and how many of
+ *  those pings a single turn can rack up - see util/human-delay.ts's withWorkingUpdates(). Tuned
+ *  so a normal one-or-two-tool-call reply (the vast majority) never triggers this at all; only a
+ *  genuinely slow multi-iteration turn or a provider retry does. */
+const WORKING_UPDATE_INTERVAL_MS = 12_000;
+const WORKING_UPDATE_MAX_TICKS = 3;
 
 const PRIVATE_BOT_REPLY =
   'Este es un asistente personal privado y no tienes acceso todavía. Pídele al administrador que te lo dé. 🙏';
@@ -204,11 +212,18 @@ export class BotManager {
       // processMessage() already catches AI-provider failures internally and returns a friendly
       // message instead of throwing (see ai-agent.ts's callModelWithRetry) - the outer try/catch
       // here is the last-resort net for anything else unexpected.
-      const reply = await processMessage(text, this.wa, {
-        id: user.id,
-        jid: user.jid,
-        isAdmin: user.role === 'admin',
-      });
+      const reply = await withWorkingUpdates(
+        processMessage(text, this.wa, {
+          id: user.id,
+          jid: user.jid,
+          isAdmin: user.role === 'admin',
+        }),
+        async () => {
+          await this.wa.sendTyping(jid).catch(() => {});
+          await this.wa.sendText(jid, workingUpdateMessage()).catch(() => {});
+        },
+        { intervalMs: WORKING_UPDATE_INTERVAL_MS, maxTicks: WORKING_UPDATE_MAX_TICKS },
+      );
       console.log('[BOT] Respuesta final a #%d: "%s"', user.id, reply.length > 200 ? `${reply.slice(0, 200)}…` : reply);
       await sleep(typingDelayMs(reply));
       await this.wa.sendText(jid, reply);

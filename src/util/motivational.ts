@@ -66,6 +66,13 @@ const AGENDA_INTROS = [
   '🔥 Vamos con toda la energía hoy:',
 ] as const;
 
+const WORKING_UPDATES = [
+  '🕐 Sigo en eso, dame un momento más...',
+  '⏳ Ya casi, estoy terminando de resolverlo...',
+  '🔎 Dame unos segundos más, sigo trabajando en tu solicitud...',
+  '🙏 Un poco más de paciencia, ya casi termino...',
+] as const;
+
 export function plainReminderPrefix(): string {
   return pick(PLAIN_REMINDER_PREFIXES);
 }
@@ -92,6 +99,12 @@ export function flexibleReminderMessage(message: string): string {
 
 export function dailyAgendaIntro(): string {
   return pick(AGENDA_INTROS);
+}
+
+/** "Still working on it" ping for a turn that's taking a while - see util/human-delay.ts's
+ *  withWorkingUpdates(), which fires this on a timer while the AI loop is still running. */
+export function workingUpdateMessage(): string {
+  return pick(WORKING_UPDATES);
 }
 
 /**

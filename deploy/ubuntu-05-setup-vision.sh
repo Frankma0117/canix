@@ -21,11 +21,29 @@ fi
 
 cd "$VISION_DIR"
 
-if [ -d .venv ]; then
-  echo "== Ya existe .venv, omito creacion =="
+# No basta con revisar que la carpeta .venv exista - un intento anterior interrumpido (Ctrl+C, sin
+# espacio en disco, python3-venv faltante en ese momento) puede dejarla creada pero sin pip
+# adentro, y el resto del script fallaria mas abajo con un error confuso ("No such file or
+# directory") en vez de decir claramente que el venv esta roto. Se detecta por la presencia real
+# de .venv/bin/pip, no solo por la carpeta.
+if [ -x .venv/bin/pip ]; then
+  echo "== Ya existe .venv (con pip), omito creacion =="
 else
+  if [ -d .venv ]; then
+    echo "== .venv existe pero esta incompleto (sin pip, de un intento anterior) - lo borro y recreo =="
+    rm -rf .venv
+  fi
   echo "== Creando entorno virtual =="
   python3 -m venv .venv
+  if [ ! -x .venv/bin/pip ]; then
+    echo "== python3 -m venv no genero pip - reintentando con ensurepip =="
+    .venv/bin/python -m ensurepip --upgrade || {
+      echo "No se pudo instalar pip dentro del venv. Asegurate de tener el paquete de venv que"
+      echo "corresponde a tu version de Python instalado (ej. 'sudo apt-get install -y python3-venv"
+      echo "python3-pip') y vuelve a correr este script."
+      exit 1
+    }
+  fi
 fi
 
 echo "== Instalando dependencias de Python (puede tardar varios minutos: descarga torch CPU) =="

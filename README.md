@@ -218,12 +218,15 @@ en vez de mandar audio) — no rompe nada del resto del bot.
 ### Instalación automática (servidor Ubuntu)
 
 ```bash
-deploy/ubuntu-04-setup-audio.sh
+./deploy.sh --with-audio
 ```
 
 Descarga el modelo de Vosk en español, el binario de Piper (última versión, linux x64) y una voz
-en español, todo en `/opt/canix/models` y `/opt/canix/bin` — al final imprime las 3 líneas que hay
-que agregar a `.env`. Seguro de re-correr (omite lo que ya esté descargado).
+en español, todo en `/opt/canix/models` y `/opt/canix/bin`, escribe las 3 variables resultantes
+directo en `.env` y reinicia el bot — sin pasos manuales. Seguro de re-correr (omite lo que ya esté
+descargado, y no toca una variable que ya hayas puesto a mano). También se puede correr suelto,
+`deploy/ubuntu-04-setup-audio.sh`, si ya tienes `/opt/canix` desplegado y solo quieres agregar
+audio (en ese caso reinicia el bot vos mismo al final, el script te lo recuerda).
 
 ### Instalación manual
 
@@ -336,6 +339,8 @@ admin-panel/     panel admin (React + Vite + Tailwind), compila a public/
 public/          estatico servido por Express (build del panel)
 vision-service/  microservicio Python separado (Fashion Mode) - clasificación de fotos por CLIP,
                  local y gratis, ver vision-service/README.md
+deploy/          scripts individuales que deploy.sh orquesta (Node, systemd, audio, visión)
+deploy.sh        despliegue completo en un solo comando, ver "Despliegue en servidor" más abajo
 data/            app.db (SQLite, no se sube al repo)
 models/          modelo de Vosk + voces de Piper (no se sube al repo, ver sección Audio)
 bin/             binario de Piper si lo instalaste con el script de deploy (no se sube al repo)
@@ -345,9 +350,50 @@ bin/             binario de Piper si lo instalaste con el script de deploy (no s
 
 El proceso debe quedar corriendo 24/7 (mantiene la sesión de WhatsApp y el scheduler de
 recordatorios), así que en servidor se usa un supervisor de procesos en vez de `npm run start`
-suelto. Dos opciones, cualquiera de las dos sirve:
+suelto.
 
-### Opción A: PM2
+### La forma rápida: `./deploy.sh`
+
+Un solo script hace todo - primera vez y cada actualización siguiente, siempre el mismo comando:
+
+```bash
+# Primera vez:
+git clone https://github.com/Frankma0117/canix.git /opt/canix
+cd /opt/canix
+./deploy.sh
+
+# Cada actualización futura, siempre lo mismo:
+cd /opt/canix
+./deploy.sh
+```
+
+Qué hace: instala Node 20+ si falta, `git pull`, `npm ci` (backend y panel admin), build del
+panel, copia `.env.example` a `.env` si no existe, aplica migraciones (`npm run db:init`), y
+(re)inicia el bot - detecta solo si ya lo tenés corriendo con PM2 o systemd y usa ese mismo, o si
+es la primera vez lo deja andando con PM2 (más simple para empezar). Al final imprime estado y
+logs recientes (ahí sale el QR de WhatsApp la primera vez).
+
+Es **idempotente y no destructivo a propósito**: nunca toca `.env`, `data/` ni `auth_info/`, y si
+encuentra cambios sin commitear en el repo del servidor se detiene ANTES de hacer `git pull` en vez
+de arriesgarse a pisarlos. Volver a correrlo no reinstala ni redescarga nada que ya esté listo.
+
+Flags opcionales (podés agregarlos en cualquier corrida, no solo la primera):
+
+```bash
+./deploy.sh --with-audio     # + transcripción/voz local (Vosk + Piper)
+./deploy.sh --with-vision    # + microservicio de visión de Fashion Mode (clasificación de fotos)
+./deploy.sh --with-all       # los dos de una
+```
+
+**Importante**: `deploy.sh` hace `git pull`, así que solo despliega lo que ya esté pusheado a
+GitHub - si acabás de terminar cambios en tu máquina, primero `git push`.
+
+Por debajo, `deploy.sh` reusa los scripts individuales de `deploy/*.sh` (`ubuntu-01-setup-node.sh`,
+`ubuntu-04-setup-audio.sh`, `ubuntu-05/06-setup-vision*.sh`, etc.) - siguen ahí y siguen sirviendo
+sueltos si preferís correr un paso a mano o entender exactamente qué hace cada uno; las siguientes
+dos secciones documentan lo que `deploy.sh` termina haciendo automáticamente.
+
+### Opción A: PM2 (manual)
 
 ```bash
 # En el servidor (Node 20+ instalado):
@@ -366,7 +412,7 @@ pm2 startup   # sigue las instrucciones que imprime para que arranque solo tras 
 - `pm2 logs cania` para ver los logs (ahí aparece el QR la primera vez, y el token del panel).
 - `pm2 restart cania` / `pm2 stop cania` para reiniciar o parar.
 
-### Opción B: systemd
+### Opción B: systemd (manual)
 
 Hay una unidad de ejemplo en `deploy/canix.service`. Ajusta las rutas si tu Node no está en
 `/usr/bin` (por ejemplo si usas `nvm`, apunta `ExecStart` al binario completo de `npm`):
@@ -384,7 +430,8 @@ sudo journalctl -u canix -f   # logs en vivo (para escanear el QR la primera vez
 
 Solo hace falta si vas a activar `FASHION_MODE_ENABLED=true` con clasificación automática de fotos
 (el módulo funciona igual sin esto, pero pidiéndote los datos a mano - ver "Fashion Mode" más
-abajo). Es un proceso Python aparte, separado del bot de Node:
+abajo). Es un proceso Python aparte, separado del bot de Node. Atajo: `./deploy.sh --with-vision`
+hace exactamente los dos pasos de abajo por vos.
 
 ```bash
 # Despues de ubuntu-02-deploy.sh (necesita /opt/canix ya instalado):
@@ -416,9 +463,9 @@ de clasificar fotos automáticamente y te pregunta el tipo/color/estilo a mano.
 - **Panel web expuesto públicamente**: si vas a acceder a `http://tu-servidor:3000` desde
   internet, ponlo detrás de un reverse proxy (nginx/Caddy) con HTTPS, y no abras el puerto 3000
   directo en el firewall.
-- **Actualizar código**: `git pull` (o subir los archivos nuevos), `npm install` si cambiaron
-  dependencias, `cd admin-panel && npm install && npm run build && cd ..` si cambió el panel, y
-  `pm2 restart cania` / `sudo systemctl restart canix`.
+- **Actualizar código**: `./deploy.sh` hace todo esto por vos (pull, dependencias, build del panel,
+  migraciones, reinicio). A mano sería: `git pull`, `npm ci`, `cd admin-panel && npm ci && npm run
+  build && cd ..`, `npm run db:init`, y `pm2 restart cania` / `sudo systemctl restart canix`.
 
 ## Reconexión de WhatsApp (sin reiniciar el servidor)
 
