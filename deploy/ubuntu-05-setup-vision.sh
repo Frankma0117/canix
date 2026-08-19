@@ -11,7 +11,11 @@ VISION_DIR="$APP_DIR/vision-service"
 
 missing_pkgs=""
 command -v python3 >/dev/null 2>&1 || missing_pkgs="$missing_pkgs python3"
-python3 -m venv --help >/dev/null 2>&1 || missing_pkgs="$missing_pkgs python3-venv"
+# `python3 -m venv --help` is NOT a real test - it just prints usage and exits 0 even when the
+# distro's venv package (which provides ensurepip) isn't installed, so it never caught a missing
+# python3-venv and let a broken, pip-less .venv get created further down. Testing that the
+# ensurepip module actually imports is what venv creation itself depends on.
+python3 -c "import ensurepip" >/dev/null 2>&1 || missing_pkgs="$missing_pkgs python3-venv"
 command -v pip3 >/dev/null 2>&1 || missing_pkgs="$missing_pkgs python3-pip"
 if [ -n "$missing_pkgs" ]; then
   echo "== Instalando dependencias que faltan:$missing_pkgs =="

@@ -63,6 +63,14 @@ fi
 # --- 2. Código -----------------------------------------------------------------
 step "Actualizando código"
 if [ -d .git ]; then
+  # Git refuses to touch a repo whose directory owner differs from the current user ("dubious
+  # ownership") - happens here easily since some steps below run under sudo (chown'ing things to
+  # root or a service user) while deploy.sh itself is normally run as a regular user. This repo
+  # path is the deploy target itself, not untrusted input, so it's safe to always trust it - avoids
+  # a confusing `git pull` failure with no code changed and no explanation.
+  if ! git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$SCRIPT_DIR"; then
+    git config --global --add safe.directory "$SCRIPT_DIR"
+  fi
   if [ -n "$(git status --porcelain)" ]; then
     echo "Hay cambios locales sin commitear en $SCRIPT_DIR - NO hago 'git pull' para no arriesgarme"
     echo "a perderlos. Revisa 'git status' ahí, guarda o descarta esos cambios, y vuelve a correr:"
