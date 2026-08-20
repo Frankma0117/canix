@@ -25,13 +25,25 @@ async function withOneRetry<T>(fn: () => Promise<T>, label: string): Promise<T> 
   }
 }
 
+/** DigitalOcean Spaces endpoints are always "<region>.digitaloceanspaces.com" (e.g.
+ *  "sfo3.digitaloceanspaces.com") - falls back to reading the region straight out of the endpoint
+ *  when DO_SPACES_REGION isn't set, instead of a hardcoded 'us-east-1'. That hardcoded fallback
+ *  used to look harmless ("the SDK requires a value; DigitalOcean ignores it"), but it's actually
+ *  wrong: the SDK signs every request with SigV4, which bakes the region into the signature itself
+ *  - a real DO datacenter endpoint (sfo3, nyc3, ams3, ...) signed as 'us-east-1' produces a
+ *  signature DO's servers reject with "the request signature we calculated does not match the
+ *  signature you provided", even though the access key/secret are perfectly correct. */
+function regionFromEndpoint(endpoint: string): string | undefined {
+  return endpoint.match(/^https?:\/\/([a-z0-9-]+)\.digitaloceanspaces\.com/i)?.[1];
+}
+
 /** Constructed lazily (never at module load) so a missing DO_SPACES_SECRET_ACCESS_KEY never
  *  crashes boot when Fashion Mode is disabled - see env.fashion.enabled gating in bot-manager.ts. */
 function buildClient(): S3Client {
   const { endpoint, region, accessKeyId, secretAccessKey } = env.fashion.spaces;
   return new S3Client({
     endpoint,
-    region: region || 'us-east-1', // the SDK requires a value; DigitalOcean ignores it
+    region: region || regionFromEndpoint(endpoint) || 'us-east-1',
     credentials: { accessKeyId, secretAccessKey },
   });
 }
