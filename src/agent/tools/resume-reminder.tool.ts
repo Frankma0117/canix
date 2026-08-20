@@ -28,6 +28,6 @@ export const resumeReminderTool: Tool = {
     if (!reminder) return `No encontré el recordatorio #${id}.`;
     if (!reminder.paused_until) return `#${id} no estaba pausado.`;
     remindersRepo.setPausedUntil(userId, id, null);
-    return `🔔 Recordatorio #${id} reanudado.`;
+    return `🔔 Listo, reanudé el recordatorio #${id}.`;
   },
 };

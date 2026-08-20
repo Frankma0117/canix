@@ -72,11 +72,11 @@ export const scheduleCallReminderTool: Tool = {
 
     const callType: CallReminderType = args.call_type === 'alarm' ? 'alarm' : 'reminder';
     const message = String(args.message ?? '').trim();
-    if (callType === 'reminder' && !message) return 'Error: falta el mensaje que se dirá en la llamada.';
+    if (callType === 'reminder' && !message) return 'Me falta el mensaje que se va a decir en la llamada.';
 
     const date = String(args.date ?? '').trim();
     const timeRaw = String(args.time ?? '');
-    if (!date || !/^\d{1,2}:\d{2}$/.test(timeRaw)) return 'Error: falta la fecha u hora de la llamada.';
+    if (!date || !/^\d{1,2}:\d{2}$/.test(timeRaw)) return 'Me falta la fecha o la hora de la llamada.';
 
     const scheduledAt = normalizeDate(`${date} ${timeRaw}`);
     if (parseWall(scheduledAt) <= parseWall(nowLocal())) {
@@ -91,7 +91,7 @@ export const scheduleCallReminderTool: Tool = {
     const recurrenceInterval = Number(args.recurrence_interval) > 0 ? Number(args.recurrence_interval) : 1;
 
     const result = createCallReminder({ userId, phoneNumber, message, callType, scheduledAt, recurrenceFreq, recurrenceInterval });
-    if (!result.ok) return `Error: ${result.error}`;
+    if (!result.ok) return result.error;
 
     const recurrenceNote =
       recurrenceFreq === 'none'
@@ -101,7 +101,7 @@ export const scheduleCallReminderTool: Tool = {
           })`;
 
     return callType === 'alarm'
-      ? `⏰ Alarma por llamada #${result.value.id} programada para ${scheduledAt}${recurrenceNote} - el teléfono timbrará y colgará solo al contestar.`
-      : `📞 Recordatorio por llamada #${result.value.id} programado para ${scheduledAt}${recurrenceNote}: "${message}".`;
+      ? `⏰ Listo, la alarma por llamada #${result.value.id} quedó para ${scheduledAt}${recurrenceNote} - el teléfono timbrará y colgará solo al contestar.`
+      : `📞 Listo, el recordatorio por llamada #${result.value.id} quedó para ${scheduledAt}${recurrenceNote}: "${message}".`;
   },
 };

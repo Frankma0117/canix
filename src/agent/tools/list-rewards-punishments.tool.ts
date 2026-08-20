@@ -26,7 +26,7 @@ export const listRewardsPunishmentsTool: Tool = {
       items = rewardsRepo.listAll(ctx.userId, args.type as RewardPunishmentType | undefined);
     }
 
-    if (items.length === 0) return 'No hay premios/castigos registrados todavía.';
+    if (items.length === 0) return 'Todavía no tienes premios ni castigos registrados.';
     return items
       .map((i) => `#${i.id} [${i.type === 'reward' ? '🏆' : '⚠️'}] ${i.date} — ${i.description}${i.note ? ` (${i.note})` : ''}`)
       .join('\n');

@@ -27,6 +27,6 @@ export const deleteContactTool: Tool = {
     const contact = contactsRepo.getById(userId, id);
     if (!contact) return `No encontré el contacto #${id}.`;
     contactsRepo.remove(userId, id);
-    return `Contacto "${contact.name}" eliminado.`;
+    return `Listo, borré el contacto "${contact.name}".`;
   },
 };

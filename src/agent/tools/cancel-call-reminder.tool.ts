@@ -27,6 +27,6 @@ export const cancelCallReminderTool: Tool = {
     const id = Number(args.id);
     const ok = callRemindersRepo.cancel(userId, id);
     if (!ok) return `No encontré el recordatorio por llamada #${id} pendiente para cancelar.`;
-    return `Recordatorio por llamada #${id} cancelado.`;
+    return `Listo, cancelé el recordatorio por llamada #${id} 📞`;
   },
 };

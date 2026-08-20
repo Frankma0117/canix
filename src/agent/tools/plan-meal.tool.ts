@@ -34,12 +34,12 @@ export const planMealTool: Tool = {
 
     const date = normalizeDate(String(args.date ?? '')).slice(0, 10);
     const mealSlot = SLOTS.includes(args.meal_slot as MealSlot) ? (args.meal_slot as MealSlot) : null;
-    if (!mealSlot) return `Error: meal_slot debe ser uno de: ${SLOTS.join(', ')}.`;
+    if (!mealSlot) return `meal_slot tiene que ser uno de: ${SLOTS.join(', ')}.`;
 
     const title = String(args.title ?? '').trim();
-    if (!title) return 'Error: falta qué comer.';
+    if (!title) return 'Me falta qué vas a comer.';
 
     const id = mealPlansRepo.create(userId, { planDate: date, mealSlot, title, notes: args.notes ? String(args.notes) : null });
-    return `Plan #${id}: ${mealSlot} del ${date} — ${title}.`;
+    return `Listo, guardé el plan #${id}: ${mealSlot} del ${date} — ${title}.`;
   },
 };

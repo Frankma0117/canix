@@ -43,13 +43,13 @@ export const editRoutineTool: Tool = {
     let reminderTime: string | undefined;
     if (args.reminder_time !== undefined) {
       reminderTime = String(args.reminder_time);
-      if (!TIME_RE.test(reminderTime)) return "Error: reminder_time debe ser una hora en formato 'HH:mm'.";
+      if (!TIME_RE.test(reminderTime)) return "La hora tiene que ir en formato 'HH:mm'.";
     }
 
     let durationMinutes: number | undefined;
     if (args.duration_minutes !== undefined) {
       durationMinutes = Number(args.duration_minutes);
-      if (!durationMinutes || durationMinutes <= 0) return 'Error: duration_minutes debe ser un número mayor a 0.';
+      if (!durationMinutes || durationMinutes <= 0) return 'La duración tiene que ser un número mayor a 0.';
     }
 
     const freq: RecurrenceFreq | undefined = args.frequency === 'weekly' ? 'weekly' : args.frequency === 'daily' ? 'daily' : undefined;
@@ -63,6 +63,6 @@ export const editRoutineTool: Tool = {
     });
     if (!ok) return `No encontré la rutina #${id}.`;
 
-    return `Rutina #${id} actualizada.`;
+    return `Listo, actualicé la rutina #${id} 👍`;
   },
 };

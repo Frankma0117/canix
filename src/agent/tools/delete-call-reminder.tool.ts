@@ -26,6 +26,6 @@ export const deleteCallReminderTool: Tool = {
     const id = Number(args.id);
     if (!callRemindersRepo.getById(userId, id)) return `No encontré el recordatorio por llamada #${id}.`;
     callRemindersRepo.remove(userId, id);
-    return `Recordatorio por llamada #${id} eliminado.`;
+    return `Listo, borré el recordatorio por llamada #${id}.`;
   },
 };

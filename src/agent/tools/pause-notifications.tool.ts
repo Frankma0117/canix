@@ -28,10 +28,10 @@ export const pauseNotificationsTool: Tool = {
     if ('error' in acting) return acting.error;
 
     const days = Number(args.days);
-    if (!Number.isFinite(days) || days <= 0) return 'Error: days debe ser un número mayor a 0.';
+    if (!Number.isFinite(days) || days <= 0) return 'Los días tienen que ser un número mayor a 0.';
 
     const until = addDays(nowLocal(), days);
     usersRepo.setPausedUntil(acting.userId, until);
-    return `🔕 Notificaciones pausadas hasta ${until.slice(0, 10)}. Nada se enviará hasta entonces (o antes si pides resume_notifications).`;
+    return `🔕 Listo, pausé tus notificaciones hasta ${until.slice(0, 10)} - nada se enviará hasta entonces (o antes si pides resume_notifications).`;
   },
 };

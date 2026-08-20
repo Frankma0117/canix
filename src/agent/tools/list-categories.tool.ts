@@ -21,7 +21,7 @@ export const listCategoriesTool: Tool = {
     if ('error' in acting) return acting.error;
 
     const categories = categoriesRepo.listAll(acting.userId);
-    if (categories.length === 0) return 'No hay categorías creadas todavía.';
+    if (categories.length === 0) return 'Todavía no tienes categorías creadas.';
     return categories
       .map((c) => `#${c.id} ${c.name}${c.description ? ` - ${c.description}` : ''}`)
       .join('\n');

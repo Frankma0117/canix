@@ -74,6 +74,7 @@ import { deleteCallReminderTool } from './delete-call-reminder.tool.js';
 import { sendStickerTool } from './send-sticker.tool.js';
 import { listStickersTool } from './list-stickers.tool.js';
 import { deleteStickerTool } from './delete-sticker.tool.js';
+import { announceUpdateTool } from './announce-update.tool.js';
 
 /** Registers every tool the agent can use. Called once at boot. */
 export function registerTools(): void {
@@ -152,4 +153,5 @@ export function registerTools(): void {
   registry.register(sendStickerTool);
   registry.register(listStickersTool);
   registry.register(deleteStickerTool);
+  registry.register(announceUpdateTool);
 }

@@ -42,6 +42,6 @@ export const editNoteTool: Tool = {
       categoryId,
     });
 
-    return `Nota #${id} actualizada.`;
+    return `Listo, actualicé la nota #${id} 📝`;
   },
 };

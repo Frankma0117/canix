@@ -33,7 +33,7 @@ export const listLinksTool: Tool = {
     let categoryId: number | undefined;
     if (args.category) {
       const category = categoriesRepo.getByName(userId, String(args.category));
-      if (!category) return `No existe la categoría "${args.category}".`;
+      if (!category) return `No tienes ninguna categoría llamada "${args.category}".`;
       categoryId = category.id;
     }
 
@@ -41,7 +41,7 @@ export const listLinksTool: Tool = {
       ? linksRepo.search(userId, String(args.search), categoryId)
       : linksRepo.listByCategory(userId, categoryId);
 
-    if (links.length === 0) return 'No hay links que coincidan.';
+    if (links.length === 0) return 'No tienes links que coincidan.';
     return links.map(formatLink).join('\n');
   },
 };

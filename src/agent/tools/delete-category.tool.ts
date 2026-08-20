@@ -28,6 +28,6 @@ export const deleteCategoryTool: Tool = {
     const category = categoriesRepo.getById(userId, id);
     if (!category) return `No encontré la categoría #${id}.`;
     categoriesRepo.remove(userId, id);
-    return `Categoría "${category.name}" eliminada.`;
+    return `Listo, borré la categoría "${category.name}".`;
   },
 };

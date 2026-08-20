@@ -28,7 +28,7 @@ export const listMealPlanTool: Tool = {
     const to = args.to_date ? normalizeDate(String(args.to_date)).slice(0, 10) : from;
 
     const plans = mealPlansRepo.listRange(userId, from, to);
-    if (plans.length === 0) return `No hay nada planeado entre ${from} y ${to}.`;
+    if (plans.length === 0) return `No tienes nada planeado entre ${from} y ${to}.`;
     return plans.map((p) => `#${p.id} ${p.plan_date} ${p.meal_slot}: ${p.title}${p.notes ? ` (${p.notes})` : ''}`).join('\n');
   },
 };

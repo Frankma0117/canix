@@ -36,7 +36,7 @@ export const listCallRemindersTool: Tool = {
 
     const status = (args.status as CallReminderStatus) ?? 'pending';
     const reminders = callRemindersRepo.listAll(userId, status);
-    if (reminders.length === 0) return 'No hay recordatorios por llamada que coincidan.';
+    if (reminders.length === 0) return 'No tienes recordatorios por llamada que coincidan.';
 
     return reminders
       .map((r) => {

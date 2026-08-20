@@ -21,7 +21,7 @@ export const listRecipesTool: Tool = {
     if ('error' in acting) return acting.error;
 
     const recipes = recipesRepo.listAll(acting.userId);
-    if (recipes.length === 0) return 'No hay recetas guardadas todavía.';
+    if (recipes.length === 0) return 'Todavía no tienes recetas guardadas.';
     return recipes.map((r) => `#${r.id} ${r.title} — ingredientes: ${r.ingredients}`).join('\n');
   },
 };

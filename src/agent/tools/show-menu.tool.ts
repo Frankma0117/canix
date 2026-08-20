@@ -1,6 +1,7 @@
 import type { Tool } from '../tool-registry.js';
 import { env } from '../../config/env.js';
 import { renderMainMenu } from '../menu.js';
+import { isTwilioConfigured } from '../../calls/twilio-client.js';
 
 /**
  * Renders the SAME two-level menu as the zero-token `/menu` raw command in bot-manager.ts (see
@@ -20,6 +21,6 @@ export const showMenuTool: Tool = {
   parameters: { type: 'object', properties: {}, additionalProperties: false },
 
   async execute(_args, ctx) {
-    return renderMainMenu({ fashionEnabled: env.fashion.enabled, isAdmin: ctx.isAdmin });
+    return renderMainMenu({ fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: ctx.isAdmin });
   },
 };

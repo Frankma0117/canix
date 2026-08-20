@@ -28,6 +28,6 @@ export const deleteRoutineTool: Tool = {
     const todo = todosRepo.getById(userId, id);
     if (!todo || todo.scope !== 'routine') return `No encontré la rutina #${id}.`;
     todosRepo.remove(userId, id); // cascades: habit_logs, reminders (kind routine_*), rewards_punishments.todo_id -> null
-    return `Rutina "${todo.title}" eliminada, junto con su historial y recordatorios.`;
+    return `Listo, borré la rutina "${todo.title}" junto con su historial y recordatorios.`;
   },
 };

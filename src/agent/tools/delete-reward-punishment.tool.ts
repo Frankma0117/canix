@@ -16,6 +16,6 @@ export const deleteRewardPunishmentTool: Tool = {
     const item = rewardsRepo.getById(ctx.userId, id);
     if (!item) return `No encontré el registro #${id}.`;
     rewardsRepo.remove(ctx.userId, id);
-    return `${item.type === 'reward' ? 'Premio' : 'Castigo'} "${item.description}" eliminado.`;
+    return `Listo, borré el ${item.type === 'reward' ? 'premio' : 'castigo'} "${item.description}".`;
   },
 };

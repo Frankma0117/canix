@@ -42,13 +42,13 @@ export const createRoutineTool: Tool = {
     const { userId, targetJid } = acting;
 
     const title = String(args.title ?? '').trim();
-    if (!title) return 'Error: falta el nombre de la rutina.';
+    if (!title) return 'Me falta el nombre de la rutina.';
 
     const reminderTime = String(args.reminder_time ?? '');
-    if (!TIME_RE.test(reminderTime)) return "Error: reminder_time debe ser una hora en formato 'HH:mm'.";
+    if (!TIME_RE.test(reminderTime)) return "La hora tiene que ir en formato 'HH:mm'.";
 
     const durationMinutes = Number(args.duration_minutes);
-    if (!durationMinutes || durationMinutes <= 0) return 'Error: duration_minutes debe ser un número mayor a 0.';
+    if (!durationMinutes || durationMinutes <= 0) return 'La duración tiene que ser un número mayor a 0.';
 
     let categoryId: number | null = null;
     if (args.category) categoryId = categoriesRepo.findOrCreate(userId, String(args.category)).id;
@@ -63,8 +63,8 @@ export const createRoutineTool: Tool = {
     });
 
     return (
-      `Rutina #${id} "${title}" creada (${freq === 'daily' ? 'diaria' : 'semanal'}): ` +
-      `aviso a las ${reminderTime}, chequeo ${durationMinutes} min después. Usa checkin_routine para marcar avances.`
+      `Listo, creé la rutina #${id} "${title}" (${freq === 'daily' ? 'diaria' : 'semanal'}) 👍 ` +
+      `Aviso a las ${reminderTime}, chequeo ${durationMinutes} min después. Usa checkin_routine para marcar avances.`
     );
   },
 };

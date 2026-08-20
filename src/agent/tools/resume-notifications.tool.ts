@@ -23,6 +23,6 @@ export const resumeNotificationsTool: Tool = {
     const user = usersRepo.getById(acting.userId);
     if (!user?.paused_until) return 'No tenías notificaciones pausadas.';
     usersRepo.setPausedUntil(acting.userId, null);
-    return '🔔 Notificaciones reanudadas.';
+    return '🔔 Listo, reanudé tus notificaciones.';
   },
 };

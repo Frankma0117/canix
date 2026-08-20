@@ -27,6 +27,6 @@ export const cancelReminderTool: Tool = {
     const reminder = remindersRepo.getById(userId, id);
     if (!reminder) return `No encontré el recordatorio #${id}.`;
     remindersRepo.cancel(userId, id);
-    return `Recordatorio #${id} cancelado.`;
+    return `Listo, cancelé el recordatorio #${id} ⏰`;
   },
 };

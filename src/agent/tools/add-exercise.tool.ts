@@ -26,7 +26,7 @@ export const addExerciseTool: Tool = {
     if (resolved.error) return resolved.error;
 
     const name = String(args.name ?? '').trim();
-    if (!name) return 'Error: falta el nombre del ejercicio.';
+    if (!name) return 'Me falta el nombre del ejercicio.';
 
     const id = exercisesRepo.create(ctx.userId, {
       todoId: resolved.todo!.id,
@@ -37,6 +37,6 @@ export const addExerciseTool: Tool = {
       weightKg: args.weight_kg !== undefined ? Number(args.weight_kg) : null,
     });
 
-    return `Ejercicio #${id} "${name}" agregado a la rutina "${resolved.todo!.title}".`;
+    return `Agregué el ejercicio #${id} "${name}" a la rutina "${resolved.todo!.title}" 💪`;
   },
 };

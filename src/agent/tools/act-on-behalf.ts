@@ -23,7 +23,7 @@ export function resolveActingUser(
 ): ActingUser | { error: string } {
   if (!targetUserRaw) return { userId: ctx.userId, targetJid: ctx.ownerJid };
 
-  if (!ctx.isAdmin) return { error: 'Solo el administrador puede actuar en nombre de otra persona.' };
+  if (!ctx.isAdmin) return { error: 'Eso solo lo puede hacer el administrador, en nombre de otra persona.' };
 
   const query = targetUserRaw.trim();
   const matches = usersRepo.findByNameOrPhone(query);

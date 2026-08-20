@@ -32,14 +32,14 @@ export const saveLinkTool: Tool = {
     const { userId } = acting;
 
     const url = String(args.url ?? '').trim();
-    if (!url) return 'Error: falta la URL.';
+    if (!url) return 'Me falta la URL.';
     const categoryName = String(args.category ?? '').trim();
-    if (!categoryName) return 'Error: falta la categoría.';
+    if (!categoryName) return 'Me falta la categoría.';
 
     const category = categoriesRepo.getByName(userId, categoryName);
     if (!category) {
       return (
-        `Error: la categoría "${categoryName}" no existe todavía. Usa list_categories para mostrarme las ` +
+        `La categoría "${categoryName}" no existe todavía. Usa list_categories para mostrarme las ` +
         'categorías reales y preguntarme en cuál, o create_category si confirmo crear una nueva - no la inventes tú.'
       );
     }
@@ -49,6 +49,6 @@ export const saveLinkTool: Tool = {
       title: args.title ? String(args.title) : null,
       description: args.description ? String(args.description) : null,
     });
-    return `Link guardado (#${id}) en la categoría "${category.name}".`;
+    return `Listo, guardé el link (#${id}) en la categoría "${category.name}" 🔗`;
   },
 };

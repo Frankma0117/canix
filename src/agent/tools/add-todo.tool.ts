@@ -35,7 +35,7 @@ export const addTodoTool: Tool = {
     const { userId } = acting;
 
     const title = String(args.title ?? '').trim();
-    if (!title) return 'Error: falta el título de la tarea.';
+    if (!title) return 'Me falta el título de la tarea.';
     const scope = args.scope === 'later' ? 'later' : 'today';
 
     let categoryId: number | null = null;
@@ -51,6 +51,6 @@ export const addTodoTool: Tool = {
     const dueDate = args.due_date ? normalizeDate(String(args.due_date)).slice(0, 10) : scope === 'today' ? todayLocal() : null;
 
     const id = todosRepo.create(userId, { title, categoryId, scope, dueDate, linkId });
-    return `Tarea #${id} agregada (${scope === 'today' ? 'hoy' : 'para después'})${linkId ? ` con link #${linkId}` : ''}.`;
+    return `Listo, agregué la tarea #${id} (${scope === 'today' ? 'hoy' : 'para después'})${linkId ? ` con link #${linkId}` : ''} 👍`;
   },
 };

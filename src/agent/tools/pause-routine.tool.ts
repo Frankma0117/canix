@@ -27,12 +27,12 @@ export const pauseRoutineTool: Tool = {
     if ('error' in acting) return acting.error;
 
     const days = Number(args.days);
-    if (!Number.isFinite(days) || days <= 0) return 'Error: days debe ser un número mayor a 0.';
+    if (!Number.isFinite(days) || days <= 0) return 'Los días tienen que ser un número mayor a 0.';
 
     const id = Number(args.id);
     const until = addDays(nowLocal(), days);
     const ok = setRoutinePaused(acting.userId, id, until);
     if (!ok) return `No encontré la rutina #${id}.`;
-    return `🔕 Rutina #${id} pausada hasta ${until.slice(0, 10)} (no avisa ni pide chequeo mientras tanto).`;
+    return `🔕 Listo, pausé la rutina #${id} hasta ${until.slice(0, 10)} (no avisa ni pide chequeo mientras tanto).`;
   },
 };

@@ -31,7 +31,7 @@ export const listTodosTool: Tool = {
     let categoryId: number | undefined;
     if (args.category) {
       const category = categoriesRepo.getByName(userId, String(args.category));
-      if (!category) return `No existe la categoría "${args.category}".`;
+      if (!category) return `No tienes ninguna categoría llamada "${args.category}".`;
       categoryId = category.id;
     }
 
@@ -41,7 +41,7 @@ export const listTodosTool: Tool = {
       categoryId,
     });
 
-    if (todos.length === 0) return 'No hay tareas que coincidan.';
+    if (todos.length === 0) return 'No tienes tareas que coincidan.';
     return todos
       .map((t) => {
         const link = t.link_id ? linksRepo.getById(userId, t.link_id) : undefined;

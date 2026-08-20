@@ -47,6 +47,6 @@ export const editTodoTool: Tool = {
     });
 
     const updated = todosRepo.getById(userId, id)!;
-    return `Tarea #${id} actualizada: "${updated.title}"${updated.due_date ? ` (${updated.due_date})` : ''}.`;
+    return `Listo, actualicé la tarea #${id}: "${updated.title}"${updated.due_date ? ` (${updated.due_date})` : ''}.`;
   },
 };

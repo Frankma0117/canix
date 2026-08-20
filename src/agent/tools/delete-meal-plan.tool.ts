@@ -27,6 +27,6 @@ export const deleteMealPlanTool: Tool = {
     const plan = mealPlansRepo.getById(userId, id);
     if (!plan) return `No encontré el plan #${id}.`;
     mealPlansRepo.remove(userId, id);
-    return `Plan #${id} (${plan.meal_slot} del ${plan.plan_date}) eliminado.`;
+    return `Listo, borré el plan #${id} (${plan.meal_slot} del ${plan.plan_date}).`;
   },
 };

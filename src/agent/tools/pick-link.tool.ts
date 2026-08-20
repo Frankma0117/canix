@@ -17,10 +17,10 @@ export const pickLinkTool: Tool = {
 
   async execute(args, ctx) {
     const category = categoriesRepo.getByName(ctx.userId, String(args.category ?? ''));
-    if (!category) return `No existe la categoría "${args.category}".`;
+    if (!category) return `No tienes ninguna categoría llamada "${args.category}".`;
 
     const link = linksRepo.pickRandom(ctx.userId, category.id);
-    if (!link) return `No hay links guardados todavía en "${category.name}".`;
+    if (!link) return `Todavía no tienes links guardados en "${category.name}".`;
 
     linksRepo.markUsed(ctx.userId, link.id);
     const label = link.title || link.description || '';

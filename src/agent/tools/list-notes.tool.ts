@@ -33,12 +33,12 @@ export const listNotesTool: Tool = {
     let categoryId: number | undefined;
     if (args.category) {
       const category = categoriesRepo.getByName(userId, String(args.category));
-      if (!category) return `No existe la categoría "${args.category}".`;
+      if (!category) return `No tienes ninguna categoría llamada "${args.category}".`;
       categoryId = category.id;
     }
 
     const notes = args.search ? notesRepo.search(userId, String(args.search), categoryId) : notesRepo.listByCategory(userId, categoryId);
-    if (notes.length === 0) return 'No hay notas que coincidan.';
+    if (notes.length === 0) return 'No tienes notas que coincidan.';
     return notes.map(formatNote).join('\n');
   },
 };

@@ -109,6 +109,17 @@ mkdir -p data
 step "Aplicando migraciones de base de datos"
 npm run db:init
 
+detect_supervisor() {
+  if command -v pm2 >/dev/null 2>&1 && pm2 jlist 2>/dev/null | grep -q '"name":"cania"'; then
+    echo "pm2"
+  elif systemctl list-unit-files 2>/dev/null | grep -q '^canix\.service'; then
+    echo "systemd"
+  else
+    echo "none"
+  fi
+}
+SUPERVISOR="$(detect_supervisor)"
+
 # --- 6. Audio: transcripción + voz (opcional) --------------------------------------
 if [ "$WITH_AUDIO" = true ]; then
   step "Transcripción/voz local (Vosk + Piper)"
@@ -122,19 +133,22 @@ if [ "$WITH_VISION" = true ]; then
   sudo ./deploy/ubuntu-06-setup-vision-service.sh
 fi
 
-# --- 8. (Re)iniciar el bot - respeta el supervisor que ya esté en uso -------------
-detect_supervisor() {
-  if command -v pm2 >/dev/null 2>&1 && pm2 jlist 2>/dev/null | grep -q '"name":"cania"'; then
-    echo "pm2"
-  elif systemctl list-unit-files 2>/dev/null | grep -q '^canix\.service'; then
-    echo "systemd"
-  else
-    echo "none"
-  fi
-}
+# --- 7.5 Permisos para el usuario de servicio (solo systemd) ----------------------
+# Bajo systemd, canix.service corre como el usuario dedicado "canix" (ver deploy/canix.service),
+# pero TODO lo anterior en este script (git pull, npm ci, mkdir -p data, npm run db:init, los
+# scripts de audio/visión) corrió como quien te conectaste por SSH (root, ubuntu, etc.), así que
+# cualquier archivo nuevo que hayan creado (sobre todo data/canix.lock y data/*.db) queda con OTRO
+# dueño. El servicio systemd entonces no puede ni escribir su propio lock file (EACCES) y queda en
+# crash-loop reiniciándose cada pocos segundos - esto es exactamente lo que pasó el 2026-08-20.
+# ubuntu-03-setup-service.sh hace este mismo chown, pero solo una vez en la instalación inicial; acá
+# lo repetimos en cada deploy para que nunca se desalinee de nuevo.
+if [ "$SUPERVISOR" = "systemd" ] && id canix &>/dev/null && [ "$(id -un)" != "canix" ]; then
+  step "Ajustando permisos para el usuario de servicio 'canix'"
+  sudo chown -R canix:canix "$SCRIPT_DIR"
+fi
 
+# --- 8. (Re)iniciar el bot - respeta el supervisor que ya esté en uso -------------
 step "Reiniciando el bot"
-SUPERVISOR="$(detect_supervisor)"
 case "$SUPERVISOR" in
   pm2)
     echo "Detecté pm2 (proceso 'cania' ya existente) - reiniciando con él."

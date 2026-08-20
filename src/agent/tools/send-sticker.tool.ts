@@ -24,7 +24,7 @@ export const sendStickerTool: Tool = {
 
   async execute(args, ctx) {
     const label = String(args.label ?? '').trim();
-    if (!label) return 'Error: falta la etiqueta del sticker.';
+    if (!label) return 'Me falta la etiqueta del sticker.';
 
     const sticker = stickersRepo.getByLabel(label);
     if (!sticker) return `No tengo ningún sticker guardado con la etiqueta "${label}".`;
@@ -32,7 +32,7 @@ export const sendStickerTool: Tool = {
     try {
       await ctx.wa.sendSticker(ctx.ownerJid, sticker.data);
       console.log('[TOOL] send_sticker: enviado "%s" a %s.', label, ctx.ownerJid);
-      return `Sticker "${label}" enviado.`;
+      return `Listo, mandé el sticker "${label}".`;
     } catch (err) {
       console.error('[TOOL] send_sticker: fallo enviando "%s":', label, (err as Error).message);
       return `No pude enviar el sticker "${label}".`;

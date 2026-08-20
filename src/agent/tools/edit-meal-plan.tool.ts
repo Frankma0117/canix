@@ -37,7 +37,7 @@ export const editMealPlanTool: Tool = {
 
     let mealSlot: MealSlot | undefined;
     if (args.meal_slot !== undefined) {
-      if (!SLOTS.includes(args.meal_slot as MealSlot)) return `Error: meal_slot debe ser uno de: ${SLOTS.join(', ')}.`;
+      if (!SLOTS.includes(args.meal_slot as MealSlot)) return `meal_slot tiene que ser uno de: ${SLOTS.join(', ')}.`;
       mealSlot = args.meal_slot as MealSlot;
     }
 
@@ -49,6 +49,6 @@ export const editMealPlanTool: Tool = {
     });
 
     const updated = mealPlansRepo.getById(userId, id)!;
-    return `Plan #${id} actualizado: ${updated.meal_slot} del ${updated.plan_date} — ${updated.title}.`;
+    return `Listo, actualicé el plan #${id}: ${updated.meal_slot} del ${updated.plan_date} — ${updated.title}.`;
   },
 };

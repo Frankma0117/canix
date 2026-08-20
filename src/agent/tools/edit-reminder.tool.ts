@@ -62,7 +62,7 @@ export const editReminderTool: Tool = {
       const windowStart = args.window_start !== undefined ? String(args.window_start) : undefined;
       const windowEnd = args.window_end !== undefined ? String(args.window_end) : undefined;
       if ((windowStart && !TIME_RE.test(windowStart)) || (windowEnd && !TIME_RE.test(windowEnd))) {
-        return "Error: window_start/window_end deben ser horas en formato 'HH:mm'.";
+        return "window_start/window_end tienen que ser horas en formato 'HH:mm'.";
       }
       if (args.run_at !== undefined) return `#${id} es flexible (sin hora fija) - usa window_start/window_end en vez de run_at.`;
       if (args.interval_seconds !== undefined || args.repeat_count !== undefined || args.with_audio !== undefined) {
@@ -95,7 +95,7 @@ export const editReminderTool: Tool = {
         targetJid: resolvedTargetJid,
       });
       const updated = remindersRepo.getById(userId, id)!;
-      return `Recordatorio flexible #${id} actualizado: ventana ${updated.window_start}-${updated.window_end} (próxima vez: ${updated.run_at}).`;
+      return `Listo, actualicé el recordatorio flexible #${id}: ventana ${updated.window_start}-${updated.window_end} (próxima vez: ${updated.run_at}) ⏰`;
     }
 
     if (reminder.kind === 'interval') {
@@ -110,14 +110,14 @@ export const editReminderTool: Tool = {
       if (args.interval_seconds !== undefined) {
         intervalSeconds = Number(args.interval_seconds);
         if (!Number.isFinite(intervalSeconds) || intervalSeconds < MIN_INTERVAL_SECONDS) {
-          return `Error: interval_seconds debe ser un número de al menos ${MIN_INTERVAL_SECONDS}.`;
+          return `interval_seconds tiene que ser un número de al menos ${MIN_INTERVAL_SECONDS}.`;
         }
       }
       let repeatCount: number | undefined;
       if (args.repeat_count !== undefined) {
         repeatCount = Number(args.repeat_count);
         if (!Number.isInteger(repeatCount) || repeatCount < 1 || repeatCount > MAX_REPEAT_COUNT) {
-          return `Error: repeat_count debe ser un entero entre 1 y ${MAX_REPEAT_COUNT}.`;
+          return `repeat_count tiene que ser un entero entre 1 y ${MAX_REPEAT_COUNT}.`;
         }
       }
 
@@ -132,13 +132,13 @@ export const editReminderTool: Tool = {
         categoryId,
       });
       const updated = remindersRepo.getById(userId, id)!;
-      return `Recordatorio de intervalo #${id} actualizado: cada ${updated.interval_seconds}s, ${updated.repeat_count} veces.`;
+      return `Listo, actualicé el recordatorio de intervalo #${id}: cada ${updated.interval_seconds}s, ${updated.repeat_count} veces ⏰`;
     }
 
     let runAt: string | undefined;
     if (args.run_at !== undefined) {
       runAt = normalizeDate(String(args.run_at));
-      if (parseWall(runAt) <= parseWall(nowLocal())) return 'El nuevo momento debe ser en el futuro.';
+      if (parseWall(runAt) <= parseWall(nowLocal())) return 'Esa hora ya pasó - dame una en el futuro.';
     }
 
     let categoryId: number | undefined;
@@ -166,7 +166,7 @@ export const editReminderTool: Tool = {
     });
 
     const updated = remindersRepo.getById(userId, id)!;
-    return `Recordatorio #${id} actualizado: "${updated.message}" para ${updated.run_at}.`;
+    return `Listo, actualicé el recordatorio #${id}: "${updated.message}" para ${updated.run_at} ⏰`;
   },
 };
 

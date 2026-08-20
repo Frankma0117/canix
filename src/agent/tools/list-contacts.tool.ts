@@ -21,7 +21,7 @@ export const listContactsTool: Tool = {
     if ('error' in acting) return acting.error;
 
     const contacts = contactsRepo.listAll(acting.userId);
-    if (contacts.length === 0) return 'No hay contactos guardados todavía.';
+    if (contacts.length === 0) return 'Todavía no tienes contactos guardados.';
     return contacts
       .map((c) => `#${c.id} ${c.name}${c.username ? ` (@${c.username})` : ''}${c.notes ? ` — ${c.notes}` : ''}`)
       .join('\n');

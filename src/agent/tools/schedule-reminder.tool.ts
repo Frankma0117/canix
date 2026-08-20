@@ -60,7 +60,7 @@ export const scheduleReminderTool: Tool = {
 
     const runAt = normalizeDate(String(args.run_at ?? ''));
     if (parseWall(runAt) <= parseWall(nowLocal())) {
-      return 'El momento debe ser en el futuro.';
+      return 'Esa hora ya pasó - dame una en el futuro.';
     }
 
     let targetJid: string | null = null;
@@ -105,6 +105,6 @@ export const scheduleReminderTool: Tool = {
     });
 
     const recurrenceNote = freq !== 'none' ? ` (se repite cada ${interval} ${freq})` : '';
-    return `Recordatorio #${id} programado para ${runAt}${recurrenceNote}.`;
+    return `Dale, quedó el recordatorio #${id} para ${runAt}${recurrenceNote} 👍`;
   },
 };

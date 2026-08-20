@@ -9,7 +9,7 @@ export const listUsersTool: Tool = {
   async execute(_args, ctx) {
     if (!ctx.isAdmin) return 'Solo el administrador puede ver esta lista.';
     const users = usersRepo.listAll();
-    if (users.length === 0) return 'No hay usuarios registrados.';
+    if (users.length === 0) return 'Todavía no le diste acceso a nadie.';
     return users
       .map((u) => {
         const allowed = usersRepo.getAllowedTools(u);

@@ -27,6 +27,6 @@ export const deleteNoteTool: Tool = {
     const note = notesRepo.getById(userId, id);
     if (!note) return `No encontré la nota #${id}.`;
     notesRepo.remove(userId, id);
-    return `Nota #${id} eliminada.`;
+    return `Listo, borré la nota #${id}.`;
   },
 };

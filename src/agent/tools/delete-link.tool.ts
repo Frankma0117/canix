@@ -28,6 +28,6 @@ export const deleteLinkTool: Tool = {
     const link = linksRepo.getById(userId, id);
     if (!link) return `No encontré el link #${id}.`;
     linksRepo.remove(userId, id);
-    return `Link #${id} (${link.url}) eliminado.`;
+    return `Listo, borré el link #${id} (${link.url}).`;
   },
 };

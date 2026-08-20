@@ -16,6 +16,6 @@ export const deleteExerciseTool: Tool = {
     const exercise = exercisesRepo.getById(ctx.userId, id);
     if (!exercise) return `No encontré el ejercicio #${id}.`;
     exercisesRepo.remove(ctx.userId, id);
-    return `Ejercicio #${id} "${exercise.name}" eliminado.`;
+    return `Listo, borré el ejercicio #${id} "${exercise.name}".`;
   },
 };

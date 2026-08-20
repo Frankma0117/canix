@@ -49,7 +49,7 @@ export const scheduleImportantDateTool: Tool = {
     const { userId, targetJid: actingJid } = acting;
 
     const title = String(args.title ?? '').trim();
-    if (!title) return 'Error: falta el título de la fecha importante.';
+    if (!title) return 'Me falta el título de la fecha importante.';
 
     const time = /^\d{1,2}:\d{2}$/.test(String(args.time ?? '')) ? String(args.time) : '09:00';
     let runAt = normalizeDate(`${String(args.date ?? '')} ${time}`);
@@ -60,7 +60,7 @@ export const scheduleImportantDateTool: Tool = {
     // forward instead of rejecting it (that's the whole point of "cumpleaños que no suelo recordar").
     if (parseWall(runAt) <= parseWall(nowLocal())) {
       if (recurrence === 'yearly') runAt = addMonths(runAt, 12);
-      else return 'Esa fecha ya pasó. Si es un evento futuro, dame la fecha correcta.';
+      else return 'Esa fecha ya pasó - si es un evento futuro, dame la fecha correcta.';
     }
 
     let targetJid: string | null = null;
@@ -113,6 +113,6 @@ export const scheduleImportantDateTool: Tool = {
     }
 
     const recurrenceNote = recurrence === 'yearly' ? ' (se repite cada año)' : '';
-    return `Fecha importante #${mainId} "${title}" programada para ${runAt}${recurrenceNote}${noticeNote}.`;
+    return `📅 Listo, quedó la fecha importante #${mainId} "${title}" para ${runAt}${recurrenceNote}${noticeNote}.`;
   },
 };

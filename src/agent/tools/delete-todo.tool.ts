@@ -30,6 +30,6 @@ export const deleteTodoTool: Tool = {
     if (!todo) return `No encontré la tarea #${id}.`;
     if (todo.scope === 'routine') return `#${id} "${todo.title}" es una rutina - usa delete_routine para eliminarla, no delete_todo.`;
     todosRepo.remove(userId, id);
-    return `Tarea #${id} "${todo.title}" eliminada.`;
+    return `Listo, borré la tarea #${id} "${todo.title}".`;
   },
 };

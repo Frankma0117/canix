@@ -16,13 +16,13 @@ export const deleteStickerTool: Tool = {
   async execute(args, ctx) {
     if (!ctx.isAdmin) return 'Solo el administrador puede hacer esto.';
     const label = String(args.label ?? '').trim();
-    if (!label) return 'Error: falta la etiqueta del sticker a eliminar.';
+    if (!label) return 'Me falta la etiqueta del sticker a eliminar.';
 
     const sticker = stickersRepo.getByLabel(label);
     if (!sticker) return `No encontré ningún sticker con la etiqueta "${label}".`;
 
     stickersRepo.delete(sticker.id);
     console.log('[TOOL] delete_sticker: eliminado "%s" (#%d).', label, sticker.id);
-    return `Sticker "${label}" eliminado.`;
+    return `Listo, borré el sticker "${label}".`;
   },
 };

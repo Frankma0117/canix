@@ -35,7 +35,7 @@ export const editLinkTool: Tool = {
     let categoryId: number | undefined;
     if (args.category) {
       const category = categoriesRepo.getByName(userId, String(args.category));
-      if (!category) return `Error: la categoría "${args.category}" no existe todavía. Usa list_categories o create_category primero.`;
+      if (!category) return `La categoría "${args.category}" no existe todavía - usa list_categories o create_category primero.`;
       categoryId = category.id;
     }
 
@@ -47,6 +47,6 @@ export const editLinkTool: Tool = {
     });
 
     const updated = linksRepo.getById(userId, id)!;
-    return `Link #${id} actualizado: ${updated.title || updated.description || updated.url}.`;
+    return `Listo, actualicé el link #${id}: ${updated.title || updated.description || updated.url} 🔗`;
   },
 };

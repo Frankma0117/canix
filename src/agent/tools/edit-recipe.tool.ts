@@ -43,6 +43,6 @@ export const editRecipeTool: Tool = {
     });
 
     const updated = recipesRepo.getById(userId, id)!;
-    return `Receta #${id} "${updated.title}" actualizada.`;
+    return `Listo, actualicé la receta #${id} "${updated.title}".`;
   },
 };

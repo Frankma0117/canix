@@ -16,6 +16,7 @@ import { ensureDailyResetReminder } from '../agent/daily-reset.js';
 import { ensureDailyDedupReminder } from '../agent/dedup.js';
 import { legacyAdminToken } from '../server/auth.js';
 import { renderMainMenu, resolveMenuCategory, renderCategoryDetail, renderUnknownCategory } from '../agent/menu.js';
+import { isTwilioConfigured } from '../calls/twilio-client.js';
 import { handleModeMessage } from '../agent/modes.js';
 import { env } from '../config/env.js';
 import { sleep, typingDelayMs, readingPauseMs, withWorkingUpdates } from '../util/human-delay.js';
@@ -279,12 +280,12 @@ export class BotManager {
       // token, same raw-command pattern as /reset/ayuda above. See agent/menu.ts for the single
       // source of truth also used by the show_menu AI tool, so both entry points stay in sync.
       if (command === '/menu') {
-        const access = { fashionEnabled: env.fashion.enabled, isAdmin: user.role === 'admin' };
+        const access = { fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: user.role === 'admin' };
         await this.wa.sendText(jid, renderMainMenu(access));
         return;
       }
       if (command.startsWith('/menu ')) {
-        const access = { fashionEnabled: env.fashion.enabled, isAdmin: user.role === 'admin' };
+        const access = { fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: user.role === 'admin' };
         const category = resolveMenuCategory(command.slice('/menu '.length), access);
         await this.wa.sendText(jid, category ? renderCategoryDetail(category) : renderUnknownCategory(access));
         return;

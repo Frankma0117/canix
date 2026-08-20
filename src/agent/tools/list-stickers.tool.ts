@@ -9,7 +9,7 @@ export const listStickersTool: Tool = {
   async execute(_args, ctx) {
     if (!ctx.isAdmin) return 'Solo el administrador puede ver esto.';
     const stickers = stickersRepo.listAll();
-    if (stickers.length === 0) return 'No hay stickers guardados todavía - mándame uno directo por WhatsApp para empezar.';
+    if (stickers.length === 0) return 'Todavía no hay stickers guardados - mándame uno directo por WhatsApp para empezar.';
     return stickers.map((s) => `- ${s.label} (#${s.id})`).join('\n');
   },
 };

@@ -38,9 +38,9 @@ export const scheduleFlexibleReminderTool: Tool = {
     const message = String(args.message ?? '').trim();
     const windowStart = String(args.window_start ?? '');
     const windowEnd = String(args.window_end ?? '');
-    if (!message) return 'Error: falta el mensaje del recordatorio.';
+    if (!message) return 'Me falta el mensaje del recordatorio.';
     if (!TIME_RE.test(windowStart) || !TIME_RE.test(windowEnd)) {
-      return "Error: window_start y window_end deben ser horas en formato 'HH:mm'.";
+      return "window_start y window_end tienen que ser horas en formato 'HH:mm'.";
     }
 
     let categoryId: number | null = null;
@@ -64,6 +64,6 @@ export const scheduleFlexibleReminderTool: Tool = {
       windowEnd,
     });
 
-    return `Recordatorio flexible #${id} "${message}" creado: todos los días entre ${windowStart} y ${windowEnd} (hoy/próxima vez: ${runAt}).`;
+    return `⏰ Listo, quedó el recordatorio flexible #${id} "${message}": todos los días entre ${windowStart} y ${windowEnd} (hoy/próxima vez: ${runAt}).`;
   },
 };

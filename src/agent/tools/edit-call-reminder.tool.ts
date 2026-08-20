@@ -46,9 +46,9 @@ export const editCallReminderTool: Tool = {
     if (args.date || args.time) {
       const date = String(args.date ?? reminder.scheduled_at.slice(0, 10));
       const timeRaw = String(args.time ?? reminder.scheduled_at.slice(11, 16));
-      if (!TIME_RE.test(timeRaw)) return "Error: time debe tener formato 'HH:mm'.";
+      if (!TIME_RE.test(timeRaw)) return "La hora tiene que ir en formato 'HH:mm'.";
       scheduledAt = normalizeDate(`${date} ${timeRaw}`);
-      if (parseWall(scheduledAt) <= parseWall(nowLocal())) return 'La nueva fecha/hora debe ser en el futuro.';
+      if (parseWall(scheduledAt) <= parseWall(nowLocal())) return 'Esa fecha/hora ya pasó - dame una en el futuro.';
     }
 
     const recurrenceFreq = FREQS.includes(args.recurrence_freq as RecurrenceFreq) ? (args.recurrence_freq as RecurrenceFreq) : undefined;
@@ -63,9 +63,9 @@ export const editCallReminderTool: Tool = {
       recurrenceFreq,
       recurrenceInterval,
     });
-    if (!result.ok) return `Error: ${result.error}`;
+    if (!result.ok) return result.error;
 
     const updated = result.value;
-    return `Recordatorio por llamada #${id} actualizado: ${updated.call_type === 'alarm' ? '⏰ alarma' : `📞 "${updated.message}"`} - ${updated.phone_number} - ${updated.scheduled_at}.`;
+    return `Listo, actualicé el recordatorio por llamada #${id}: ${updated.call_type === 'alarm' ? '⏰ alarma' : `📞 "${updated.message}"`} - ${updated.phone_number} - ${updated.scheduled_at}.`;
   },
 };

@@ -26,10 +26,10 @@ export const createCategoryTool: Tool = {
     const { userId } = acting;
 
     const name = String(args.name ?? '').trim();
-    if (!name) return 'Error: falta el nombre de la categoría.';
+    if (!name) return 'Me falta el nombre de la categoría.';
     const existing = categoriesRepo.getByName(userId, name);
-    if (existing) return `La categoría "${existing.name}" ya existía (#${existing.id}).`;
+    if (existing) return `Ya tenías la categoría "${existing.name}" (#${existing.id}).`;
     const id = categoriesRepo.create(userId, name, args.description ? String(args.description) : null);
-    return `Categoría "${name}" creada (#${id}).`;
+    return `Listo, creé la categoría "${name}" (#${id}) 👍`;
   },
 };

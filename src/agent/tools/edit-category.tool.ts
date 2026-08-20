@@ -41,6 +41,6 @@ export const editCategoryTool: Tool = {
     });
 
     const updated = categoriesRepo.getById(userId, id)!;
-    return `Categoría #${id} actualizada: "${updated.name}".`;
+    return `Listo, actualicé la categoría #${id}: "${updated.name}".`;
   },
 };

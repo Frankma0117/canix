@@ -28,7 +28,7 @@ export const grantAccessTool: Tool = {
     if (!ctx.isAdmin) return 'Solo el administrador puede dar acceso a otras personas.';
     const phone = String(args.phone ?? '').trim();
     const name = String(args.name ?? '').trim();
-    if (!phone || !name) return 'Error: falta el número o el nombre.';
+    if (!phone || !name) return 'Me falta el número o el nombre.';
     const username = args.username ? String(args.username).trim() : null;
 
     const jid = phoneToJid(phone);

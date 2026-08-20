@@ -16,7 +16,7 @@ export const revokeAccessTool: Tool = {
   async execute(args, ctx) {
     if (!ctx.isAdmin) return 'Solo el administrador puede quitar acceso.';
     const query = String(args.name_or_phone ?? '').trim();
-    if (!query) return 'Error: falta el nombre o número.';
+    if (!query) return 'Me falta el nombre o el número.';
 
     const matches = usersRepo.findByNameOrPhone(query).filter((u) => u.role !== 'admin'); // never removable via chat
     if (matches.length === 0) return `No encontré a nadie con acceso que coincida con "${query}".`;
@@ -25,6 +25,6 @@ export const revokeAccessTool: Tool = {
     }
 
     usersRepo.remove(matches[0].id);
-    return `Acceso de "${matches[0].name}" revocado y su información eliminada.`;
+    return `Listo, le quité el acceso a "${matches[0].name}" y borré su información.`;
   },
 };

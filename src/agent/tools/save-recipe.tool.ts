@@ -32,12 +32,12 @@ export const saveRecipeTool: Tool = {
     const title = String(args.title ?? '').trim();
     const ingredients = String(args.ingredients ?? '').trim();
     const instructions = String(args.instructions ?? '').trim();
-    if (!title || !ingredients || !instructions) return 'Error: falta título, ingredientes o instrucciones.';
+    if (!title || !ingredients || !instructions) return 'Me falta el título, los ingredientes o las instrucciones.';
 
     let categoryId: number | null = null;
     if (args.category) categoryId = categoriesRepo.findOrCreate(userId, String(args.category)).id;
 
     const id = recipesRepo.create(userId, { title, ingredients, instructions, categoryId });
-    return `Receta #${id} "${title}" guardada.`;
+    return `Listo, guardé la receta #${id} "${title}".`;
   },
 };

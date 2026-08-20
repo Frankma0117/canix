@@ -42,16 +42,16 @@ export const scheduleIntervalReminderTool: Tool = {
     const { userId, targetJid } = acting;
 
     const message = String(args.message ?? '').trim();
-    if (!message) return 'Error: falta el mensaje a repetir.';
+    if (!message) return 'Me falta el mensaje a repetir.';
 
     const intervalSeconds = Number(args.interval_seconds);
     if (!Number.isFinite(intervalSeconds) || intervalSeconds < MIN_INTERVAL_SECONDS) {
-      return `Error: interval_seconds debe ser un número de al menos ${MIN_INTERVAL_SECONDS}.`;
+      return `interval_seconds tiene que ser un número de al menos ${MIN_INTERVAL_SECONDS}.`;
     }
 
     const repeatCount = Number(args.repeat_count);
     if (!Number.isInteger(repeatCount) || repeatCount < 1 || repeatCount > MAX_REPEAT_COUNT) {
-      return `Error: repeat_count debe ser un entero entre 1 y ${MAX_REPEAT_COUNT}.`;
+      return `repeat_count tiene que ser un entero entre 1 y ${MAX_REPEAT_COUNT}.`;
     }
 
     const startDelay = Number(args.start_delay_seconds) > 0 ? Number(args.start_delay_seconds) : 0;
@@ -74,7 +74,7 @@ export const scheduleIntervalReminderTool: Tool = {
     });
 
     return (
-      `Recordatorio #${id} programado: "${message}" cada ${intervalSeconds}s, ${repeatCount} veces` +
+      `⏰ Listo, quedó el recordatorio #${id}: "${message}" cada ${intervalSeconds}s, ${repeatCount} veces` +
       `${args.with_audio ? ' (con nota de voz)' : ''}. Dime "para" o "listo" en cualquier momento si quieres cancelarlo antes.`
     );
   },

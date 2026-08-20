@@ -27,7 +27,7 @@ export const setUserPermissionsTool: Tool = {
   async execute(args, ctx) {
     if (!ctx.isAdmin) return 'Solo el administrador puede cambiar permisos.';
     const query = String(args.name_or_phone ?? '').trim();
-    if (!query) return 'Error: falta el nombre o número.';
+    if (!query) return 'Me falta el nombre o el número.';
 
     const matches = usersRepo.findByNameOrPhone(query).filter((u) => u.role !== 'admin');
     if (matches.length === 0) return `No encontré a nadie con acceso que coincida con "${query}".`;
@@ -37,7 +37,7 @@ export const setUserPermissionsTool: Tool = {
     const target = matches[0];
 
     const requested = Array.isArray(args.tool_names) ? (args.tool_names as unknown[]).map(String) : [];
-    if (requested.length === 0) return 'Error: falta la lista de tool_names (o ["all"] para acceso completo).';
+    if (requested.length === 0) return 'Me falta la lista de tool_names (o ["all"] para acceso completo).';
 
     if (requested.length === 1 && requested[0] === 'all') {
       usersRepo.setAllowedTools(target.id, null);

@@ -34,7 +34,7 @@ export const addContactTool: Tool = {
 
     const name = String(args.name ?? '').trim();
     const phone = String(args.phone ?? '').trim();
-    if (!name || !phone) return 'Error: falta nombre o número.';
+    if (!name || !phone) return 'Me falta el nombre o el número del contacto.';
     const username = args.username ? String(args.username).trim().replace(/^@/, '') : null;
 
     const jid = phoneToJid(phone);
@@ -57,6 +57,6 @@ export const addContactTool: Tool = {
         'Revisa que esté completo con el indicativo del país (ej. 57 para Colombia, sin el +).'
       );
     }
-    return `Contacto "${contact.name}" guardado (#${contact.id}).`;
+    return `Listo, guardé el contacto "${contact.name}" (#${contact.id}) 👍`;
   },
 };

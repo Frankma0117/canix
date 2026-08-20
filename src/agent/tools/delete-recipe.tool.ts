@@ -27,6 +27,6 @@ export const deleteRecipeTool: Tool = {
     const recipe = recipesRepo.getById(userId, id);
     if (!recipe) return `No encontré la receta #${id}.`;
     recipesRepo.remove(userId, id);
-    return `Receta #${id} "${recipe.title}" eliminada.`;
+    return `Listo, borré la receta #${id} "${recipe.title}".`;
   },
 };

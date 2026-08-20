@@ -25,6 +25,6 @@ export const resumeRoutineTool: Tool = {
     const id = Number(args.id);
     const ok = setRoutinePaused(acting.userId, id, null);
     if (!ok) return `No encontré la rutina #${id}.`;
-    return `🔔 Rutina #${id} reanudada.`;
+    return `🔔 Listo, reanudé la rutina #${id}.`;
   },
 };

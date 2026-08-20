@@ -35,7 +35,7 @@ export const listRemindersTool: Tool = {
     let categoryId: number | undefined;
     if (args.category) {
       const category = categoriesRepo.getByName(userId, String(args.category));
-      if (!category) return `No existe la categoría "${args.category}".`;
+      if (!category) return `No tienes ninguna categoría llamada "${args.category}".`;
       categoryId = category.id;
     }
 
@@ -43,7 +43,7 @@ export const listRemindersTool: Tool = {
       ? remindersRepo.listByCategory(userId, categoryId, status)
       : remindersRepo.listAll(userId, status);
 
-    if (reminders.length === 0) return 'No hay recordatorios que coincidan.';
+    if (reminders.length === 0) return 'No tienes recordatorios que coincidan.';
     return reminders
       .map((r) => {
         const link = r.link_id ? linksRepo.getById(userId, r.link_id) : undefined;

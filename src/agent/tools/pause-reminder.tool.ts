@@ -39,10 +39,10 @@ export const pauseReminderTool: Tool = {
     }
 
     const days = Number(args.days);
-    if (!Number.isFinite(days) || days <= 0) return 'Error: days debe ser un número mayor a 0.';
+    if (!Number.isFinite(days) || days <= 0) return 'Los días tienen que ser un número mayor a 0.';
 
     const until = addDays(nowLocal(), days);
     remindersRepo.setPausedUntil(userId, id, until);
-    return `🔕 Recordatorio #${id} pausado hasta ${until.slice(0, 10)}.`;
+    return `🔕 Listo, pausé el recordatorio #${id} hasta ${until.slice(0, 10)}.`;
   },
 };

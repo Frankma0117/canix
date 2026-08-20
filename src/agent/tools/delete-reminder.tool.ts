@@ -36,6 +36,6 @@ export const deleteReminderTool: Tool = {
       return `#${id} es un aviso automático del sistema, no se puede eliminar por aquí.`;
     }
     remindersRepo.remove(userId, id);
-    return `Recordatorio #${id} eliminado.`;
+    return `Listo, borré el recordatorio #${id}.`;
   },
 };

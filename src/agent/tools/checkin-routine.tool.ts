@@ -31,7 +31,7 @@ export const checkinRoutineTool: Tool = {
 
     const id = Number(args.id);
     const todo = todosRepo.getById(userId, id);
-    if (!todo || todo.scope !== 'routine') return `No encontré la rutina #${id}.`;
+    if (!todo || todo.scope !== 'routine') return `No encontré ninguna rutina con el #${id}.`;
 
     const date = args.date ? String(args.date) : todayLocal();
     const done = args.done === undefined ? true : Boolean(args.done);
@@ -47,6 +47,8 @@ export const checkinRoutineTool: Tool = {
         .catch(() => {});
     }
 
-    return `Rutina "${todo.title}" marcada como ${done ? 'hecha' : 'NO hecha'} el ${date}. Racha actual: ${streak} día(s).`;
+    return done
+      ? `¡"${todo.title}" hecha el ${date}! 🎉 Racha actual: ${streak} día(s).`
+      : `Ok, marqué "${todo.title}" como NO hecha el ${date}. Racha actual: ${streak} día(s).`;
   },
 };

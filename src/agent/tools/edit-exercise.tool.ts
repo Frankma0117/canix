@@ -31,6 +31,6 @@ export const editExerciseTool: Tool = {
       weightKg: args.weight_kg !== undefined ? Number(args.weight_kg) : undefined,
     });
 
-    return `Ejercicio #${id} actualizado.`;
+    return `Listo, actualicé el ejercicio #${id} 💪`;
   },
 };

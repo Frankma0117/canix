@@ -25,7 +25,7 @@ export const registerRewardPunishmentTool: Tool = {
   async execute(args, ctx) {
     const type: RewardPunishmentType = args.type === 'punishment' ? 'punishment' : 'reward';
     const description = String(args.description ?? '').trim();
-    if (!description) return 'Error: falta la descripción.';
+    if (!description) return 'Me falta la descripción.';
 
     let todoId: number | null = null;
     if (args.routine) {
@@ -45,6 +45,6 @@ export const registerRewardPunishmentTool: Tool = {
     });
 
     const label = type === 'reward' ? 'Premio 🏆' : 'Castigo ⚠️';
-    return `${label} #${id} registrado: "${description}"${todoId ? ' (ligado a la rutina)' : ''}.`;
+    return `Listo, quedó registrado - ${label} #${id}: "${description}"${todoId ? ' (ligado a la rutina)' : ''}.`;
   },
 };

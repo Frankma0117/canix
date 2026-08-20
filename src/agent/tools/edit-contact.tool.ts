@@ -39,6 +39,6 @@ export const editContactTool: Tool = {
     });
 
     const updated = contactsRepo.getById(userId, id)!;
-    return `Contacto #${id} actualizado: "${updated.name}"${updated.username ? ` (@${updated.username})` : ''}.`;
+    return `Listo, actualicé el contacto #${id}: "${updated.name}"${updated.username ? ` (@${updated.username})` : ''}.`;
   },
 };

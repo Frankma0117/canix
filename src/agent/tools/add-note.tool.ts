@@ -31,13 +31,13 @@ export const addNoteTool: Tool = {
     const { userId } = acting;
 
     const content = String(args.content ?? '').trim();
-    if (!content) return 'Error: falta el contenido de la nota.';
+    if (!content) return 'Me falta el contenido de la nota.';
 
     let categoryId: number | null = null;
     if (args.category) categoryId = categoriesRepo.findOrCreate(userId, String(args.category)).id;
 
     const title = args.title ? String(args.title).trim() : null;
     const id = notesRepo.create(userId, { content, categoryId, title });
-    return `📝 Nota #${id}${title ? ` "${title}"` : ''} guardada.`;
+    return `📝 Listo, guardé la nota #${id}${title ? ` "${title}"` : ''}.`;
   },
 };

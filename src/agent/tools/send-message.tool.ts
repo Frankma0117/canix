@@ -20,7 +20,7 @@ export const sendMessageTool: Tool = {
   async execute(args, ctx) {
     const to = String(args.to ?? '').trim();
     const message = String(args.message ?? '').trim();
-    if (!to || !message) return 'Error: falta destinatario o mensaje.';
+    if (!to || !message) return 'Me falta el destinatario o el mensaje.';
 
     let targetJid: string;
     let isNewRawNumber = false;
@@ -49,18 +49,22 @@ export const sendMessageTool: Tool = {
       } else if (/^[\d\s()+-]{6,}$/.test(to)) {
         isNewRawNumber = true;
         // Un contacto guardado (o un jid explícito) ya quedó validado cuando se agregó/se vio por
-        // primera vez - pero un número crudo recién escrito puede no ser real o estar incompleto,
-        // y sendText() no necesariamente falla por eso (WhatsApp puede tragarse en silencio un
-        // envío a un jid malo). Se verifica primero con onWhatsApp() y se usa el jid NORMALIZADO
-        // que esa consulta devuelve (puede ser un @lid en vez de @s.whatsapp.net) en vez de armarlo
-        // a mano - si la consulta en sí falla (socket caído, etc.) se sigue con el jid armado a
-        // mano en vez de bloquear el envío solo porque la verificación no se pudo hacer.
+        // primera vez - pero un número crudo recién escrito puede no ser real o estar incompleto, y
+        // sendText() no necesariamente falla por eso (WhatsApp puede tragarse en silencio un envío a
+        // un jid malo), así que se verifica primero con onWhatsApp(). IMPORTANTE: el jid que esa
+        // consulta devuelve NO se usa para enviar ni para guardar el contacto - a veces es un @lid
+        // en vez de un @s.whatsapp.net, y un lid resuelto así (no aprendido del tráfico real de esa
+        // persona) es exactamente el caso que ya rompió los envíos "en frío" una vez (ver el
+        // comentario de prefetchLid en wa-manager.ts): WhatsApp lo acepta sin error pero el mensaje
+        // nunca llega, y si además quedara guardado como el jid del contacto, cualquier envío futuro
+        // "por nombre" a esa persona heredaría el mismo problema en silencio. Solo se usa `exists`
+        // de esta consulta (para avisar de un número inválido); el jid real siempre es phoneToJid().
         const digits = normalizePhoneDigits(to);
         const resolved = await ctx.wa.resolveOnWhatsApp(digits);
         if (resolved?.exists === false) {
           return `Ese número (${to}) no parece tener WhatsApp. Revisa que esté completo con el indicativo del país (ej. 57 para Colombia, sin el +).`;
         }
-        targetJid = resolved?.jid ?? phoneToJid(to);
+        targetJid = phoneToJid(to);
         console.log(
           '[TOOL] send_message: número %s -> jid=%s (verificado=%s)',
           to,
@@ -78,7 +82,7 @@ export const sendMessageTool: Tool = {
       console.log('[TOOL] send_message: sock.sendMessage() confirmo el envio a %s sin error.', targetJid);
     } catch (err) {
       console.error('[TOOL] send_message: fallo el envio a %s:', targetJid, (err as Error).message);
-      return `No se pudo enviar el mensaje a ${to}: ${(err as Error).message}`;
+      return `No pude enviarle el mensaje a ${to}: ${(err as Error).message}`;
     }
 
     // First time writing to a raw number that worked - save it as a contact so it's easy to
@@ -87,6 +91,6 @@ export const sendMessageTool: Tool = {
       contactsRepo.upsert(ctx.userId, to, targetJid, null);
     }
 
-    return `Mensaje enviado a ${to}.`;
+    return `Listo, le mandé el mensaje a ${to} 👍`;
   },
 };

@@ -19,7 +19,7 @@ export const regeneratePanelTokenTool: Tool = {
     if (!query) {
       const token = randomBytes(24).toString('hex');
       usersRepo.setPanelToken(ctx.userId, token);
-      return `Nuevo token de tu panel: ${token} (el anterior ya no sirve).`;
+      return `Listo, ya tienes token nuevo para tu panel: ${token} (el anterior ya no sirve).`;
     }
 
     if (!ctx.isAdmin) return 'Solo el administrador puede regenerar el token de otra persona.';
@@ -28,6 +28,6 @@ export const regeneratePanelTokenTool: Tool = {
 
     const token = randomBytes(24).toString('hex');
     usersRepo.setPanelToken(target.id, token);
-    return `Nuevo token del panel para "${target.name}": ${token} (el anterior ya no sirve).`;
+    return `Listo, token nuevo del panel para "${target.name}": ${token} (el anterior ya no sirve).`;
   },
 };

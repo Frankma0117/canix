@@ -12,4 +12,5 @@ export const ADMIN_ONLY_TOOLS = [
   'list_available_tools',
   'list_stickers',
   'delete_sticker',
+  'announce_update',
 ];
