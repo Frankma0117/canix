@@ -70,6 +70,12 @@ export const usersRepo = {
     db.prepare('UPDATE users SET allowed_tools = ? WHERE id = ?').run(tools ? JSON.stringify(tools) : null, id);
   },
 
+  /** Switches this user's active special mode (see agent/modes.ts), or pass null to return to the
+   *  default mode (recordatorios). */
+  setActiveMode(id: number, mode: string | null): void {
+    db.prepare('UPDATE users SET active_mode = ? WHERE id = ?').run(mode, id);
+  },
+
   /** Parses a user's allowed_tools column. Null means unrestricted (every tool available). */
   getAllowedTools(user: User): string[] | null {
     if (!user.allowed_tools) return null;

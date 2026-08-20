@@ -1,6 +1,6 @@
 import type { Tool } from '../tool-registry.js';
 import { contactsRepo } from '../../db/repositories/contacts.repo.js';
-import { phoneToJid, isJid } from '../../util/jid.js';
+import { phoneToJid, normalizePhoneDigits, isJid } from '../../util/jid.js';
 
 export const sendMessageTool: Tool = {
   name: 'send_message',
@@ -47,22 +47,28 @@ export const sendMessageTool: Tool = {
       } else if (matches.length > 1) {
         return `Hay varios contactos que coinciden con "${to}": ${matches.map((m) => m.name).join(', ')}. Sé más específico.`;
       } else if (/^[\d\s()+-]{6,}$/.test(to)) {
-        targetJid = phoneToJid(to);
         isNewRawNumber = true;
+        // Un contacto guardado (o un jid explícito) ya quedó validado cuando se agregó/se vio por
+        // primera vez - pero un número crudo recién escrito puede no ser real o estar incompleto,
+        // y sendText() no necesariamente falla por eso (WhatsApp puede tragarse en silencio un
+        // envío a un jid malo). Se verifica primero con onWhatsApp() y se usa el jid NORMALIZADO
+        // que esa consulta devuelve (puede ser un @lid en vez de @s.whatsapp.net) en vez de armarlo
+        // a mano - si la consulta en sí falla (socket caído, etc.) se sigue con el jid armado a
+        // mano en vez de bloquear el envío solo porque la verificación no se pudo hacer.
+        const digits = normalizePhoneDigits(to);
+        const resolved = await ctx.wa.resolveOnWhatsApp(digits);
+        if (resolved?.exists === false) {
+          return `Ese número (${to}) no parece tener WhatsApp. Revisa que esté completo con el indicativo del país (ej. 57 para Colombia, sin el +).`;
+        }
+        targetJid = resolved?.jid ?? phoneToJid(to);
+        console.log(
+          '[TOOL] send_message: número %s -> jid=%s (verificado=%s)',
+          to,
+          targetJid,
+          resolved ? 'sí' : 'no se pudo verificar',
+        );
       } else {
         return `No encontré ningún contacto llamado "${to}". Guárdalo primero con add_contact o dame su número.`;
-      }
-    }
-
-    // A saved contact (or an explicit jid) was already validated when it was added/first seen -
-    // but a raw number typed just now might not be real/complete, and sendText() won't
-    // necessarily throw for that (WhatsApp can silently swallow sends to a bad jid). Verify it
-    // first so we never claim "enviado" when nothing actually went out.
-    if (isNewRawNumber) {
-      const exists = await ctx.wa.checkOnWhatsApp(targetJid);
-      console.log('[TOOL] send_message: verificacion de %s -> existe=%s', targetJid, exists === null ? 'no se pudo verificar' : exists);
-      if (exists === false) {
-        return `Ese número (${to}) no parece tener WhatsApp. Revisa que esté completo con el indicativo del país (ej. 57 para Colombia, sin el +).`;
       }
     }
 

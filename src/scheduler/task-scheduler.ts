@@ -1,6 +1,8 @@
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { messagesRepo } from '../db/repositories/messages.repo.js';
+import { stickersRepo } from '../db/repositories/stickers.repo.js';
+import { processDueCallReminders } from '../calls/call-reminders.service.js';
 import { nowLocal, addMinutes, addMonths, addDays, addSeconds, dateOnly, randomTimeOnDate } from '../util/datetime.js';
 import { buildAgendaMessage } from '../agent/agenda.js';
 import { buildWeeklyReportMessage } from '../agent/weekly-report.js';
@@ -112,11 +114,23 @@ export class TaskScheduler {
   }
 
   private async tick(): Promise<void> {
-    if (!this.wa.isConnected()) return; // retried on the next tick once connected
     if (this.running) return; // previous tick still in flight - never process the same due set twice
     this.running = true;
 
     try {
+      // Phone-call reminders (Twilio Programmable Voice, see calls/call-reminders.service.ts) -
+      // reuses this same tick/interval instead of a second worker, but runs regardless of the
+      // WhatsApp connection state below: a call reminder has nothing to do with the WA session,
+      // and shouldn't wait on it (or on WhatsApp reminder processing) either way. A failure here
+      // is caught and logged, never allowed to skip the WhatsApp reminders that follow.
+      try {
+        await processDueCallReminders();
+      } catch (err) {
+        console.error('[SCHEDULER] Error procesando recordatorios de llamada:', (err as Error).message);
+      }
+
+      if (!this.wa.isConnected()) return; // WhatsApp reminders retried on the next tick once connected
+
       let due: DueReminder[];
       try {
         due = remindersRepo.listDue(nowLocal());
@@ -199,6 +213,20 @@ export class TaskScheduler {
 
           await this.wa.sendText(target, text);
           console.log('[SCHEDULER] Recordatorio #%d enviado a %s.', reminder.id, target);
+
+          // Best-effort "good morning" sticker alongside the daily agenda - this push never goes
+          // through the AI loop (no model turn to decide "does a sticker fit?"), so it's a plain
+          // keyword match against whatever the admin actually labeled a sticker (see
+          // stickers.repo.ts's findByKeywords) instead of an LLM judgment call. Silently does
+          // nothing if no matching sticker exists yet.
+          if (reminder.kind === 'daily_agenda') {
+            const morningSticker = stickersRepo.findByKeywords(['buenos_dias', 'buen_dia', 'good_morning', 'buenosdias']);
+            if (morningSticker) {
+              await this.wa.sendSticker(target, morningSticker.data).catch((err) => {
+                console.error('[SCHEDULER] No se pudo enviar el sticker de buenos días:', (err as Error).message);
+              });
+            }
+          }
         } catch (err) {
           console.error('[SCHEDULER] Recordatorio #%d falló:', reminder.id, (err as Error).message);
           // Best-effort only: a one-off reminder gets marked failed so it's visible; a recurring

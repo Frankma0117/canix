@@ -190,3 +190,13 @@ if [ "$WITH_VISION" = false ]; then
   echo "Corriste con --no-vision: la clasificación automática de fotos de Fashion Mode quedó sin"
   echo "instalar. Corre './deploy.sh' (sin flags) cuando quieras agregarla."
 fi
+if ! grep -q '^TWILIO_ACCOUNT_SID=.\+' .env 2>/dev/null || ! grep -q '^TWILIO_AUTH_TOKEN=.\+' .env 2>/dev/null || ! grep -q '^TWILIO_PHONE_NUMBER=.\+' .env 2>/dev/null; then
+  echo "⚠️  Recordatorios por llamada (Twilio) sin configurar - completa en .env TWILIO_ACCOUNT_SID,"
+  echo "   TWILIO_AUTH_TOKEN y TWILIO_PHONE_NUMBER (console.twilio.com). Sin esto, schedule_call_reminder"
+  echo "   y /api/call-reminders devuelven error en vez de llamar a nadie - el resto del bot sigue igual."
+fi
+if ! grep -q '^PANEL_URL=https\?://.\+' .env 2>/dev/null; then
+  echo "⚠️  PANEL_URL no apunta a una URL pública - los recordatorios por llamada igual funcionan,"
+  echo "   pero Twilio no podrá avisar el estado real de cada llamada (se quedan en \"processing\")."
+  echo "   Ponla en .env (https://tu-dominio) para que /webhooks/twilio/call-status sea alcanzable."
+fi

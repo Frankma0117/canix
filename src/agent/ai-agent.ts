@@ -5,8 +5,10 @@ import { messagesRepo } from '../db/repositories/messages.repo.js';
 import { categoriesRepo } from '../db/repositories/categories.repo.js';
 import { todosRepo } from '../db/repositories/todos.repo.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
+import { stickersRepo } from '../db/repositories/stickers.repo.js';
 import { currentTimeContext, todayLocal } from '../util/datetime.js';
 import { buildAgendaMessage } from './agenda.js';
+import { isModeKey, toolsForMode, getModeCategory, type ModeKey } from './modes.js';
 import { sleep } from '../util/human-delay.js';
 import { env } from '../config/env.js';
 import type { WaManager } from '../whatsapp/wa-manager.js';
@@ -56,6 +58,15 @@ type ChatMsg = OpenAI.Chat.Completions.ChatCompletionMessageParam;
  *  reply is the answer" turns, so we can make sure the follow-through tool call actually happens. */
 function looksLikeQuestion(text: string): boolean {
   return /[?¿]\s*$/.test(text.trim());
+}
+
+/** Merges two independent tool restrictions (per-user permissions + active mode) into the single
+ *  list actually handed to the model this turn - null on either side means "no restriction there",
+ *  so it only narrows, it can add access back. Both narrowing at once means the intersection. */
+function combineAllowed(a: string[] | null, b: string[] | null): string[] | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a.filter((name) => b.includes(name));
 }
 
 /**
@@ -164,11 +175,21 @@ Reglas de las herramientas:
   schedule_flexible_reminder con una ventana horaria (window_start/window_end) - el sistema elige
   una hora al azar dentro de esa ventana cada día, así no se vuelve mecánico.
 - Para avisos que se repiten cada cierto tiempo un número fijo de veces (ej. "avísame cada 30
-  segundos, 5 veces, para cambiar de serie", timers de ejercicio/descansos, o para insistir en algo
-  urgente), usa schedule_interval_reminder - NO uses schedule_reminder con recurrence para esto,
-  esa recurrencia es para días/semanas/meses/años, no segundos. Si el usuario pide que le llames o
-  que insista hasta que le conteste, esta es la alternativa real (no puedo hacer llamadas de
-  verdad): explica eso brevemente y ofrece el aviso repetido como reemplazo.
+  segundos, 5 veces, para cambiar de serie", timers de ejercicio/descansos), usa
+  schedule_interval_reminder - NO uses schedule_reminder con recurrence para esto, esa recurrencia
+  es para días/semanas/meses/años, no segundos.
+- schedule_call_reminder es especial y NO es un reemplazo de lo anterior - hace una LLAMADA
+  TELEFÓNICA real (cuesta dinero, suena el teléfono de verdad). Úsala SOLO cuando pidan
+  explícitamente que los llamen ("llámame", "que timbre el teléfono") para algo verdaderamente
+  importante, o para una alarma para despertarse ("despiértame con una llamada a las 6am") - nunca
+  la ofrezcas ni la uses para un recordatorio casual, para eso siempre schedule_reminder/
+  schedule_important_date. call_type "alarm" solo hace timbrar y cuelga al contestar (no dice
+  nada, sirve para despertar); call_type "reminder" dice el mensaje en voz y cuelga. También puede
+  repetirse (recurrence_freq/recurrence_interval, igual que un recordatorio normal - ej. "llámame
+  cada 2 días a las 8am" = daily + recurrence_interval 2). Para ver/editar/cancelar/eliminar una ya
+  programada usa list_call_reminders/edit_call_reminder/cancel_call_reminder/delete_call_reminder -
+  igual que con los recordatorios normales, nunca la borres y la crees de nuevo solo para
+  cambiarle algo.
 - Para tareas (todos): "today" es solo para hoy, "later" para pendientes sin fecha fija o para más
   adelante, y "routine" para hábitos recurrentes (ejercicio, leer, etc.). Una tarea de "today"/
   "later" se marca con complete_todo; una rutina se marca con checkin_routine - son cosas
@@ -207,6 +228,11 @@ Reglas de las herramientas:
 - Cada persona con acceso tiene su propio panel web con su propio token (separado del de cualquier
   otro) - si preguntan cómo entrar o si se les perdió el token, usa regenerate_panel_token (sin
   argumentos les regenera el suyo propio).
+- Si abajo en tu contexto ves "Stickers disponibles", úsalos por tu cuenta con send_sticker cuando
+  el momento de la conversación calce con alguna etiqueta (saludo, celebración, motivación,
+  despedida, etc.) - NUNCA preguntes si quiero uno, simplemente mándalo cuando aplique. Si ninguna
+  etiqueta calza con el momento, no mandes ninguno - no fuerces uno que no pega. Como mucho un
+  sticker por turno, y no en cada mensaje - solo cuando de verdad sume.
 - Si quiero dejar de recibir avisos por unos días (viaje, vacaciones, descanso), usa
   pause_notifications (con days) para pausar TODO, o pause_routine/pause_reminder si es solo una
   rutina o recordatorio puntual - no cancela ni borra nada, todo vuelve solo cuando pase ese tiempo,
@@ -264,7 +290,7 @@ antes de adivinar - nunca asumas de quién se trata.`;
  * rediscover it every turn - is what lets it answer "qué tengo hoy"/"ya lo hice" reliably and
  * avoid re-asking about something already checked in (see buildAgendaMessage in agent/agenda.ts).
  */
-function buildSystemPrompt(userId: number, isAdmin: boolean): string {
+function buildSystemPrompt(userId: number, isAdmin: boolean, activeMode: ModeKey | null): string {
   const categories = categoriesRepo.listAll(userId);
   const categoryList = categories.length
     ? categories.map((c) => `- ${c.name}${c.description ? `: ${c.description}` : ''}`).join('\n')
@@ -275,8 +301,21 @@ function buildSystemPrompt(userId: number, isAdmin: boolean): string {
     ? laterPending.map((t) => `- #${t.id} ${t.title}`).join('\n')
     : '(Sin pendientes "para después".)';
 
+  // Only mentioned at all once at least one exists - keeps the prompt clean for a fresh install
+  // with no sticker pack yet (see send-sticker.tool.ts / BASE_PROMPT's usage rule above).
+  const stickerLabels = stickersRepo.listAll().map((s) => s.label);
+  const stickerLine = stickerLabels.length ? `\nStickers disponibles: ${stickerLabels.join(', ')}` : '';
+
+  const modeAddendum = activeMode
+    ? `\n\nMODO ACTIVO: ${getModeCategory(activeMode).title}. Ahora mismo SOLO tienes disponibles las ` +
+      `herramientas de esta categoría, más recordatorios/links/categorías (siempre activos). Si te piden ` +
+      `algo de otra categoría, dilo con naturalidad e indica que escriban "salir" para volver a modo ` +
+      `recordatorios, o el nombre del otro modo para cambiar directo - no finjas hacerlo con una tool que ` +
+      `no tienes.`
+    : '';
+
   return [
-    BASE_PROMPT + (isAdmin ? ADMIN_PROMPT_ADDENDUM : ''),
+    BASE_PROMPT + (isAdmin ? ADMIN_PROMPT_ADDENDUM : '') + modeAddendum,
     '',
     currentTimeContext(),
     `Hoy es ${todayLocal()}.`,
@@ -288,6 +327,7 @@ function buildSystemPrompt(userId: number, isAdmin: boolean): string {
     '',
     'Pendientes "para después" (sin fecha fija):',
     laterList,
+    stickerLine,
   ].join('\n');
 }
 
@@ -306,7 +346,14 @@ export async function processMessage(
   // The admin always has full access; anyone else may be limited to a subset by the admin (see
   // set-user-permissions.tool.ts) - null means unrestricted, same as before this feature existed.
   const fullUser = usersRepo.getById(user.id);
-  const allowedTools = !user.isAdmin && fullUser ? usersRepo.getAllowedTools(fullUser) : null;
+  const permissionAllowedTools = !user.isAdmin && fullUser ? usersRepo.getAllowedTools(fullUser) : null;
+
+  // Special modes (see agent/modes.ts) layer a second, independent restriction on top of the one
+  // above - whichever one is tighter wins (intersection), so an admin-restricted user who's also
+  // inside a mode never regains a tool either restriction alone would have denied them.
+  const activeMode = isModeKey(fullUser?.active_mode) ? fullUser!.active_mode : null;
+  const modeAllowedTools = toolsForMode(activeMode);
+  const allowedTools = combineAllowed(permissionAllowedTools, modeAllowedTools);
 
   const history = messagesRepo.history(user.id, env.ai.historyTurns);
   // If my last turn was a bare clarifying question, this incoming message is almost certainly the
@@ -317,7 +364,7 @@ export async function processMessage(
   messagesRepo.add(user.id, 'user', userText);
 
   const messages: ChatMsg[] = [
-    { role: 'system', content: buildSystemPrompt(user.id, user.isAdmin) },
+    { role: 'system', content: buildSystemPrompt(user.id, user.isAdmin, activeMode) },
     ...history.map((m) => ({ role: m.role, content: m.content }) as ChatMsg),
     { role: 'user', content: userText },
   ];

@@ -120,6 +120,21 @@ export const env = {
       recommendationCacheTtlMs: parseInt(process.env.FASHION_RECOMMENDATION_CACHE_TTL_MS ?? '3600000', 10),
     },
   },
+
+  // Phone-call reminders (Twilio Programmable Voice, see src/calls/) - an isolated module, same
+  // "never crashes boot if unconfigured" philosophy as Fashion Mode's vision service: a missing
+  // TWILIO_AUTH_TOKEN only means placing a call fails with a clear error, nothing else breaks.
+  twilio: {
+    accountSid: process.env.TWILIO_ACCOUNT_SID ?? '',
+    authToken: process.env.TWILIO_AUTH_TOKEN ?? '',
+    // The Twilio number calls are placed FROM (caller id) - E.164, e.g. "+18023004379".
+    phoneNumber: process.env.TWILIO_PHONE_NUMBER ?? '',
+    // How many times a failed/no-answer/busy call is retried before giving up for good (see
+    // calls/call-reminders.service.ts) - kept low on purpose, every attempt is a real phone call
+    // Twilio bills for.
+    maxAttempts: parseInt(process.env.TWILIO_CALL_MAX_ATTEMPTS ?? '3', 10),
+    retryDelayMinutes: parseInt(process.env.TWILIO_CALL_RETRY_DELAY_MINUTES ?? '5', 10),
+  },
 };
 
 export type Env = typeof env;

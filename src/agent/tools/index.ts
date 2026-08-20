@@ -66,6 +66,14 @@ import { addNoteTool } from './add-note.tool.js';
 import { listNotesTool } from './list-notes.tool.js';
 import { editNoteTool } from './edit-note.tool.js';
 import { deleteNoteTool } from './delete-note.tool.js';
+import { scheduleCallReminderTool } from './schedule-call-reminder.tool.js';
+import { listCallRemindersTool } from './list-call-reminders.tool.js';
+import { editCallReminderTool } from './edit-call-reminder.tool.js';
+import { cancelCallReminderTool } from './cancel-call-reminder.tool.js';
+import { deleteCallReminderTool } from './delete-call-reminder.tool.js';
+import { sendStickerTool } from './send-sticker.tool.js';
+import { listStickersTool } from './list-stickers.tool.js';
+import { deleteStickerTool } from './delete-sticker.tool.js';
 
 /** Registers every tool the agent can use. Called once at boot. */
 export function registerTools(): void {
@@ -136,4 +144,12 @@ export function registerTools(): void {
   registry.register(listNotesTool);
   registry.register(editNoteTool);
   registry.register(deleteNoteTool);
+  registry.register(scheduleCallReminderTool);
+  registry.register(listCallRemindersTool);
+  registry.register(editCallReminderTool);
+  registry.register(cancelCallReminderTool);
+  registry.register(deleteCallReminderTool);
+  registry.register(sendStickerTool);
+  registry.register(listStickersTool);
+  registry.register(deleteStickerTool);
 }

@@ -255,6 +255,78 @@ export function initSchema(): void {
       UNIQUE(outfit_id, garment_id)
     );
 
+    -- The bot's sticker pack (see agent/modes.ts's ALWAYS_ON_TOOLS, agent/tools/send-sticker.tool.ts).
+    -- Only the admin can teach the bot a new one, by sending it as a real WhatsApp sticker (see
+    -- bot-manager.ts) - it's saved here with label = NULL until their next plain-text message names
+    -- it. Global (no user_id scope): every user's conversation can receive one, only uploading is
+    -- admin-only. The AI agent picks WHEN to send one on its own, from the labels listed in its
+    -- system prompt context - never asked to by the person chatting.
+    CREATE TABLE IF NOT EXISTS stickers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT,
+      data BLOB NOT NULL,
+      mimetype TEXT NOT NULL DEFAULT 'image/webp',
+      created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_stickers_label ON stickers(label);
+
+    -- Contact card(s) someone just shared via WhatsApp's native "share contact" feature (see
+    -- util/vcard.ts, bot-manager.ts), waiting on their explicit "sí"/"no"/"1,3" reply before any of
+    -- them actually becomes a real row in the contacts table - see agent/tools/add-contact.tool.ts
+    -- for the table they graduate into. Sharing a new batch before answering replaces whatever was
+    -- pending (see pending-contacts.repo.ts's replaceForUser) - acting on a stale, already-
+    -- superseded offer would be confusing.
+    CREATE TABLE IF NOT EXISTS pending_shared_contacts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_pending_shared_contacts_user ON pending_shared_contacts(user_id);
+
+    -- Phone-call reminders (Twilio Programmable Voice, see src/calls/) - a separate resource from
+    -- the WhatsApp-text reminders table above (different channel, different fields, different
+    -- status vocabulary), processed by the SAME scheduler tick (see scheduler/task-scheduler.ts)
+    -- instead of a second worker. status is this row's own lifecycle (pending -> processing ->
+    -- completed/failed/cancelled) - twilio_call_status separately tracks Twilio's own call
+    -- progress (queued/ringing/in-progress/completed/busy/no-answer/failed/canceled), updated by
+    -- the status callback webhook (see server/twilio-webhook.ts). Reaching 'processing' is NOT the
+    -- same as the call being answered - see call-reminders.service.ts's comment on why 'completed'
+    -- is only ever set from Twilio's own callback, never just because the API accepted the request.
+    -- call_type distinguishes the two ways this can ring someone (see calls/call-reminders.service.ts's
+    -- buildTwiml): 'reminder' speaks the message then hangs up (a genuinely important reminder the
+    -- user explicitly asked to get as a PHONE CALL, not a routine WhatsApp one); 'alarm' says
+    -- nothing at all and hangs up the instant it's answered - the ringing itself IS the alarm, like
+    -- a wake-up call. This whole feature is deliberately NOT wired to general reminders - see
+    -- agent/tools/schedule-call-reminder.tool.ts's description for why the AI only offers it for
+    -- something truly important or an explicit alarm request.
+    CREATE TABLE IF NOT EXISTS call_reminders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      phone_number TEXT NOT NULL,
+      message TEXT NOT NULL,
+      call_type TEXT NOT NULL DEFAULT 'reminder' CHECK (call_type IN ('reminder', 'alarm')),
+      scheduled_at TEXT NOT NULL,
+      -- Same convention as reminders.recurrence_freq/interval (see nextCallScheduledAt in
+      -- calls/call-reminders.service.ts) - 'daily' + interval=2 is "every 2 days". A recurring one
+      -- only advances to its next occurrence once Twilio reports the call actually completed (see
+      -- handleCallStatusUpdate) - never just because it was dispatched.
+      recurrence_freq TEXT NOT NULL DEFAULT 'none' CHECK (recurrence_freq IN ('none', 'daily', 'weekly', 'monthly', 'yearly')),
+      recurrence_interval INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'cancelled')),
+      twilio_call_sid TEXT,
+      twilio_call_status TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_call_reminders_status_scheduled ON call_reminders(status, scheduled_at);
+    CREATE INDEX IF NOT EXISTS idx_call_reminders_user ON call_reminders(user_id);
+    CREATE INDEX IF NOT EXISTS idx_call_reminders_call_sid ON call_reminders(twilio_call_sid);
+
     -- Token/cost visibility for Fashion Mode's AI calls (intent classification + outfit
     -- recommendation) - separate from the general [LLM] console log in ai-agent.ts, so "cuánto
     -- está gastando Fashion Mode" can be answered on its own instead of mixed with normal chat use.
@@ -343,6 +415,13 @@ export function initSchema(): void {
   // task-scheduler.ts). Both 'YYYY-MM-DD HH:mm:ss' local wall time, same format as run_at.
   ensureColumn('users', 'paused_until', 'paused_until TEXT');
   ensureColumn('reminders', 'paused_until', 'paused_until TEXT');
+  // Special modes (see agent/modes.ts) - which category, if any, this user is currently "inside"
+  // (rutinas/tareas/notas/contactos/comidas/premios/resumenes). NULL = default mode (recordatorios).
+  ensureColumn('users', 'active_mode', 'active_mode TEXT');
+  // Recurring call reminders (e.g. "llámame cada 2 días a las 8am") - added after call_reminders'
+  // initial release, see the table's own comment above.
+  ensureColumn('call_reminders', 'recurrence_freq', "recurrence_freq TEXT NOT NULL DEFAULT 'none'");
+  ensureColumn('call_reminders', 'recurrence_interval', 'recurrence_interval INTEGER NOT NULL DEFAULT 1');
 }
 
 /** Adds a column to `table` if it doesn't already exist (table/column names here are always our own constants, never user input). */

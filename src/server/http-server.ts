@@ -12,11 +12,21 @@ import { todosRepo } from '../db/repositories/todos.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { rewardsRepo } from '../db/repositories/rewards.repo.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
+import { callRemindersRepo } from '../db/repositories/call-reminders.repo.js';
+import { createCallReminder, updateCallReminder, testCallNow } from '../calls/call-reminders.service.js';
+import { registerTwilioWebhook } from './twilio-webhook.js';
 import { createRoutineWithReminders, updateRoutineWithReminders } from '../agent/routine-setup.js';
-import { todayLocal } from '../util/datetime.js';
+import { todayLocal, nowLocal } from '../util/datetime.js';
 import { phoneToJid } from '../util/jid.js';
 import { resolvePanelUser, requirePanelAdmin, findUserByToken } from './auth.js';
-import type { RecurrenceFreq, TodoScope, TodoStatus, ReminderStatus, RewardPunishmentType } from '../types/index.js';
+import type {
+  RecurrenceFreq,
+  TodoScope,
+  TodoStatus,
+  ReminderStatus,
+  RewardPunishmentType,
+  CallReminderStatus,
+} from '../types/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(here, '..', '..', 'public');
@@ -44,7 +54,18 @@ function h(fn: (req: Request, res: Response) => unknown) {
 
 export function createServer(bot: BotManager): Express {
   const app = express();
+  // Needed so req.protocol correctly reflects "https" (via X-Forwarded-Proto) when this app runs
+  // behind a reverse proxy/TLS terminator - Twilio's webhook signature validation (see
+  // server/twilio-webhook.ts) reconstructs the exact public URL it called, and gets it wrong
+  // without this if the proxy doesn't terminate TLS at this same process.
+  app.set('trust proxy', true);
   app.use(cors());
+
+  // Twilio's status-callback webhook - registered BEFORE express.json() below and outside /api on
+  // purpose: it's unauthenticated by our own Bearer scheme (Twilio can't send it) and needs its
+  // own express.urlencoded() body parser instead of JSON (see twilio-webhook.ts).
+  registerTwilioWebhook(app);
+
   app.use(express.json());
   app.use(express.static(publicDir));
 
@@ -237,6 +258,104 @@ export function createServer(bot: BotManager): Express {
     '/api/reminders/:id',
     h((req, res) => {
       remindersRepo.remove(userId(req), Number(req.params.id));
+      res.json({ ok: true });
+    }),
+  );
+
+  // ---------- Phone-call reminders (Twilio Programmable Voice, see src/calls/) ----------
+  // A separate resource from /api/reminders above (different channel, fields, and status
+  // vocabulary - see call-reminders.repo.ts's own comment) - same panel auth (resolvePanelUser
+  // already ran for every /api route), so every call reminder is scoped to whoever created it.
+  app.get(
+    '/api/call-reminders',
+    h((req, res) => {
+      const status = req.query.status as CallReminderStatus | undefined;
+      res.json(callRemindersRepo.listAll(userId(req), status));
+    }),
+  );
+  app.get(
+    '/api/call-reminders/:id',
+    h((req, res) => {
+      const reminder = callRemindersRepo.getById(userId(req), Number(req.params.id));
+      if (!reminder) return res.status(404).json({ error: 'No existe ese recordatorio' });
+      res.json(reminder);
+    }),
+  );
+  app.post(
+    '/api/call-reminders',
+    h((req, res) => {
+      const { phone_number, message, call_type, scheduled_at, recurrence_freq, recurrence_interval } = req.body ?? {};
+      if (!phone_number || !scheduled_at) {
+        return res.status(400).json({ error: 'phone_number y scheduled_at son requeridos' });
+      }
+      if (call_type && call_type !== 'reminder' && call_type !== 'alarm') {
+        return res.status(400).json({ error: 'call_type debe ser "reminder" o "alarm"' });
+      }
+      const result = createCallReminder({
+        userId: userId(req),
+        phoneNumber: String(phone_number),
+        message: String(message ?? ''),
+        callType: call_type === 'alarm' ? 'alarm' : 'reminder',
+        scheduledAt: String(scheduled_at),
+        recurrenceFreq: recurrence_freq as RecurrenceFreq | undefined,
+        recurrenceInterval: recurrence_interval === undefined ? undefined : Number(recurrence_interval),
+      });
+      if (!result.ok) return res.status(400).json({ error: result.error });
+      res.json(result.value);
+    }),
+  );
+  app.put(
+    '/api/call-reminders/:id',
+    h((req, res) => {
+      const { phone_number, message, call_type, scheduled_at, recurrence_freq, recurrence_interval } = req.body ?? {};
+      if (call_type && call_type !== 'reminder' && call_type !== 'alarm') {
+        return res.status(400).json({ error: 'call_type debe ser "reminder" o "alarm"' });
+      }
+      const result = updateCallReminder(userId(req), Number(req.params.id), {
+        phoneNumber: phone_number === undefined ? undefined : String(phone_number),
+        message: message === undefined ? undefined : String(message),
+        callType: call_type as 'reminder' | 'alarm' | undefined,
+        scheduledAt: scheduled_at === undefined ? undefined : String(scheduled_at),
+        recurrenceFreq: recurrence_freq as RecurrenceFreq | undefined,
+        recurrenceInterval: recurrence_interval === undefined ? undefined : Number(recurrence_interval),
+      });
+      if (!result.ok) return res.status(400).json({ error: result.error });
+      res.json(result.value);
+    }),
+  );
+  app.post(
+    '/api/call-reminders/:id/cancel',
+    h((req, res) => {
+      const ok = callRemindersRepo.cancel(userId(req), Number(req.params.id));
+      if (!ok) return res.status(400).json({ error: 'No se puede cancelar (no existe, o ya terminó)' });
+      res.json({ ok: true });
+    }),
+  );
+  // Places the call RIGHT NOW using this reminder's own phone/message, as a separate one-off test
+  // row (see calls/call-reminders.service.ts's testCallNow) - the original scheduled reminder is
+  // never touched by this, so testing it doesn't consume/advance its real scheduled occurrence.
+  app.post(
+    '/api/call-reminders/:id/test',
+    h(async (req, res) => {
+      const uid = userId(req);
+      const reminder = callRemindersRepo.getById(uid, Number(req.params.id));
+      if (!reminder) return res.status(404).json({ error: 'No existe ese recordatorio' });
+
+      const result = await testCallNow({
+        userId: uid,
+        phoneNumber: reminder.phone_number,
+        message: reminder.message,
+        callType: reminder.call_type,
+        scheduledAt: nowLocal(),
+      });
+      if (!result.ok) return res.status(400).json({ error: result.error });
+      res.json(result.value);
+    }),
+  );
+  app.delete(
+    '/api/call-reminders/:id',
+    h((req, res) => {
+      callRemindersRepo.remove(userId(req), Number(req.params.id));
       res.json({ ok: true });
     }),
   );

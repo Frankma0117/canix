@@ -35,6 +35,12 @@ export type IncomingHandler = (msg: {
    *  garment photos" bulk import, see fashion/image/pdf-intake.ts) - only downloaded if Fashion
    *  Mode actually consumes it as a PDF. */
   documentMessage?: WAMessage;
+  /** Same laziness, for an incoming sticker - only downloaded when the sender is the admin
+   *  teaching the bot a new one (see the sticker pack flow in bot-manager.ts). */
+  stickerMessage?: WAMessage;
+  /** Present for a WhatsApp "share contact" message (one or several at once) - no media download
+   *  involved here, the vCard(s) are already inline on the message (see util/vcard.ts). */
+  contactMessage?: WAMessage;
 }) => Promise<void>;
 
 /**
@@ -228,6 +234,12 @@ export class WaManager {
         // anything that isn't a fashion PDF, exactly like a document was ignored before this field
         // existed.
         const documentMessage = m.message?.documentMessage ? m : undefined;
+        // Same idea for stickers (the bot's sticker pack, see bot-manager.ts) - passed through
+        // untouched; only an admin's incoming sticker is ever actually downloaded.
+        const stickerMessage = m.message?.stickerMessage ? m : undefined;
+        // A shared contact (or several at once) - see util/vcard.ts / bot-manager.ts's save-with-
+        // confirmation flow. No media download involved, the vCard(s) are already inline.
+        const contactMessage = m.message?.contactMessage || m.message?.contactsArrayMessage ? m : undefined;
 
         if (!text.trim() && m.message?.audioMessage) {
           const transcribed = await this.transcribeIncomingAudio(m);
@@ -240,7 +252,7 @@ export class WaManager {
           }
         }
 
-        if (!text.trim() && !imageMessage && !documentMessage) continue;
+        if (!text.trim() && !imageMessage && !documentMessage && !stickerMessage && !contactMessage) continue;
 
         const name = m.pushName || undefined;
 
@@ -252,7 +264,7 @@ export class WaManager {
         });
 
         try {
-          await this.handler?.({ jid, name, text: text.trim(), fromAudio, imageMessage, documentMessage });
+          await this.handler?.({ jid, name, text: text.trim(), fromAudio, imageMessage, documentMessage, stickerMessage, contactMessage });
         } catch (err) {
           console.error('[WA] Error procesando mensaje:', (err as Error).message);
         }
@@ -316,6 +328,25 @@ export class WaManager {
       return results?.[0]?.exists ?? null;
     } catch (err) {
       console.error('[WA] No se pudo verificar %s en WhatsApp:', jid, (err as Error).message);
+      return null;
+    }
+  }
+
+  /**
+   * Same lookup as checkOnWhatsApp(), but also returns the normalized jid WhatsApp itself resolved
+   * for that number - preferible a construirlo a mano (ver phoneToJid en util/jid.ts) cuando se
+   * trata de un número crudo recién escrito, porque a veces WhatsApp enruta una cuenta por un @lid
+   * en vez del jid de teléfono plano, y solo esta consulta sabe cuál es el correcto. Null si el
+   * socket no está conectado, la consulta falla, o el número no existe en WhatsApp.
+   */
+  async resolveOnWhatsApp(numberOrJid: string): Promise<{ jid: string; exists: boolean } | null> {
+    if (!this.sock) return null;
+    try {
+      const results = await this.sock.onWhatsApp(numberOrJid);
+      const match = results?.[0];
+      return match ?? null;
+    } catch (err) {
+      console.error('[WA] No se pudo resolver %s en WhatsApp:', numberOrJid, (err as Error).message);
       return null;
     }
   }

@@ -77,6 +77,28 @@ export interface HabitLog {
   created_at: string;
 }
 
+export type CallReminderStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
+export type CallReminderType = 'reminder' | 'alarm';
+
+/** Phone-call reminder (Twilio) - special, not a general reminder channel: only for something
+ *  truly important the user explicitly wants delivered as an actual call, or a wake-up alarm. */
+export interface CallReminder {
+  id: number;
+  phone_number: string;
+  message: string;
+  call_type: CallReminderType;
+  scheduled_at: string;
+  recurrence_freq: RecurrenceFreq;
+  recurrence_interval: number;
+  status: CallReminderStatus;
+  twilio_call_sid: string | null;
+  twilio_call_status: string | null;
+  attempts: number;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export type RewardPunishmentType = 'reward' | 'punishment';
 
 export interface RewardPunishment {

@@ -1,8 +1,13 @@
-import { jidNormalizedUser, type WAMessage } from 'baileys';
+import { jidNormalizedUser, downloadMediaMessage, type WAMessage } from 'baileys';
 import { WaManager } from './wa-manager.js';
 import { handleFashionMessage } from '../fashion/router.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { messagesRepo } from '../db/repositories/messages.repo.js';
+import { stickersRepo, normalizeStickerLabel } from '../db/repositories/stickers.repo.js';
+import { pendingContactsRepo } from '../db/repositories/pending-contacts.repo.js';
+import { contactsRepo } from '../db/repositories/contacts.repo.js';
+import { extractSharedContacts } from '../util/vcard.js';
+import { phoneToJid } from '../util/jid.js';
 import { resetAllUserData } from '../db/reset-user.js';
 import { processMessage } from '../agent/ai-agent.js';
 import { ensureDailyAgendaReminder } from '../agent/agenda.js';
@@ -11,6 +16,7 @@ import { ensureDailyResetReminder } from '../agent/daily-reset.js';
 import { ensureDailyDedupReminder } from '../agent/dedup.js';
 import { legacyAdminToken } from '../server/auth.js';
 import { renderMainMenu, resolveMenuCategory, renderCategoryDetail, renderUnknownCategory } from '../agent/menu.js';
+import { handleModeMessage } from '../agent/modes.js';
 import { env } from '../config/env.js';
 import { sleep, typingDelayMs, readingPauseMs, withWorkingUpdates } from '../util/human-delay.js';
 import { workingUpdateMessage } from '../util/motivational.js';
@@ -44,6 +50,9 @@ const HELP_TEXT =
   'categorías, premios/castigos e historial) y empieza de cero. Pide confirmación antes de ' +
   'hacerlo, no se puede deshacer.\n' +
   '/ayuda - muestra este mensaje.\n\n' +
+  'Recordatorios y links siempre están activos. Rutinas, tareas, notas, contactos, comidas, ' +
+  'premios y resúmenes son modos: escribe su nombre (ej. "rutinas") para entrar y ver su menú, y ' +
+  '"salir" para volver. Ve /menu para el detalle de cada uno.\n\n' +
   'Todo lo demás simplemente pídemelo hablando normal, como ya sabes. 🙌';
 
 /**
@@ -90,6 +99,8 @@ export class BotManager {
     fromAudio,
     imageMessage,
     documentMessage,
+    stickerMessage,
+    contactMessage,
   }: {
     jid: string;
     name?: string;
@@ -97,6 +108,8 @@ export class BotManager {
     fromAudio?: boolean;
     imageMessage?: WAMessage;
     documentMessage?: WAMessage;
+    stickerMessage?: WAMessage;
+    contactMessage?: WAMessage;
   }) {
     // Everything below can fail in ways that have nothing to do with the user's message itself
     // (AI provider hiccup, a bug, WhatsApp acting up) - wrapping the whole thing means there is
@@ -151,6 +164,94 @@ export class BotManager {
 
       const command = text.trim().toLowerCase();
 
+      // Sticker pack (see agent/tools/send-sticker.tool.ts) - only the admin can teach the bot a
+      // new one, by sending it as a real WhatsApp sticker. Checked before everything else below:
+      // a sticker carries no meaningful text, and Fashion Mode/the mode router have nothing to do
+      // with it either way.
+      if (stickerMessage) {
+        if (user.role === 'admin') {
+          try {
+            const data = (await downloadMediaMessage(stickerMessage, 'buffer', {})) as Buffer;
+            const mimetype = stickerMessage.message?.stickerMessage?.mimetype ?? 'image/webp';
+            const saved = stickersRepo.createPending(user.id, data, mimetype);
+            console.log('[STICKER] Sticker #%d recibido del admin #%d, pendiente de etiqueta.', saved.id, user.id);
+            await this.wa.sendText(
+              jid,
+              '🏷️ Sticker recibido. ¿Con qué etiqueta lo guardo? (ej. "buenos_dias", "celebracion", "motivacion")',
+            );
+          } catch (err) {
+            console.error('[STICKER] Error descargando el sticker del admin:', (err as Error).message);
+            await this.wa.sendText(jid, '⚠️ No pude descargar ese sticker, intenta de nuevo.').catch(() => {});
+          }
+        }
+        return; // nothing else to do with this turn either way
+      }
+
+      // If the admin just sent a sticker and hasn't named it yet, their next plain-text message
+      // (not a raw command like /menu) is that label. Checked early for the same reason as above.
+      const pendingSticker = user.role === 'admin' ? stickersRepo.getPendingFor(user.id) : undefined;
+      if (pendingSticker && text.trim() && !command.startsWith('/')) {
+        const label = normalizeStickerLabel(text);
+        stickersRepo.setLabel(pendingSticker.id, label);
+        console.log('[STICKER] Sticker #%d etiquetado como "%s".', pendingSticker.id, label);
+        await this.wa.sendText(jid, `✅ Guardado como "${label}" - lo uso cuando calce en la conversación, sin que me lo pidas.`);
+        return;
+      }
+
+      // Shared WhatsApp contact card(s) (native "share contact" feature, see util/vcard.ts) - works
+      // for anyone, not admin-only (sharing your own contacts is a normal action). Nothing is saved
+      // yet: only offered, and only actually written to `contacts` once the person replies "sí"
+      // (see the pending-batch reply handler right below).
+      if (contactMessage) {
+        const shared = extractSharedContacts(contactMessage);
+        if (shared.length === 0) {
+          await this.wa.sendText(jid, '⚠️ No pude leer ese contacto, ¿me lo compartes de nuevo?').catch(() => {});
+          return;
+        }
+        pendingContactsRepo.replaceForUser(user.id, shared);
+        console.log('[CONTACTS] Usuario #%d compartió %d contacto(s), pendiente de confirmación.', user.id, shared.length);
+        const list = shared.map((c, i) => `${i + 1}. ${c.name} - ${c.phone}`).join('\n');
+        await this.wa.sendText(
+          jid,
+          `📇 Recibí ${shared.length} contacto${shared.length > 1 ? 's' : ''}:\n\n${list}\n\n` +
+            '¿Los guardo? Responde "sí" para guardar todos, los números separados por coma para guardar ' +
+            'solo algunos (ej. "1,3"), o "no" para descartar.',
+        );
+        return;
+      }
+
+      // Answer to the "¿los guardo?" offer above - only "sí"/"no"/a list of numbers is consumed
+      // here; anything else falls through untouched and the offer just stays pending (a new shared
+      // batch, or an explicit answer later, is how it gets resolved).
+      const pendingContacts = pendingContactsRepo.listForUser(user.id);
+      if (pendingContacts.length > 0 && command) {
+        if (/^(si|sí|guardar( todos)?)$/.test(command)) {
+          for (const c of pendingContacts) contactsRepo.upsert(user.id, c.name, phoneToJid(c.phone), null);
+          pendingContactsRepo.clearForUser(user.id);
+          console.log('[CONTACTS] Usuario #%d guardó %d contacto(s) compartido(s).', user.id, pendingContacts.length);
+          await this.wa.sendText(jid, `✅ Guardé ${pendingContacts.length} contacto(s). Ya puedes escribirles por nombre.`);
+          return;
+        }
+        if (/^(no|cancelar|descartar)$/.test(command)) {
+          pendingContactsRepo.clearForUser(user.id);
+          console.log('[CONTACTS] Usuario #%d descartó %d contacto(s) compartido(s).', user.id, pendingContacts.length);
+          await this.wa.sendText(jid, '👍 Descartado, no guardé nada.');
+          return;
+        }
+        const indices = command
+          .split(',')
+          .map((s) => Number(s.trim()))
+          .filter((n) => Number.isInteger(n) && n >= 1 && n <= pendingContacts.length);
+        if (indices.length > 0) {
+          const chosen = indices.map((i) => pendingContacts[i - 1]);
+          for (const c of chosen) contactsRepo.upsert(user.id, c.name, phoneToJid(c.phone), null);
+          pendingContactsRepo.clearForUser(user.id);
+          console.log('[CONTACTS] Usuario #%d guardó %d de %d contacto(s) compartido(s).', user.id, chosen.length, pendingContacts.length);
+          await this.wa.sendText(jid, `✅ Guardé ${chosen.length} de los ${pendingContacts.length} contactos.`);
+          return;
+        }
+      }
+
       if (command === '/reset') {
         messagesRepo.clear(user.id);
         await this.wa.sendText(jid, '🧹 Historial de conversación borrado.');
@@ -201,6 +302,15 @@ export class BotManager {
           return;
         }
       }
+      // Special modes (rutinas/tareas/notas/contactos/comidas/premios/resúmenes) - see agent/modes.ts.
+      // Also zero-token, same raw-command pattern as everything above. Runs after Fashion Mode
+      // (a fully separate island) so its own "salir"/entry keywords never collide with these.
+      const modeResult = handleModeMessage(user.id, text);
+      if (modeResult.consumed) {
+        if (modeResult.reply) await this.wa.sendText(jid, modeResult.reply);
+        return;
+      }
+
       if (!text.trim()) return; // bare image, not consumed by Fashion - same silent-ignore as before this feature existed
 
       // Brief human-like pauses (see util/human-delay.ts) so replies don't land instantly on

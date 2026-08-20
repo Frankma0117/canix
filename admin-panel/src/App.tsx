@@ -6,6 +6,7 @@ import { TodosPage } from './pages/TodosPage.tsx';
 import { RoutinesPage } from './pages/RoutinesPage.tsx';
 import { RewardsPage } from './pages/RewardsPage.tsx';
 import { RemindersPage } from './pages/RemindersPage.tsx';
+import { CallRemindersPage } from './pages/CallRemindersPage.tsx';
 import { LinksPage } from './pages/LinksPage.tsx';
 import { CategoriesPage } from './pages/CategoriesPage.tsx';
 import { ContactsPage } from './pages/ContactsPage.tsx';
@@ -17,6 +18,7 @@ export type SectionId =
   | 'routines'
   | 'rewards'
   | 'reminders'
+  | 'call-reminders'
   | 'links'
   | 'categories'
   | 'contacts'
@@ -50,6 +52,7 @@ function Shell() {
         {section === 'routines' && <RoutinesPage />}
         {section === 'rewards' && <RewardsPage />}
         {section === 'reminders' && <RemindersPage />}
+        {section === 'call-reminders' && <CallRemindersPage />}
         {section === 'links' && <LinksPage />}
         {section === 'categories' && <CategoriesPage />}
         {section === 'contacts' && <ContactsPage />}

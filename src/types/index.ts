@@ -25,6 +25,10 @@ export interface User {
   // Set = every scheduled notification for this person is silenced until this moment (see
   // pause-notifications.tool.ts / task-scheduler.ts). NULL = not paused.
   paused_until: string | null;
+  // Which special mode (see agent/modes.ts) this user is currently inside - restricts which tools
+  // the AI agent can call this turn to just that category (plus reminders/links, always on). NULL
+  // = default mode (recordatorios), the only one active without an explicit entry command.
+  active_mode: string | null;
   created_at: string;
 }
 
@@ -310,6 +314,60 @@ export interface AiUsage {
   model: string | null;
   input_tokens: number | null;
   output_tokens: number | null;
+  created_at: string;
+}
+
+/** One contact card from a WhatsApp "share contact" message, waiting on the sharer's explicit
+ *  yes/no before it becomes a real row in `contacts` (see db/repositories/pending-contacts.repo.ts,
+ *  util/vcard.ts). */
+export interface PendingSharedContact {
+  id: number;
+  user_id: number;
+  name: string;
+  phone: string;
+  created_at: string;
+}
+
+export type CallReminderStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
+/** 'reminder' speaks the message then hangs up; 'alarm' says nothing and hangs up the instant it's
+ *  answered - the ringing itself is the alarm (see calls/call-reminders.service.ts's buildTwiml). */
+export type CallReminderType = 'reminder' | 'alarm';
+
+/** A phone-call reminder (Twilio Programmable Voice, see src/calls/) - separate resource from the
+ *  WhatsApp-text `reminders` above (different channel/fields/status vocabulary), and deliberately
+ *  NOT a general-purpose substitute for them - only for something truly important or an explicit
+ *  alarm request (see agent/tools/schedule-call-reminder.tool.ts). `status` is this row's own
+ *  lifecycle; `twilio_call_status` separately tracks Twilio's own call progress (see
+ *  server/twilio-webhook.ts), which is the ONLY thing allowed to set status to 'completed'. */
+export interface CallReminder {
+  id: number;
+  user_id: number;
+  phone_number: string; // E.164
+  message: string;
+  call_type: CallReminderType;
+  scheduled_at: string; // 'YYYY-MM-DD HH:mm:ss' local wall time, same convention as reminders.run_at
+  // Same convention as Reminder.recurrence_freq/interval - 'daily' + interval=2 is "every 2 days".
+  // Only advances to the next occurrence once Twilio reports the call actually completed (see
+  // calls/call-reminders.service.ts's handleCallStatusUpdate) - not just because it was dispatched.
+  recurrence_freq: RecurrenceFreq;
+  recurrence_interval: number;
+  status: CallReminderStatus;
+  twilio_call_sid: string | null;
+  twilio_call_status: string | null;
+  attempts: number;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One saved sticker (see db/repositories/stickers.repo.ts) - label is NULL right after the admin
+ *  sends it, until their next plain-text message names it (see bot-manager.ts). */
+export interface Sticker {
+  id: number;
+  label: string | null;
+  data: Buffer;
+  mimetype: string;
+  created_by: number;
   created_at: string;
 }
 

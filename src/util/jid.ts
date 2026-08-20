@@ -9,8 +9,15 @@ import { env } from '../config/env.js';
  * DEFAULT_COUNTRY_CODE env var).
  */
 export function phoneToJid(phone: string): string {
+  return `${normalizePhoneDigits(phone)}@s.whatsapp.net`;
+}
+
+/** Digit-only normalization step of phoneToJid, exposed on its own for callers that need the plain
+ *  number (e.g. to pass to sock.onWhatsApp()) rather than an already-built @s.whatsapp.net jid -
+ *  see send-message.tool.ts, which prefers the jid WhatsApp itself resolves over building one. */
+export function normalizePhoneDigits(phone: string): string {
   const digitsOnly = phone.trim().replace(/\D/g, '');
-  return `${withCountryCode(digitsOnly)}@s.whatsapp.net`;
+  return withCountryCode(digitsOnly);
 }
 
 function withCountryCode(digits: string): string {
