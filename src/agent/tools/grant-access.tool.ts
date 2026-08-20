@@ -59,7 +59,12 @@ export const grantAccessTool: Tool = {
     // a alguien que nunca me ha escrito" (see the WA cold-send race explained in wa-manager.ts's
     // ensurePrivacyToken comment - already mitigated best-effort there, but not guaranteed).
     try {
-      await ctx.wa.sendText(jid, `¡Hola ${user.name}! Ya tienes acceso a este asistente. Si quieres, también puedes entrar al panel web en ${panelLine}`);
+      await ctx.wa.sendText(
+        jid,
+        `¡Hola ${user.name}! Soy Canix, tu asistente virtual 🤖 Ya tienes acceso: te ayudo con recordatorios, ` +
+          `tareas, rutinas y hábitos, links guardados por categoría, notas y más - escribe /menu cuando quieras ver ` +
+          `todo el detalle. También puedes entrar al panel web en ${panelLine}`,
+      );
     } catch (err) {
       console.error('[TOOL] grant_access: no se pudo avisar el token del panel a %s:', jid, (err as Error).message);
       return (

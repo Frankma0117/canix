@@ -233,7 +233,7 @@ function isModeCategory(key: string): boolean {
 }
 
 export function renderMainMenu(access: MenuAccess): string {
-  const lines: string[] = ['📋 *Menú Cania*', '', 'Elegí una categoría (número o nombre):', ''];
+  const lines: string[] = ['📋 *Menú Canix*', '', 'Elegí una categoría (número o nombre):', ''];
 
   for (const cat of CORE_CATEGORIES) {
     const modeHint = isModeCategory(cat.key) ? ` - escribe "${cat.aliases[0]}" para entrar` : '';

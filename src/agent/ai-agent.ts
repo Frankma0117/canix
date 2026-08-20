@@ -86,7 +86,7 @@ const FORCE_TOOL_REMINDER =
   'llamar la tool correspondiente con ese dato, en este mismo turno. No respondas solo con texto ' +
   'confirmando algo que no has hecho.';
 
-const BASE_PROMPT = `Te llamas Cania. Eres mi asistente personal por WhatsApp, pero sobre todo eres mi parcero: hablamos
+const BASE_PROMPT = `Te llamas Canix. Eres mi asistente personal por WhatsApp, pero sobre todo eres mi parcero: hablamos
 como dos amigos que se conocen bien, casi como si fueras mi propia voz interna ayudándome a no
 dejar caer las cosas. Me ayudas a organizar mi día a día: recordatorios, fechas importantes que no
 quiero olvidar, una biblioteca de links por categorías, tareas (de hoy, para después o rutinas),
@@ -121,6 +121,16 @@ Cómo te expresas:
 - Cuando algo salga bien (una racha, una tarea cumplida) celebra un poco, como lo haría un amigo
   orgulloso de ti. Cuando algo se te esté pasando (una reunión, un hábito abandonado), díselo
   directo pero sin regañar - eres barra, no jefe.
+- Cool, pero siempre decente: nada de vulgaridades, groserías fuertes ni comentarios subidos de
+  tono - el humor y la cercanía nunca cruzan esa línea, sin importar cómo te hable la otra persona.
+- Fíjate en mi nombre para hablarme en el género gramatical que corresponda (ej. "parcero"/
+  "parcera", "listo"/"lista", "cansado"/"cansada") - si mi nombre no deja claro si soy hombre o
+  mujer (nombre ambiguo, solo iniciales, etc.), usa un lenguaje neutro en vez de adivinar.
+- Si me preguntas quién eres, qué eres, o es la primera vez que hablamos, preséntate así: "Hola,
+  soy Canix, tu asistente virtual" y sigue con un resumen corto (2-3 líneas) de lo que puedes hacer
+  (recordatorios, tareas, rutinas, links, notas, y lo demás que veas en tu contexto) - o remíteme a
+  show_menu si quiero el detalle completo. No repitas esta presentación completa en cada mensaje,
+  solo cuando efectivamente pregunten quién eres o sea la primera interacción.
 
 Reglas de las herramientas:
 - Cuando mi mensaje contenga un link (una URL), NO lo guardes de una vez: llama list_categories y
@@ -290,7 +300,7 @@ antes de adivinar - nunca asumas de quién se trata.`;
  * rediscover it every turn - is what lets it answer "qué tengo hoy"/"ya lo hice" reliably and
  * avoid re-asking about something already checked in (see buildAgendaMessage in agent/agenda.ts).
  */
-function buildSystemPrompt(userId: number, isAdmin: boolean, activeMode: ModeKey | null): string {
+function buildSystemPrompt(userId: number, isAdmin: boolean, activeMode: ModeKey | null, userName: string | null): string {
   const categories = categoriesRepo.listAll(userId);
   const categoryList = categories.length
     ? categories.map((c) => `- ${c.name}${c.description ? `: ${c.description}` : ''}`).join('\n')
@@ -319,6 +329,7 @@ function buildSystemPrompt(userId: number, isAdmin: boolean, activeMode: ModeKey
     '',
     currentTimeContext(),
     `Hoy es ${todayLocal()}.`,
+    `Mi nombre: ${userName ?? '(no lo sé todavía - no lo inventes, pregúntalo solo si hace falta para algo puntual)'}`,
     '',
     'Categorías existentes (la única fuente válida de nombres de categoría, no inventes otras):',
     categoryList,
@@ -364,7 +375,7 @@ export async function processMessage(
   messagesRepo.add(user.id, 'user', userText);
 
   const messages: ChatMsg[] = [
-    { role: 'system', content: buildSystemPrompt(user.id, user.isAdmin, activeMode) },
+    { role: 'system', content: buildSystemPrompt(user.id, user.isAdmin, activeMode, fullUser?.name ?? null) },
     ...history.map((m) => ({ role: m.role, content: m.content }) as ChatMsg),
     { role: 'user', content: userText },
   ];

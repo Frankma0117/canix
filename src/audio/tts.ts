@@ -51,7 +51,7 @@ export async function synthesizeVoiceNote(text: string): Promise<Buffer | null> 
   const trimmed = text.trim();
   if (!trimmed) return null;
 
-  const outFile = join(tmpdir(), `cania-tts-${randomUUID()}.wav`);
+  const outFile = join(tmpdir(), `canix-tts-${randomUUID()}.wav`);
   try {
     await runPiper(trimmed, outFile);
     const wav = await readFile(outFile);

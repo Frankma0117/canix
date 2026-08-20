@@ -24,7 +24,7 @@ export function LockScreen() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-secondary via-gray-light to-accent/40 px-4 dark:from-[#141110] dark:via-[#141110] dark:to-[#1c1a2e]">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-br from-secondary via-gray-light to-accent/40 px-4 dark:from-[#0f1020] dark:via-[#0f1020] dark:to-[#231c3d]">
       <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-primary/20 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-24 -right-24 h-72 w-72 rounded-full bg-accent/30 blur-3xl" />
 
@@ -33,10 +33,10 @@ export function LockScreen() {
         className="relative w-full max-w-sm rounded-3xl border border-white/60 bg-white/80 p-8 shadow-xl shadow-primary/10 backdrop-blur-xl dark:border-white/10 dark:bg-white/5"
       >
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-xl text-white shadow-lg shadow-primary/30">
-            🗂️
+          <div className="brand-gradient mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl text-xl text-white shadow-lg shadow-primary/30">
+            🤖
           </div>
-          <h1 className="font-display text-2xl font-semibold text-ink dark:text-white">Cania</h1>
+          <h1 className="font-display text-2xl font-semibold text-ink dark:text-white">Canix</h1>
           <p className="mt-1 text-sm text-gray-dark">Acceso restringido a tu panel personal</p>
         </div>
 

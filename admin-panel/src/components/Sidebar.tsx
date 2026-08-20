@@ -30,14 +30,14 @@ export function Sidebar({
   const items = isAdmin ? ITEMS : ITEMS.filter((i) => i.id !== 'connection');
 
   return (
-    <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-gray-medium/70 bg-white px-3 py-5 dark:border-white/10 dark:bg-[#181411]">
+    <aside className="flex h-screen w-60 shrink-0 flex-col border-r border-gray-medium/70 bg-white px-3 py-5 dark:border-white/10 dark:bg-[#15162c]">
       <div className="mb-6 flex items-center gap-2 px-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-base text-white shadow-sm shadow-primary/30">
-          🗂️
+        <div className="brand-gradient flex h-9 w-9 items-center justify-center rounded-xl text-base text-white shadow-sm shadow-primary/30">
+          🤖
         </div>
         <div>
           <p className="font-display text-base font-semibold leading-none text-ink dark:text-white">
-            Cania
+            Canix
           </p>
           <p className="text-xs text-gray-dark">{user?.name ?? 'Panel personal'}</p>
         </div>

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Despliegue completo de Cania en un solo comando - pensado para correr siempre desde la raíz del
+# Despliegue completo de Canix en un solo comando - pensado para correr siempre desde la raíz del
 # repo ya clonado en el servidor (primera vez: `git clone ... /opt/canix && cd /opt/canix &&
 # ./deploy.sh`; después, siempre el mismo `./deploy.sh` para actualizar).
 #

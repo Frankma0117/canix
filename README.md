@@ -1,4 +1,4 @@
-# Cania 🗂️
+# Canix 🗂️
 
 Asistente personal por WhatsApp: recordatorios, una biblioteca de links clasificados por
 categorías, tareas (de hoy, para después o rutinas) y seguimiento de hábitos. Es **multi-usuario**

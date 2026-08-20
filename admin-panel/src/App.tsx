@@ -44,7 +44,7 @@ function Shell() {
   const isAdmin = user?.role === 'admin';
 
   return (
-    <div className="flex min-h-screen bg-gray-light dark:bg-[#141110]">
+    <div className="flex min-h-screen bg-gray-light dark:bg-[#0f1020]">
       <Sidebar active={section} onNavigate={setSection} isAdmin={isAdmin} />
       <main className="flex-1 overflow-y-auto">
         {section === 'today' && <TodosPage scope="today" title="Pendientes de hoy" />}

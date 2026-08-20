@@ -17,7 +17,7 @@ import { ensureDailyDedupReminder } from './agent/dedup.js';
 quietLibsignalLogs();
 
 async function main() {
-  console.log('=== Cania · asistente personal por WhatsApp ===');
+  console.log('=== Canix · asistente personal por WhatsApp ===');
 
   // 0) Refuse to run twice against the same DB/session (see util/single-instance.ts) - a real
   // cause of duplicate reminder sends is two processes each running their own scheduler.

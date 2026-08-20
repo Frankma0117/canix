@@ -1,5 +1,5 @@
 [Unit]
-Description=Cania - Fashion Mode vision service (CLIP, local)
+Description=Canix - Fashion Mode vision service (CLIP, local)
 After=network.target
 
 [Service]

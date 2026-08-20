@@ -1,5 +1,5 @@
 [Unit]
-Description=Cania - asistente personal por WhatsApp
+Description=Canix - asistente personal por WhatsApp
 After=network-online.target
 Wants=network-online.target
 

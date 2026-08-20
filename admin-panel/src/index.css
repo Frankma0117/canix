@@ -5,13 +5,17 @@
   --font-display: 'Space Grotesk', ui-sans-serif, sans-serif;
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
 
-  --color-primary: #6366f1;
-  --color-primary-dark: #4338ca;
+  /* Canix brand: cyan-blue -> violet gradient (see the logo), navy-black wordmark. --color-primary
+     is a mid-tone pick from that gradient for flat UI (buttons/links/focus rings, where an actual
+     gradient wouldn't render well) - the real two-tone gradient lives in --gradient-brand below,
+     reserved for brand marks (logo swatches, headers) so it reads as an accent, not noise. */
+  --color-primary: #4f7de0;
+  --color-primary-dark: #6a3fd6;
   --color-secondary: #eef2ff;
-  --color-accent: #a5b4fc;
-  --color-ink: #1c1c1c;
+  --color-accent: #8b5cf6;
+  --color-ink: #14151f;
 
-  --color-gray-light: #f8f9fa;
+  --color-gray-light: #f8f9fc;
   --color-gray-medium: #e5e7eb;
   --color-gray-dark: #6b7280;
 
@@ -19,6 +23,17 @@
   --color-warning: #f59e0b;
   --color-error: #ef4444;
   --color-info: #3b82f6;
+}
+
+/* The actual brand gradient (see the logo's hexagon outline) - a design token, not a Tailwind
+   color, since it's meant for specific brand marks (logo badges, header accents), not as a
+   fill for arbitrary UI surfaces. */
+:root {
+  --gradient-brand: linear-gradient(135deg, #29abe2 0%, #7b3fe4 100%);
+}
+
+.brand-gradient {
+  background: var(--gradient-brand);
 }
 
 :root {
@@ -36,8 +51,8 @@ body {
 }
 
 html.dark body {
-  background-color: #141110;
-  color: #f5efe8;
+  background-color: #0f1020;
+  color: #eef0ff;
 }
 
 h1,
@@ -56,5 +71,5 @@ h3,
   border-radius: 999px;
 }
 html.dark ::-webkit-scrollbar-thumb {
-  background-color: #3a332c;
+  background-color: #2a2c45;
 }
