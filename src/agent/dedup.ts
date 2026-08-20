@@ -10,6 +10,57 @@ function normalize(s: string): string {
   return s.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+// Matches a trailing time-of-day tag some reminders get worded with (e.g. "Hora de tomar tu
+// apixaban (mañana)" vs "Hora de tomar tu apixaban") - two reminders that only differ by this tag
+// are the exact "same thing, said slightly differently" duplicate reported in practice (a
+// medication reminder created once as "...", once as "... (mañana)"), so it's stripped before
+// comparing, same idea as stripKnownPrefix() below for the random emoji lead-in.
+const TIME_OF_DAY_SUFFIX_RE = /\s*\((madrugada|ma[nñ]ana|tarde|noche)\)\s*$/i;
+
+/** Normalizes a reminder's message for duplicate comparison ONLY (not for display) - strips the
+ *  random emoji prefix some kinds bake in at creation (stripKnownPrefix) and a trailing "(mañana)"/
+ *  "(tarde)"/"(noche)"/"(madrugada)" tag, then case/whitespace-folds what's left. Deliberately a
+ *  separate function from normalize() above (used for routine titles too) - collapsing that same
+ *  suffix there could wrongly merge two routines the user made distinct ON PURPOSE, like "Yoga
+ *  (mañana)" and "Yoga (noche)" as two different daily habits; a reminder has no such legitimate
+ *  "same title, different time-of-day tag, both intentional" case since the tag itself is only ever
+ *  decorative wording, never data. */
+function normalizeReminderMessage(message: string): string {
+  return normalize(stripKnownPrefix(message).replace(TIME_OF_DAY_SUFFIX_RE, ''));
+}
+
+/**
+ * Duplicate-detection key for a reminder-like set of fields - two reminders are duplicates iff they
+ * share kind + target_jid + recurrence_freq/interval + the same normalized message + the same
+ * time-of-day (+ same calendar date for a true one-off, since two distinct one-off reminders on
+ * different days aren't duplicates just for sharing a clock time) + the same window for `flexible`.
+ * Exported so both the nightly sweep (dedupeReminders below) and schedule_reminder's own
+ * create-time check (see schedule-reminder.tool.ts) use the exact same definition of "duplicate" -
+ * catching it at creation is strictly better (the user never even sees the double-fire), the nightly
+ * sweep stays as the safety net for whatever slips through (a race, a kind this check doesn't cover).
+ */
+export function reminderDedupeKey(r: {
+  kind: ReminderKind;
+  target_jid: string | null;
+  recurrence_freq: string;
+  recurrence_interval: number;
+  message: string;
+  run_at: string;
+  window_start?: string | null;
+  window_end?: string | null;
+}): string {
+  return [
+    r.kind,
+    r.target_jid ?? '',
+    r.recurrence_freq,
+    r.recurrence_interval,
+    normalizeReminderMessage(r.message),
+    r.run_at.slice(11, 16),
+    r.recurrence_freq === 'none' ? r.run_at.slice(0, 10) : '',
+    r.kind === 'flexible' ? `${r.window_start ?? ''}-${r.window_end ?? ''}` : '',
+  ].join('|');
+}
+
 /**
  * Creates the recurring "daily_dedup" reminder for a user if they don't already have one - same
  * idempotent-bootstrap pattern as ensureDailyAgendaReminder (see agent/agenda.ts), called from the
@@ -104,29 +155,15 @@ function dedupeRoutines(userId: number): number {
 const DEDUPABLE_KINDS: ReminderKind[] = ['reminder', 'important_date', 'flexible'];
 
 /**
- * Two reminders are duplicates iff they share kind + target_jid + recurrence_freq/interval + the
- * same normalized message (prefix-stripped, see util/motivational.ts's stripKnownPrefix - several
- * kinds bake a random emoji prefix into the stored message at creation, which would otherwise
- * defeat a naive string match) + the same time-of-day. A true one-off (recurrence_freq === 'none')
- * additionally needs the same calendar date, since two distinct one-off reminders that happen to
- * share a time-of-day on different days are not duplicates. `flexible` additionally needs the same
- * window. Keeps the oldest (lowest id) - reminders carry no per-row history worth preserving the
- * way a routine's habit_logs does, so "oldest wins" is safe and simple here.
+ * Two reminders are duplicates iff reminderDedupeKey() (above) matches - see that function for the
+ * exact fields compared. Keeps the oldest (lowest id) - reminders carry no per-row history worth
+ * preserving the way a routine's habit_logs does, so "oldest wins" is safe and simple here.
  */
 function dedupeReminders(userId: number): number {
   const reminders = remindersRepo.listAll(userId, 'pending').filter((r) => DEDUPABLE_KINDS.includes(r.kind));
   const groups = new Map<string, Reminder[]>();
   for (const r of reminders) {
-    const key = [
-      r.kind,
-      r.target_jid ?? '',
-      r.recurrence_freq,
-      r.recurrence_interval,
-      normalize(stripKnownPrefix(r.message)),
-      r.run_at.slice(11, 16),
-      r.recurrence_freq === 'none' ? r.run_at.slice(0, 10) : '',
-      r.kind === 'flexible' ? `${r.window_start}-${r.window_end}` : '',
-    ].join('|');
+    const key = reminderDedupeKey(r);
     const arr = groups.get(key) ?? [];
     arr.push(r);
     groups.set(key, arr);

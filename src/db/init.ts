@@ -422,6 +422,13 @@ export function initSchema(): void {
   // initial release, see the table's own comment above.
   ensureColumn('call_reminders', 'recurrence_freq', "recurrence_freq TEXT NOT NULL DEFAULT 'none'");
   ensureColumn('call_reminders', 'recurrence_interval', 'recurrence_interval INTEGER NOT NULL DEFAULT 1');
+  // 'male'/'female'/NULL (not yet known) - set once via set_user_gender and handed to the model in
+  // every turn's system prompt (see ai-agent.ts's buildSystemPrompt) so it addresses this person in
+  // the right grammatical gender ("parcero"/"parcera") consistently, instead of re-guessing from the
+  // name on every single message (which was missing it even for unambiguous names in practice).
+  // Validated at the application layer (usersRepo.setGender) rather than a DB CHECK constraint,
+  // same reasoning as role/active_mode above - SQLite can't add one to an existing table via ALTER.
+  ensureColumn('users', 'gender', 'gender TEXT');
 }
 
 /** Adds a column to `table` if it doesn't already exist (table/column names here are always our own constants, never user input). */

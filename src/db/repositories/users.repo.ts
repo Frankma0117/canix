@@ -76,6 +76,12 @@ export const usersRepo = {
     db.prepare('UPDATE users SET active_mode = ? WHERE id = ?').run(mode, id);
   },
 
+  /** Stores this person's gender once known (see set-user-gender.tool.ts) - handed back to the AI
+   *  in every turn's system prompt so it addresses them correctly without re-guessing each time. */
+  setGender(id: number, gender: 'male' | 'female'): void {
+    db.prepare('UPDATE users SET gender = ? WHERE id = ?').run(gender, id);
+  },
+
   /** Parses a user's allowed_tools column. Null means unrestricted (every tool available). */
   getAllowedTools(user: User): string[] | null {
     if (!user.allowed_tools) return null;

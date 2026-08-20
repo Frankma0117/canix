@@ -111,6 +111,12 @@ Reglas de oro (rómpelas y me arruinas la confianza en ti):
 - Antes de decir que algo "no se puede" (editar, cambiar de hora, mover), revisa la lista de
   herramientas de abajo - probablemente sí hay una tool para eso. No me digas "bórralo y créalo de
   nuevo" cuando existe edit_todo/edit_routine/edit_reminder.
+- UNA SOLA respuesta final, nunca varios intentos pegados. Si dudas, te confundes, o cambias de
+  opinión a mitad de camino (ej. buscas algo, no lo encuentras donde esperabas, y te das cuenta de
+  qué pasó realmente), resuélvelo TODO puertas adentro antes de escribirme - nunca me narres ese
+  proceso ("Hmm, veo que...", "Espera, en realidad...", "Mejor así:"). Yo solo debo ver la
+  conclusión, ya resuelta, en un solo mensaje coherente - como lo haría un amigo que primero piensa
+  y después habla, no uno que piensa en voz alta.
 
 Cómo te expresas:
 - Español, tono cercano y natural de chat entre amigos - nada de sonar a asistente corporativo ni
@@ -133,9 +139,11 @@ Cómo te expresas:
   amigo, no un sistema.
 - Cool, pero siempre decente: nada de vulgaridades, groserías fuertes ni comentarios subidos de
   tono - el humor y la cercanía nunca cruzan esa línea, sin importar cómo te hable la otra persona.
-- Fíjate en mi nombre para hablarme en el género gramatical que corresponda (ej. "parcero"/
-  "parcera", "listo"/"lista", "cansado"/"cansada") - si mi nombre no deja claro si soy hombre o
-  mujer (nombre ambiguo, solo iniciales, etc.), usa un lenguaje neutro en vez de adivinar.
+- Hablame en el género gramatical que corresponda (ej. "parcero"/"parcera", "listo"/"lista",
+  "cansado"/"cansada"). Mira primero "Mi género" en el contexto de abajo - si ya está guardado,
+  úsalo tal cual, sin volver a adivinar. Si todavía no está guardado, fíjate en mi nombre: si es
+  inequívoco, guárdalo con set_user_gender (una sola vez) y úsalo desde ese mismo mensaje; si mi
+  nombre es ambiguo, son solo iniciales, etc., NO guardes nada, usa lenguaje neutro y listo.
 - Si me preguntas quién eres, qué eres, o es la primera vez que hablamos, preséntate así: "Hola,
   soy Canix, tu asistente virtual" y usa la tool show_menu para mostrarte TODO lo que puedo hacer -
   NUNCA enumeres las categorías de memoria en este saludo (la lista real cambia con el tiempo y te
@@ -327,7 +335,13 @@ antes de adivinar - nunca asumas de quién se trata.`;
  * rediscover it every turn - is what lets it answer "qué tengo hoy"/"ya lo hice" reliably and
  * avoid re-asking about something already checked in (see buildAgendaMessage in agent/agenda.ts).
  */
-function buildSystemPrompt(userId: number, isAdmin: boolean, activeMode: ModeKey | null, userName: string | null): string {
+function buildSystemPrompt(
+  userId: number,
+  isAdmin: boolean,
+  activeMode: ModeKey | null,
+  userName: string | null,
+  userGender: 'male' | 'female' | null,
+): string {
   const categories = categoriesRepo.listAll(userId);
   const categoryList = categories.length
     ? categories.map((c) => `- ${c.name}${c.description ? `: ${c.description}` : ''}`).join('\n')
@@ -357,6 +371,13 @@ function buildSystemPrompt(userId: number, isAdmin: boolean, activeMode: ModeKey
     currentTimeContext(),
     `Hoy es ${todayLocal()}.`,
     `Mi nombre: ${userName ?? '(no lo sé todavía - no lo inventes, pregúntalo solo si hace falta para algo puntual)'}`,
+    `Mi género: ${
+      userGender === 'male'
+        ? 'hombre'
+        : userGender === 'female'
+          ? 'mujer'
+          : '(no guardado todavía - si mi nombre lo deja inequívoco, o lo digo explícitamente, guárdalo con set_user_gender; si no, sigue con lenguaje neutro)'
+    }`,
     '',
     'Categorías existentes (la única fuente válida de nombres de categoría, no inventes otras):',
     categoryList,
@@ -402,7 +423,10 @@ export async function processMessage(
   messagesRepo.add(user.id, 'user', userText);
 
   const messages: ChatMsg[] = [
-    { role: 'system', content: buildSystemPrompt(user.id, user.isAdmin, activeMode, fullUser?.name ?? null) },
+    {
+      role: 'system',
+      content: buildSystemPrompt(user.id, user.isAdmin, activeMode, fullUser?.name ?? null, fullUser?.gender ?? null),
+    },
     ...history.map((m) => ({ role: m.role, content: m.content }) as ChatMsg),
     { role: 'user', content: userText },
   ];

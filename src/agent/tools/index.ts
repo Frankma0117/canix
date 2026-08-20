@@ -75,6 +75,7 @@ import { sendStickerTool } from './send-sticker.tool.js';
 import { listStickersTool } from './list-stickers.tool.js';
 import { deleteStickerTool } from './delete-sticker.tool.js';
 import { announceUpdateTool } from './announce-update.tool.js';
+import { setUserGenderTool } from './set-user-gender.tool.js';
 
 /** Registers every tool the agent can use. Called once at boot. */
 export function registerTools(): void {
@@ -154,4 +155,5 @@ export function registerTools(): void {
   registry.register(listStickersTool);
   registry.register(deleteStickerTool);
   registry.register(announceUpdateTool);
+  registry.register(setUserGenderTool);
 }

@@ -29,6 +29,10 @@ export interface User {
   // the AI agent can call this turn to just that category (plus reminders/links, always on). NULL
   // = default mode (recordatorios), the only one active without an explicit entry command.
   active_mode: string | null;
+  // 'male'/'female'/NULL (not yet known) - see set-user-gender.tool.ts and db/init.ts's migration
+  // comment for why this exists as its own stored field instead of re-inferred from the name/context
+  // on every turn.
+  gender: 'male' | 'female' | null;
   created_at: string;
 }
 

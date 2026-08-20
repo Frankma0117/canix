@@ -100,6 +100,8 @@ export const ALWAYS_ON_TOOLS = [
   'set_user_permissions',
   'list_available_tools',
   'send_sticker',
+  'announce_update',
+  'set_user_gender',
 ];
 
 const EXIT_KEYWORDS = ['salir', 'salir modo', 'recordatorios', 'modo recordatorios'];

@@ -6,6 +6,7 @@ import { linksRepo } from '../../db/repositories/links.repo.js';
 import { normalizeDate, parseWall, nowLocal } from '../../util/datetime.js';
 import { phoneToJid, isJid } from '../../util/jid.js';
 import { resolveActingUser } from './act-on-behalf.js';
+import { reminderDedupeKey } from '../dedup.js';
 import type { RecurrenceFreq } from '../../types/index.js';
 
 const FREQS: RecurrenceFreq[] = ['none', 'daily', 'weekly', 'monthly', 'yearly'];
@@ -94,10 +95,36 @@ export const scheduleReminderTool: Tool = {
       : 'none';
     const interval = Number(args.recurrence_interval) > 0 ? Number(args.recurrence_interval) : 1;
 
+    const message = String(args.message ?? '');
+    const finalTargetJid = targetJid ?? actingJid;
+    // Catches it BEFORE it's created, not after - a same-thing-worded-slightly-differently
+    // duplicate (e.g. "Hora de tomar tu apixaban" vs "Hora de tomar tu apixaban (mañana)", both for
+    // 08:00 daily) used to only get caught by the once-a-day dedup sweep, meaning it could fire
+    // twice a day for hours before being cleaned up. See dedup.ts's reminderDedupeKey for exactly
+    // what counts as "the same reminder" here.
+    const candidateKey = reminderDedupeKey({
+      kind: 'reminder',
+      target_jid: finalTargetJid,
+      recurrence_freq: freq,
+      recurrence_interval: interval,
+      message,
+      run_at: runAt,
+    });
+    const nearDuplicate = remindersRepo
+      .listAll(userId, 'pending')
+      .find((r) => r.kind === 'reminder' && reminderDedupeKey(r) === candidateKey);
+    if (nearDuplicate) {
+      return (
+        `Ya tienes un recordatorio muy parecido para ese mismo horario: #${nearDuplicate.id} ` +
+        `"${nearDuplicate.message}" (${nearDuplicate.run_at}). Usa edit_reminder si quieres cambiarle ` +
+        `algo, en vez de crear uno nuevo - así no te llegan dos avisos para lo mismo.`
+      );
+    }
+
     const id = remindersRepo.create(userId, {
-      message: String(args.message ?? ''),
+      message,
       runAt,
-      targetJid: targetJid ?? actingJid,
+      targetJid: finalTargetJid,
       categoryId,
       recurrenceFreq: freq,
       recurrenceInterval: interval,
