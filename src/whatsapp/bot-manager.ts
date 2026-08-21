@@ -8,7 +8,8 @@ import { pendingContactsRepo } from '../db/repositories/pending-contacts.repo.js
 import { contactsRepo } from '../db/repositories/contacts.repo.js';
 import { extractSharedContacts } from '../util/vcard.js';
 import { phoneToJid } from '../util/jid.js';
-import { resetAllUserData } from '../db/reset-user.js';
+import { resetAllUserData, resetFashionData } from '../db/reset-user.js';
+import { spacesStorageService } from '../fashion/storage/spaces-storage.service.js';
 import { processMessage } from '../agent/ai-agent.js';
 import { ensureDailyAgendaReminder } from '../agent/agenda.js';
 import { ensureWeeklyReportReminder } from '../agent/weekly-report.js';
@@ -42,6 +43,12 @@ const RESET_ALL_WARNING =
   'premios/castigos e historial de chat - no se puede deshacer (tu acceso al bot no se toca). ' +
   'Si estás seguro, escribe exactamente:\n\n/reset todo confirmar';
 
+const RESET_FASHION_WARNING =
+  '⚠️ Esto borra TODO tu Fashion Mode: cada prenda de tu armario, tus outfits guardados y tu foto ' +
+  'de referencia (junto con las fotos guardadas en la nube) - no se puede deshacer. El resto de tu ' +
+  'contenido (recordatorios, tareas, etc.) no se toca. Si estás seguro, escribe exactamente:\n\n' +
+  '/reset outfit confirmar';
+
 const HELP_TEXT =
   'Comandos disponibles:\n\n' +
   '/menu - menú completo de todo lo que puedo hacer, organizado por categorías.\n' +
@@ -50,6 +57,8 @@ const HELP_TEXT =
   '/reset todo - borra TODA tu información (recordatorios, rutinas, contactos, links, notas, ' +
   'categorías, premios/castigos e historial) y empieza de cero. Pide confirmación antes de ' +
   'hacerlo, no se puede deshacer.\n' +
+  '/reset outfit - borra TODO tu Fashion Mode (armario, outfits guardados, foto de referencia) sin ' +
+  'tocar el resto de tu información. Pide confirmación antes de hacerlo, no se puede deshacer.\n' +
   '/ayuda - muestra este mensaje.\n\n' +
   'Recordatorios y links siempre están activos. Rutinas, tareas, notas, contactos, comidas, ' +
   'premios y resúmenes son modos: escribe su nombre (ej. "rutinas") para entrar y ver su menú, y ' +
@@ -268,6 +277,34 @@ export class BotManager {
         resetAllUserData(user.id);
         console.log('[BOT] #%d pidio /reset todo confirmar - se borro toda su informacion.', user.id);
         await this.wa.sendText(jid, '🗑️ Listo, borré todo tu contenido. Seguimos desde cero.');
+        return;
+      }
+
+      if (command === '/reset outfit') {
+        await this.wa.sendText(jid, RESET_FASHION_WARNING);
+        return;
+      }
+
+      if (command === '/reset outfit confirmar') {
+        const { garmentsDeleted, outfitsDeleted, storageKeys } = resetFashionData(user.id);
+        // Best-effort: an orphaned Spaces object is harmless (see spacesStorageService.delete's own
+        // comment) - the DB rows are already gone either way, so a Spaces hiccup here never leaves
+        // the user's armario half-deleted or blocks the confirmation.
+        await spacesStorageService.delete(storageKeys).catch((err) => {
+          console.error('[BOT] #%d: fallo limpiando fotos de Spaces tras /reset outfit:', user.id, (err as Error).message);
+        });
+        console.log(
+          '[BOT] #%d pidio /reset outfit confirmar - %d prenda(s), %d outfit(s), %d foto(s) borradas.',
+          user.id,
+          garmentsDeleted,
+          outfitsDeleted,
+          storageKeys.length,
+        );
+        await this.wa.sendText(
+          jid,
+          `🗑️ Listo, borré tu Fashion Mode completo (${garmentsDeleted} prenda(s), ${outfitsDeleted} outfit(s) ` +
+            `guardado(s)). Arrancamos de cero - mandame una foto cuando quieras agregar tu primera prenda.`,
+        );
         return;
       }
 

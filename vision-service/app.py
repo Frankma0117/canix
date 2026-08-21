@@ -13,14 +13,16 @@ import base64
 import io
 import json
 import logging
+import time
 
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 from PIL import Image
 
 import model
-from color import dominant_color
+from color import dominant_colors
 from pdf_extract import extract_images
+from quality import assess_quality
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("vision-service")
@@ -49,6 +51,7 @@ def health() -> dict:
 
 @app.post("/analyze")
 async def analyze(image: UploadFile = File(...), labels: str = Form(...)) -> JSONResponse:
+    started = time.monotonic()
     try:
         groups = json.loads(labels)
     except json.JSONDecodeError:
@@ -61,7 +64,15 @@ async def analyze(image: UploadFile = File(...), labels: str = Form(...)) -> JSO
         logger.warning("Imagen inválida recibida: %s", err)
         return JSONResponse(status_code=400, content={"error": "imagen inválida"})
 
-    result: dict = {}
+    # Quality is assessed but never blocks classification - a flagged photo still often yields a
+    # usable (if lower-confidence) result, and the caller decides what to do with the flag (see
+    # http-vision.service.ts's qualityIssues - it's surfaced so a low-confidence result can get a
+    # specific "la foto está borrosa" message instead of a generic "no pude analizarla").
+    quality = assess_quality(pil_image)
+    if not quality["ok"]:
+        logger.info("Calidad de foto cuestionable: %s", quality["issues"])
+
+    result: dict = {"quality": quality, "model": model.current_model_name()}
     for group_def in groups:
         group = group_def.get("group")
         values = group_def.get("values") or []
@@ -69,9 +80,15 @@ async def analyze(image: UploadFile = File(...), labels: str = Form(...)) -> JSO
             continue
 
         if group == "color":
-            # Pixel-based, not the CLIP model (see color.py's docstring for why).
-            name, confidence = dominant_color(pil_image)
+            # Pixel-based, not the CLIP model (see color.py's docstring for why). Also returns a
+            # secondary color separately when the garment genuinely has one (see dominant_colors) -
+            # canix's garments.secondary_colors column already existed for this, just unused until now.
+            colors = dominant_colors(pil_image, top_n=2)
+            name, confidence = colors[0]
             result["color"] = {"value": name, "confidence": confidence}
+            if len(colors) > 1:
+                sec_name, sec_confidence = colors[1]
+                result["secondary_color"] = {"value": sec_name, "confidence": sec_confidence}
             continue
 
         scored = model.classify_group(pil_image, values)
@@ -86,6 +103,13 @@ async def analyze(image: UploadFile = File(...), labels: str = Form(...)) -> JSO
             top_value, top_conf = scored[0]
             result[group] = {"value": top_value, "confidence": round(top_conf, 4)}
 
+    elapsed_ms = round((time.monotonic() - started) * 1000)
+    logger.info(
+        "Análisis: grupos=%s tiempo=%dms calidad_ok=%s",
+        [g.get("group") for g in groups if g.get("group")],
+        elapsed_ms,
+        quality["ok"],
+    )
     return JSONResponse(content=result)
 
 

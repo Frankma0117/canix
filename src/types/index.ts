@@ -268,6 +268,17 @@ export interface Garment {
   condition: string | null;
   warmth: string | null;
   water_resistance: string | null;
+  neckline: string | null;
+  sleeves: string | null;
+  length: string | null;
+  closure: string | null;
+  pockets: string | null;
+  short_description: string | null;
+  long_description: string | null;
+  analysis_confidence: string | null; // JSON: Record<field, FieldMeta> - see vision.service.ts
+  analysis_model: string | null;
+  analysis_version: number | null;
+  analyzed_at: string | null;
   is_active: number;
   favorite: number;
   notes: string | null;
@@ -282,6 +293,21 @@ export interface FashionSession {
   user_id: number;
   state: string;
   data: string; // JSON
+  updated_at: string;
+}
+
+/** Styling profile feeding the outfit recommendation engine - see fashion-profile.repo.ts /
+ *  set-fashion-profile.tool.ts. */
+export interface FashionProfile {
+  user_id: number;
+  height_cm: number | null;
+  build: string | null; // see taxonomy.ts's BODY_BUILDS
+  size: string | null; // see taxonomy.ts's SIZES
+  preferred_colors: string | null; // JSON array
+  avoided_colors: string | null; // JSON array
+  preferred_styles: string | null; // JSON array
+  reference_photo_key: string | null;
+  reference_photo_url: string | null;
   updated_at: string;
 }
 

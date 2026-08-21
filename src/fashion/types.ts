@@ -18,7 +18,8 @@ export type FashionState =
   | 'FASHION_EDIT_GARMENT_FIELD'
   | 'FASHION_DELETE_CONFIRM'
   | 'FASHION_OUTFIT_RESULT'
-  | 'FASHION_MY_OUTFITS_LIST';
+  | 'FASHION_MY_OUTFITS_LIST'
+  | 'FASHION_PROFILE_WAITING_PHOTO';
 
 /** A garment draft being built during the add-garment flow, held in fashion_sessions.data until
  *  confirmed. Mirrors garments.repo.ts's create() fields but every value starts optional/unknown. */
@@ -31,9 +32,37 @@ export interface GarmentDraft {
   type?: string;
   category?: string;
   color?: string;
+  secondaryColors?: string[];
   pattern?: string;
   style?: string[];
   formality?: string;
+  fit?: string;
+  material?: string;
+  warmth?: string;
+  waterResistance?: string;
+  neckline?: string;
+  sleeves?: string;
+  closure?: string;
+  pockets?: string;
+  length?: string;
+  /** Short catalog-style name and a longer natural-language paragraph, both generated purely from
+   *  the structured fields above (see garment-description.ts) - never free-generated text, so
+   *  nothing in them can be something the vision pipeline didn't actually detect. */
+  shortDescription?: string;
+  longDescription?: string;
+  /** Per-field confidence/tier/certainty (see vision.service.ts's FieldMeta) - stored so the
+   *  confirmation screen and the saved garment can both show "esto lo veo clarísimo" vs "esto es
+   *  una estimación" instead of presenting every field the same way. */
+  fieldMeta?: Record<string, { confidence: number; tier: string; certainty: string }>;
+  /** Photo quality issues flagged before classification (see vision-service/quality.py) - used to
+   *  give a specific, helpful message instead of a generic "no pude analizarla" fallback. */
+  qualityIssues?: string[];
+  /** Which CLIP model + taxonomy/pipeline version produced this draft's auto-detected fields, and
+   *  when - see taxonomy.ts's ANALYSIS_VERSION. Absent entirely for a garment classified purely by
+   *  hand (manual fallback cascade), which is honest: nothing to attribute to a model there. */
+  analysisModel?: string;
+  analysisVersion?: number;
+  analyzedAt?: string;
   aiMetadata?: unknown;
   /** Which fields the vision service actually filled in (above the confidence floor) - drives the
    *  confirm-or-correct summary so we don't claim confidence in a field the user never provided

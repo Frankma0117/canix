@@ -15,6 +15,7 @@
  * text, so `/menu <categoría>` and typing the mode's name directly never drift apart.
  */
 import { usersRepo } from '../db/repositories/users.repo.js';
+import { messagesRepo } from '../db/repositories/messages.repo.js';
 import { CORE_CATEGORIES, STICKERS_CATEGORY, MODE_KEYS, type MenuCategory } from './menu.js';
 
 export type ModeKey = (typeof MODE_KEYS)[number];
@@ -102,6 +103,7 @@ export const ALWAYS_ON_TOOLS = [
   'send_sticker',
   'announce_update',
   'set_user_gender',
+  'set_fashion_profile',
 ];
 
 const EXIT_KEYWORDS = ['salir', 'salir modo', 'recordatorios', 'modo recordatorios'];
@@ -131,10 +133,35 @@ export function toolsForMode(key: ModeKey | null): string[] | null {
   return [...ALWAYS_ON_TOOLS, ...MODE_TOOLS[key]];
 }
 
+const ENTRY_NUMBER_EMOJI = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+
+/**
+ * Entry screen for a mode - same numbered "¿qué querés hacer?" shape as Fashion Mode's own HOME_MENU
+ * (see fashion/flows/home.flow.ts), instead of just dumping the category's bullet list as prose.
+ * Built from category.detail's own bullets (never a separate copy) so this can never drift from
+ * `/menu <categoría>`'s answer - just re-numbered instead of dashed, plus a closing "Salir" option.
+ * The numbers are illustrative, not a strict tap-to-select menu like Fashion's: this mode still runs
+ * on the normal AI loop (see this file's own top comment), so typing natural language works exactly
+ * the same as before - the numbering is purely to make "what can I do here" scannable at a glance.
+ */
 export function renderModeEntryMessage(category: MenuCategory): string {
+  const lines = category.detail.split('\n');
+  const header = lines[0]; // "🔁 *Rutinas y hábitos*"
+  // Drops any bullet that's itself just the "escribe salir para..." instruction (see
+  // STICKERS_CATEGORY) - this menu already appends its own "🚪 Salir" option + footer sentence for
+  // every category, so keeping that bullet too would just repeat the same instruction twice.
+  const bullets = lines
+    .filter((l) => l.trim().startsWith('- '))
+    .map((l) => l.trim().slice(2))
+    .filter((b) => !/\bsalir\b/i.test(b));
+  const options = bullets.map((b, i) => `${ENTRY_NUMBER_EMOJI[i] ?? `${i + 1}.`} ${b}`).join('\n');
+
   return (
-    `${category.detail}\n\n` +
-    `✅ Ya estás en modo *${category.title}* - hablame normal para esto. ` +
+    `${header}\n\n` +
+    `¿Qué quieres hacer?\n\n` +
+    `${options}\n` +
+    `🚪 Salir\n\n` +
+    `Ya estás en modo *${category.title}* - no hace falta escribir un número, hablame normal y ya. ` +
     `Escribe "salir" para volver a modo recordatorios, o el nombre de otro modo para cambiar directo.`
   );
 }
@@ -165,7 +192,13 @@ export function handleModeMessage(userId: number, text: string): ModeRouterResul
   if (EXIT_KEYWORDS.includes(textLower)) {
     if (!currentMode) return { consumed: false }; // already default - let the AI handle a bare "salir"
     usersRepo.setActiveMode(userId, null);
-    console.log('[MODE] Usuario #%d volvió a modo recordatorios.', userId);
+    // Wipes the chat history along with the mode switch - without this, the AI's next reply (back
+    // in normal mode) still carried the whole conversation from inside the mode just left (or from
+    // whatever was being discussed right before entering it), and kept answering as if that were
+    // still the topic ("me empieza a responder con otras cosas" - see the user's own report). A
+    // mode switch is a hard context boundary, so the chat history resets with it, same as /reset.
+    messagesRepo.clear(userId);
+    console.log('[MODE] Usuario #%d volvió a modo recordatorios (historial reiniciado).', userId);
     return { consumed: true, reply: renderModeExitMessage() };
   }
 
@@ -174,7 +207,8 @@ export function handleModeMessage(userId: number, text: string): ModeRouterResul
 
   if (category.key !== currentMode) {
     usersRepo.setActiveMode(userId, category.key as ModeKey);
-    console.log('[MODE] Usuario #%d entró a modo %s.', userId, category.key);
+    messagesRepo.clear(userId); // see the exit branch above for why
+    console.log('[MODE] Usuario #%d entró a modo %s (historial reiniciado).', userId, category.key);
   }
   return { consumed: true, reply: renderModeEntryMessage(category) };
 }

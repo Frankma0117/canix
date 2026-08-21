@@ -9,6 +9,48 @@ export interface GarmentFilters {
   search?: string; // matches category/color/brand/notes
 }
 
+export interface GarmentCreateFields {
+  publicId: string;
+  storageKey: string;
+  imageUrl: string;
+  thumbnailKey?: string | null;
+  thumbnailUrl?: string | null;
+  type: string;
+  category: string;
+  subcategory?: string | null;
+  gender?: string | null;
+  color?: string | null;
+  secondaryColors?: string[] | null;
+  pattern?: string | null;
+  material?: string | null;
+  fit?: string | null;
+  style?: string[] | null;
+  formality?: string | null;
+  season?: string[] | null;
+  weather?: string[] | null;
+  occasions?: string[] | null;
+  brand?: string | null;
+  size?: string | null;
+  condition?: string | null;
+  warmth?: string | null;
+  waterResistance?: string | null;
+  neckline?: string | null;
+  sleeves?: string | null;
+  length?: string | null;
+  closure?: string | null;
+  pockets?: string | null;
+  shortDescription?: string | null;
+  longDescription?: string | null;
+  analysisConfidence?: unknown;
+  analysisModel?: string | null;
+  analysisVersion?: number | null;
+  analyzedAt?: string | null;
+  notes?: string | null;
+  aiMetadata?: unknown;
+}
+
+export type GarmentUpdateFields = Partial<Omit<GarmentCreateFields, 'publicId' | 'storageKey' | 'imageUrl' | 'thumbnailKey' | 'thumbnailUrl'>>;
+
 export const garmentsRepo = {
   getById(userId: number, id: number): Garment | undefined {
     return db.prepare('SELECT * FROM garments WHERE id = ? AND user_id = ? AND is_active = 1').get(id, userId) as
@@ -22,44 +64,16 @@ export const garmentsRepo = {
       .get(publicId, userId) as Garment | undefined;
   },
 
-  create(
-    userId: number,
-    fields: {
-      publicId: string;
-      storageKey: string;
-      imageUrl: string;
-      thumbnailKey?: string | null;
-      thumbnailUrl?: string | null;
-      type: string;
-      category: string;
-      subcategory?: string | null;
-      gender?: string | null;
-      color?: string | null;
-      secondaryColors?: string[] | null;
-      pattern?: string | null;
-      material?: string | null;
-      fit?: string | null;
-      style?: string[] | null;
-      formality?: string | null;
-      season?: string[] | null;
-      weather?: string[] | null;
-      occasions?: string[] | null;
-      brand?: string | null;
-      size?: string | null;
-      condition?: string | null;
-      warmth?: string | null;
-      waterResistance?: string | null;
-      notes?: string | null;
-      aiMetadata?: unknown;
-    },
-  ): number {
+  create(userId: number, fields: GarmentCreateFields): number {
     const info = db
       .prepare(
         `INSERT INTO garments
          (user_id, public_id, storage_key, image_url, thumbnail_key, thumbnail_url, type, category, subcategory,
           gender, color, secondary_colors, pattern, material, fit, style, formality, season, weather, occasions,
-          brand, size, condition, warmth, water_resistance, notes, ai_metadata)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          brand, size, condition, warmth, water_resistance, neckline, sleeves, length, closure, pockets,
+          short_description, long_description, analysis_confidence, analysis_model, analysis_version, analyzed_at,
+          notes, ai_metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         userId,
@@ -87,6 +101,17 @@ export const garmentsRepo = {
         fields.condition ?? null,
         fields.warmth ?? null,
         fields.waterResistance ?? null,
+        fields.neckline ?? null,
+        fields.sleeves ?? null,
+        fields.length ?? null,
+        fields.closure ?? null,
+        fields.pockets ?? null,
+        fields.shortDescription ?? null,
+        fields.longDescription ?? null,
+        fields.analysisConfidence !== undefined ? JSON.stringify(fields.analysisConfidence) : null,
+        fields.analysisModel ?? null,
+        fields.analysisVersion ?? null,
+        fields.analyzedAt ?? null,
         fields.notes ?? null,
         fields.aiMetadata !== undefined ? JSON.stringify(fields.aiMetadata) : null,
       );
@@ -121,9 +146,16 @@ export const garmentsRepo = {
       clauses.push('favorite = 1');
     }
     if (filters.search) {
-      clauses.push('(category LIKE ? COLLATE NOCASE OR color LIKE ? COLLATE NOCASE OR brand LIKE ? COLLATE NOCASE OR notes LIKE ? COLLATE NOCASE)');
+      // long_description folds in nearly every structured field as prose (material, fit, pattern,
+      // style, neckline...) - matching against it is a cheap, no-infrastructure stand-in for real
+      // semantic search (see the user's own "no agregues infraestructura compleja sin justificarla"
+      // - embeddings/vector search would be exactly that, unjustified for a personal wardrobe's size).
+      clauses.push(
+        '(category LIKE ? COLLATE NOCASE OR color LIKE ? COLLATE NOCASE OR brand LIKE ? COLLATE NOCASE OR ' +
+          'notes LIKE ? COLLATE NOCASE OR long_description LIKE ? COLLATE NOCASE)',
+      );
       const like = `%${filters.search}%`;
-      params.push(like, like, like, like);
+      params.push(like, like, like, like, like);
     }
 
     const where = clauses.join(' AND ');
@@ -135,39 +167,16 @@ export const garmentsRepo = {
     return { rows, total };
   },
 
-  update(
-    userId: number,
-    id: number,
-    fields: Partial<{
-      type: string;
-      category: string;
-      subcategory: string | null;
-      gender: string | null;
-      color: string | null;
-      secondaryColors: string[] | null;
-      pattern: string | null;
-      material: string | null;
-      fit: string | null;
-      style: string[] | null;
-      formality: string | null;
-      season: string[] | null;
-      weather: string[] | null;
-      occasions: string[] | null;
-      brand: string | null;
-      size: string | null;
-      condition: string | null;
-      warmth: string | null;
-      waterResistance: string | null;
-      notes: string | null;
-    }>,
-  ): void {
+  update(userId: number, id: number, fields: GarmentUpdateFields): void {
     const current = this.getById(userId, id);
     if (!current) return;
     db.prepare(
       `UPDATE garments SET
         type = ?, category = ?, subcategory = ?, gender = ?, color = ?, secondary_colors = ?, pattern = ?,
         material = ?, fit = ?, style = ?, formality = ?, season = ?, weather = ?, occasions = ?, brand = ?,
-        size = ?, condition = ?, warmth = ?, water_resistance = ?, notes = ?, updated_at = datetime('now')
+        size = ?, condition = ?, warmth = ?, water_resistance = ?, neckline = ?, sleeves = ?, length = ?,
+        closure = ?, pockets = ?, short_description = ?, long_description = ?, analysis_confidence = ?,
+        analysis_model = ?, analysis_version = ?, analyzed_at = ?, notes = ?, updated_at = datetime('now')
        WHERE id = ? AND user_id = ?`,
     ).run(
       fields.type ?? current.type,
@@ -189,6 +198,17 @@ export const garmentsRepo = {
       fields.condition === undefined ? current.condition : fields.condition,
       fields.warmth === undefined ? current.warmth : fields.warmth,
       fields.waterResistance === undefined ? current.water_resistance : fields.waterResistance,
+      fields.neckline === undefined ? current.neckline : fields.neckline,
+      fields.sleeves === undefined ? current.sleeves : fields.sleeves,
+      fields.length === undefined ? current.length : fields.length,
+      fields.closure === undefined ? current.closure : fields.closure,
+      fields.pockets === undefined ? current.pockets : fields.pockets,
+      fields.shortDescription === undefined ? current.short_description : fields.shortDescription,
+      fields.longDescription === undefined ? current.long_description : fields.longDescription,
+      fields.analysisConfidence === undefined ? current.analysis_confidence : JSON.stringify(fields.analysisConfidence),
+      fields.analysisModel === undefined ? current.analysis_model : fields.analysisModel,
+      fields.analysisVersion === undefined ? current.analysis_version : fields.analysisVersion,
+      fields.analyzedAt === undefined ? current.analyzed_at : fields.analyzedAt,
       fields.notes === undefined ? current.notes : fields.notes,
       id,
       userId,

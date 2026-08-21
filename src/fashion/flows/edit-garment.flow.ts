@@ -1,17 +1,19 @@
 import { fashionSessionsRepo } from '../../db/repositories/fashion-sessions.repo.js';
 import { garmentsRepo } from '../../db/repositories/garments.repo.js';
-import { GARMENT_TYPES, GARMENT_TYPE_LABELS, CATEGORIES_BY_TYPE, COLORS, normalizeColor } from '../taxonomy.js';
+import { GARMENT_TYPES, GARMENT_TYPE_LABELS, CATEGORIES_BY_TYPE, COLORS, MATERIALS, FITS, normalizeColor, normalizeToTaxonomy } from '../taxonomy.js';
 import type { GarmentType } from '../taxonomy.js';
 import type { FashionSessionData } from '../types.js';
 import type { FashionRouterContext, FashionRouterResult } from '../router-types.js';
 import { HOME_MENU } from './home.flow.js';
 
-const EDITABLE_FIELDS = ['type', 'category', 'color', 'favorite'] as const;
+const EDITABLE_FIELDS = ['type', 'category', 'color', 'material', 'fit', 'favorite'] as const;
 type EditableField = (typeof EDITABLE_FIELDS)[number];
 const FIELD_LABELS: Record<EditableField, string> = {
   type: 'Tipo',
   category: 'Categoría',
   color: 'Color',
+  material: 'Material',
+  fit: 'Ajuste',
   favorite: 'Favorito',
 };
 
@@ -32,17 +34,25 @@ export function showGarmentDetail(userId: number, garmentId: number): string {
 
   fashionSessionsRepo.setState(userId, 'FASHION_GARMENT_DETAIL', { selectedGarmentId: garmentId } satisfies FashionSessionData);
 
+  const header = garment.favorite ? '❤️ ' : '';
+  const description = garment.long_description ?? `${categoryLabel(garment.category)}${garment.color ? `, color ${garment.color}` : ''}.`;
+
   const lines = [
-    `👕 ${categoryLabel(garment.category)}${garment.favorite ? ' ❤️' : ''}`,
-    garment.color ? `🎨 Color: ${garment.color}` : undefined,
-    garment.style ? `✨ Estilo: ${JSON.parse(garment.style).join(', ')}` : undefined,
+    `${header}${description}`,
     `🖼️ ${garment.image_url}`,
-    '',
-    '1. Marcar/quitar favorito',
-    '2. Editar',
-    '3. Eliminar',
-    '4. Volver al armario',
-  ].filter((l): l is string => l !== undefined);
+  ];
+
+  let confidenceMeta: Record<string, { tier: string }> = {};
+  try {
+    confidenceMeta = garment.analysis_confidence ? JSON.parse(garment.analysis_confidence) : {};
+  } catch {
+    confidenceMeta = {};
+  }
+  if (Object.values(confidenceMeta).some((m) => m.tier === 'baja')) {
+    lines.push('⚠️ Algunos datos son una estimación con confianza baja.');
+  }
+
+  lines.push('', '1. Marcar/quitar favorito', '2. Editar', '3. Eliminar', '4. Volver al armario');
 
   return lines.join('\n');
 }
@@ -108,6 +118,8 @@ export async function handleEditSelect(ctx: FashionRouterContext): Promise<Fashi
 
   if (field === 'type') return { consumed: true, reply: `Nuevo tipo:\n\n${GARMENT_TYPES.map((t, i) => `${i + 1}. ${GARMENT_TYPE_LABELS[t]}`).join('\n')}` };
   if (field === 'category') return { consumed: true, reply: '¿Cuál es la categoría nueva? (ej. "camisa", "jeans")' };
+  if (field === 'material') return { consumed: true, reply: `¿Cuál material? (ej. ${MATERIALS.slice(0, 4).join(', ')}...):` };
+  if (field === 'fit') return { consumed: true, reply: `¿Cuál ajuste? (ej. ${FITS.slice(0, 4).join(', ')}...):` };
   return { consumed: true, reply: `Nuevo color (ej. ${COLORS.slice(0, 4).join(', ')}...):` };
 }
 
@@ -132,7 +144,30 @@ export async function handleEditField(ctx: FashionRouterContext): Promise<Fashio
   } else if (field === 'color') {
     if (!text) return { consumed: true, reply: '¿De qué color?' };
     garmentsRepo.update(ctx.userId, garmentId, { color: normalizeColor(text) ?? text.toLowerCase() });
+  } else if (field === 'material') {
+    if (!text) return { consumed: true, reply: '¿Cuál material?' };
+    garmentsRepo.update(ctx.userId, garmentId, { material: normalizeToTaxonomy(MATERIALS, text) ?? text.toLowerCase() });
+  } else if (field === 'fit') {
+    if (!text) return { consumed: true, reply: '¿Cuál ajuste?' };
+    garmentsRepo.update(ctx.userId, garmentId, { fit: normalizeToTaxonomy(FITS, text) ?? text.toLowerCase() });
   }
+
+  // A manual correction can make the generated description stale (e.g. color was fixed but the
+  // paragraph still names the old one) - regenerate it from the now-updated row so it never
+  // contradicts what was just corrected. Garment's own columns are snake_case/JSON-string
+  // (secondary_colors, style) while the description builder wants camelCase/real arrays - convert
+  // rather than spread blindly (see the same conversion in revalidate-garments.flow.ts).
+  const { buildShortDescription, buildLongDescription } = await import('../description.js');
+  const updated = garmentsRepo.getById(ctx.userId, garmentId)!;
+  const describable = {
+    ...updated,
+    secondaryColors: updated.secondary_colors ? (JSON.parse(updated.secondary_colors) as string[]) : [],
+    style: updated.style ? (JSON.parse(updated.style) as string[]) : [],
+  };
+  garmentsRepo.update(ctx.userId, garmentId, {
+    shortDescription: buildShortDescription(describable),
+    longDescription: buildLongDescription(describable),
+  });
 
   fashionSessionsRepo.setState(ctx.userId, 'FASHION_GARMENT_DETAIL', { selectedGarmentId: garmentId });
   return { consumed: true, reply: `Listo, actualizado.\n\n${showGarmentDetail(ctx.userId, garmentId)}` };

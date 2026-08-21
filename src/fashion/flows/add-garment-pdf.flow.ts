@@ -6,9 +6,9 @@ import { intakeGarmentPdf } from '../image/pdf-intake.js';
 import { toAnalysisCopy, toThumbnail } from '../image/image-processing.js';
 import { spacesStorageService } from '../storage/spaces-storage.service.js';
 import { httpVisionService } from '../vision/http-vision.service.js';
-import { candidateLabelsForVision, CATEGORIES_BY_TYPE } from '../taxonomy.js';
+import { CATEGORIES_BY_TYPE } from '../taxonomy.js';
 import type { GarmentType } from '../taxonomy.js';
-import { renderTypeOptions } from './add-garment.flow.js';
+import { renderTypeOptions, applyVisionAnalysis, draftToCreateFields } from './add-garment.flow.js';
 import type { FashionSessionData, GarmentDraft } from '../types.js';
 import type { FashionRouterContext, FashionRouterResult } from '../router-types.js';
 import { HOME_MENU } from './home.flow.js';
@@ -94,25 +94,8 @@ async function processOneExtractedImage(userId: number, raw: Buffer): Promise<Ga
     detectedFields: [],
   };
 
-  const analysis = await httpVisionService.analyze(analysisCopy, candidateLabelsForVision());
-  if (analysis) {
-    if (analysis.type) {
-      draft.type = analysis.type;
-      draft.detectedFields!.push('type');
-    }
-    if (analysis.category) {
-      draft.category = analysis.category;
-      draft.detectedFields!.push('category');
-    }
-    if (analysis.color) {
-      draft.color = analysis.color;
-      draft.detectedFields!.push('color');
-    }
-    if (analysis.pattern) draft.pattern = analysis.pattern;
-    if (analysis.style.length) draft.style = analysis.style;
-    if (analysis.formality) draft.formality = analysis.formality;
-    draft.aiMetadata = analysis.raw;
-  }
+  const analysis = await httpVisionService.analyze(analysisCopy);
+  if (analysis) applyVisionAnalysis(draft, analysis);
 
   return draft;
 }
@@ -163,20 +146,7 @@ export async function handlePdfReview(ctx: FashionRouterContext): Promise<Fashio
         skipped++;
         continue;
       }
-      const id = garmentsRepo.create(ctx.userId, {
-        publicId: draft.publicId,
-        storageKey: draft.storageKey,
-        imageUrl: draft.imageUrl,
-        thumbnailKey: draft.thumbnailKey,
-        thumbnailUrl: draft.thumbnailUrl,
-        type: draft.type,
-        category: draft.category,
-        color: draft.color,
-        pattern: draft.pattern,
-        style: draft.style,
-        formality: draft.formality,
-        aiMetadata: draft.aiMetadata,
-      });
+      const id = garmentsRepo.create(ctx.userId, draftToCreateFields(draft as GarmentDraft & { type: string; category: string }));
       saved++;
       console.log('[FASHION] Prenda #%d guardada (PDF) para el usuario #%d.', id, ctx.userId);
     }

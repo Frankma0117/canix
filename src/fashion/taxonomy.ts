@@ -91,7 +91,23 @@ export const COLORS = [
 
 export const PATTERNS = ['liso', 'rayas', 'cuadros', 'estampado', 'floral', 'animal_print', 'a_lunares'] as const;
 export const MATERIALS = ['algodon', 'lino', 'lana', 'poliester', 'denim', 'cuero', 'seda', 'sintetico', 'mezcla'] as const;
-export const FITS = ['ajustado', 'regular', 'holgado', 'oversize'] as const;
+// Ampliado con más matices de silueta (slim/oversized/boxy/cropped/recta/tapered/ancha) en vez de
+// crear un campo "silhouette" aparte - son el mismo concepto (qué tan ceñida/holgada cae la prenda),
+// y separarlos hubiera sido un campo duplicado y confuso en vez de uno más rico.
+export const FITS = ['ajustado', 'slim', 'regular', 'holgado', 'oversize', 'boxy', 'cropped', 'recto', 'tapered', 'ancho'] as const;
+// Solo aplica a TOP/OUTERWEAR/FULL_BODY (ver garmentTypesForGroup abajo) - no tiene sentido
+// preguntarle al modelo por el cuello de un pantalón.
+export const NECKLINES = [
+  'cuello_redondo', 'cuello_v', 'cuello_polo', 'cuello_mao', 'cuello_italiano', 'cuello_cutaway',
+  'button_down', 'cuello_alto', 'halter', 'cuello_cuadrado', 'cuello_barco', 'sin_cuello',
+] as const;
+export const SLEEVES = ['sin_mangas', 'manga_corta', 'manga_3_4', 'manga_larga', 'manga_abullonada', 'raglan'] as const;
+// Un solo pool compartido entre BOTTOM/FULL_BODY/OUTERWEAR - el modelo elige el término que mejor
+// aplique según lo que ya sabe (falda/vestido/abrigo), no es 100% preciso pero evita triplicar la
+// taxonomía por tipo de prenda para una diferencia menor.
+export const LENGTHS = ['cropped', 'cintura', 'cadera', 'muslo', 'rodilla', 'midi', 'maxi'] as const;
+export const CLOSURES = ['botones', 'cremallera', 'broches', 'cordones', 'cruzado', 'sin_cierre_visible'] as const;
+export const POCKETS = ['sin_bolsillos_visibles', 'bolsillos_pecho', 'bolsillos_laterales', 'bolsillos_cargo', 'bolsillos_traseros', 'bolsillos_ocultos'] as const;
 export const STYLES = ['casual', 'smart_casual', 'formal', 'deportivo', 'urbano', 'clasico', 'minimalista', 'bohemio'] as const;
 export const FORMALITY = ['muy_informal', 'informal', 'smart_casual', 'formal', 'muy_formal'] as const;
 export const SEASONS = ['primavera', 'verano', 'otono', 'invierno', 'todo_el_ano'] as const;
@@ -105,6 +121,11 @@ export const WARMTH = ['ligero', 'medio', 'abrigado'] as const;
 export const WATER_RESISTANCE = ['no', 'resistente', 'impermeable'] as const;
 export const GENDERS = ['hombre', 'mujer', 'unisex'] as const;
 export const SIZES = ['xs', 's', 'm', 'l', 'xl', 'xxl', 'unica'] as const;
+// A person's general build (not a garment's) - used by the outfit engine to reason about fit
+// alongside a garment's own `fit` (ajustado/holgado/etc), see fashion-profile.repo.ts /
+// set-fashion-profile.tool.ts. Deliberately coarse (4 buckets) - this is a styling input, not a
+// medical/precise measurement.
+export const BODY_BUILDS = ['delgada', 'media', 'robusta', 'atletica'] as const;
 
 /** All category `value`s across every type, flattened - used to validate/search without caring
  *  which type a given category belongs to. */
@@ -179,15 +200,96 @@ export interface TaxonomyCandidates {
   groups: { group: string; values: string[] }[];
 }
 
-export function candidateLabelsForVision(): TaxonomyCandidates {
+/**
+ * Bumped whenever the taxonomy/pipeline changes in a way that could change what a photo gets
+ * classified as (new groups, reworded candidates, restructured passes) - stored per-garment as
+ * `analysis_version` (see garments.repo.ts) so "actualizar ropa" and any future audit can tell
+ * which pass produced which data instead of guessing. Plain integer, bump by 1 per meaningful change.
+ */
+export const ANALYSIS_VERSION = 2;
+
+/**
+ * PASS 1 of garment vision analysis - type-independent groups only. `category` is deliberately
+ * NOT here: asking the model to pick among all ~45 categories across every garment type at once
+ * (the old single-pass design) meant a lot of irrelevant competition for every photo - a shirt only
+ * ever needed to compete against other TOP categories, not against "falda"/"botas"/"cinturon" too.
+ * See candidateLabelsForVisionPass2 below, which only runs once `type` is known from this pass.
+ */
+export function candidateLabelsForVisionPass1(): TaxonomyCandidates {
   return {
     groups: [
       { group: 'type', values: [...GARMENT_TYPES] },
-      { group: 'category', values: allCategoryValues() },
-      { group: 'color', values: [...COLORS] },
       { group: 'pattern', values: [...PATTERNS] },
       { group: 'style', values: [...STYLES] },
       { group: 'formality', values: [...FORMALITY] },
     ],
   };
 }
+
+/** Which of the type-conditional pass-2 attribute groups make sense for a given garment type -
+ *  e.g. asking about "cuello"/"mangas" on a pair of shoes would just add noise, never a real
+ *  answer. Kept as one small lookup instead of scattering `if (type === ...)` checks. */
+const NECKLINE_SLEEVES_TYPES: readonly GarmentType[] = ['TOP', 'OUTERWEAR', 'FULL_BODY'];
+const CLOSURE_POCKETS_TYPES: readonly GarmentType[] = ['TOP', 'OUTERWEAR', 'BOTTOM', 'FULL_BODY'];
+const LENGTH_TYPES: readonly GarmentType[] = ['BOTTOM', 'FULL_BODY', 'OUTERWEAR'];
+
+/**
+ * PASS 2 - runs only once pass 1 confidently identified `type`. `category` is scoped to exactly
+ * that type's own options (CATEGORIES_BY_TYPE[type]), which is the single biggest accuracy win in
+ * this whole taxonomy: the model now only ever has to tell a "camisa" from a "polo" from a
+ * "sweater", never from "falda" or "botas" at the same time. The rest (fit/material/warmth/
+ * water_resistance) always apply; neckline/sleeves/closure/pockets/length only join in when they're
+ * actually meaningful for this type (see the lookups above).
+ */
+export function candidateLabelsForVisionPass2(type: GarmentType): TaxonomyCandidates {
+  const groups: { group: string; values: string[] }[] = [
+    { group: 'category', values: CATEGORIES_BY_TYPE[type].map((c) => c.value) },
+    { group: 'fit', values: [...FITS] },
+    { group: 'material', values: [...MATERIALS] },
+    { group: 'warmth', values: [...WARMTH] },
+    { group: 'water_resistance', values: [...WATER_RESISTANCE] },
+  ];
+  if (NECKLINE_SLEEVES_TYPES.includes(type)) {
+    groups.push({ group: 'neckline', values: [...NECKLINES] }, { group: 'sleeves', values: [...SLEEVES] });
+  }
+  if (CLOSURE_POCKETS_TYPES.includes(type)) {
+    groups.push({ group: 'closure', values: [...CLOSURES] }, { group: 'pockets', values: [...POCKETS] });
+  }
+  if (LENGTH_TYPES.includes(type)) {
+    groups.push({ group: 'length', values: [...LENGTHS] });
+  }
+  return { groups };
+}
+
+/** Confidence tiers per the user's own spec: >=0.90 alta, >=0.70 media, >=0.40 baja, below that
+ *  treated as desconocido (the caller drops the value entirely rather than storing a low-confidence
+ *  guess - see http-vision.service.ts's `pick()`). */
+export type ConfidenceTier = 'alta' | 'media' | 'baja';
+
+export function confidenceTier(confidence: number): ConfidenceTier {
+  if (confidence >= 0.9) return 'alta';
+  if (confidence >= 0.7) return 'media';
+  return 'baja';
+}
+
+/**
+ * Whether a field counts as directly OBSERVED vs. ESTIMATED (inferred) - a fixed, honest mapping,
+ * not something the model itself decides (CLIP has no reasoning trace to introspect - it's a
+ * similarity comparison, not a model that can explain "I can see X therefore Y"). Color/pattern/
+ * neckline/sleeves/closure/pockets/length are structural/visual traits closest to "directly on the
+ * surface of the photo"; material/fit/warmth/water_resistance/style/formality are judgment calls
+ * even when the model is confident about them, so they're always "inferido", never "observado" -
+ * see BASE fields comment in vision.service.ts for where this gets attached per result.
+ */
+export const OBSERVED_FIELDS = new Set([
+  'type',
+  'category',
+  'color',
+  'secondaryColors',
+  'pattern',
+  'neckline',
+  'sleeves',
+  'closure',
+  'pockets',
+  'length',
+]);

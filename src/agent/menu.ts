@@ -203,10 +203,14 @@ const FASHION_CATEGORY: MenuCategory = {
   detail:
     `👔 *Fashion Mode (armario y outfits)*\n\n` +
     `- Escribe "fashion", "moda", "outfit" o "armario" para entrar\n` +
-    `- Agregá prendas mandando una foto - las clasifica automáticamente (o te pregunta si no puede)\n` +
+    `- Agregá prendas mandando una foto - detecta tipo, categoría, color (principal y secundario), ` +
+    `patrón, material, ajuste, estilo, formalidad y más, automáticamente\n` +
     `- Mandá un PDF con varias fotos para agregarlas todas de una\n` +
     `- Consultá tu armario con filtros: "armario camisas", "armario favoritos"\n` +
     `- Editá, marcá favorito o eliminá cualquier prenda\n` +
+    `- "actualizar ropa" vuelve a analizar TODAS tus prendas guardadas con el detector más reciente\n` +
+    `- Contame tu talla/contextura/altura y colores/estilos que preferís, para que el outfit se ` +
+    `ajuste mejor a vos\n` +
     `- Pedí un outfit por ocasión: "outfit boda", "outfit oficina"\n` +
     `- Escribe "salir" para volver al chat normal`,
 };

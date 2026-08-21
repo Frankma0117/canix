@@ -12,7 +12,8 @@ export const HOME_MENU = `👔 *Fashion Mode*
 5. 🚪 Salir
 
 También puedes escribir directo: "armario", "armario camisas", "agregar prenda", "outfit boda",
-"mis outfits", "salir".`;
+"mis outfits", "salir", o "actualizar ropa" para que revise de nuevo todas tus prendas guardadas
+(color, ajuste, material y más).`;
 
 export function enterHome(userId: number): string {
   fashionSessionsRepo.setState(userId, 'FASHION_HOME', {});

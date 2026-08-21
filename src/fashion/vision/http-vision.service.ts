@@ -1,6 +1,15 @@
 import { env } from '../../config/env.js';
-import type { TaxonomyCandidates } from '../taxonomy.js';
-import type { VisionService, VisionAnalysisResult } from './vision.service.js';
+import {
+  candidateLabelsForVisionPass1,
+  candidateLabelsForVisionPass2,
+  confidenceTier,
+  OBSERVED_FIELDS,
+  GARMENT_TYPES,
+  typeForCategory,
+  type TaxonomyCandidates,
+  type GarmentType,
+} from '../taxonomy.js';
+import type { VisionService, VisionAnalysisResult, FieldMeta } from './vision.service.js';
 
 interface ScoredValue {
   value: string;
@@ -8,12 +17,24 @@ interface ScoredValue {
 }
 
 interface AnalyzeResponse {
+  quality?: { ok: boolean; issues: string[] };
+  model?: string | null;
   type?: ScoredValue;
   category?: ScoredValue;
   color?: ScoredValue;
+  secondary_color?: ScoredValue;
   pattern?: ScoredValue;
   style?: ScoredValue[];
   formality?: ScoredValue;
+  fit?: ScoredValue;
+  material?: ScoredValue;
+  warmth?: ScoredValue;
+  water_resistance?: ScoredValue;
+  neckline?: ScoredValue;
+  sleeves?: ScoredValue;
+  closure?: ScoredValue;
+  pockets?: ScoredValue;
+  length?: ScoredValue;
 }
 
 export interface PdfExtractResult {
@@ -29,17 +50,57 @@ export interface PdfExtractResult {
  * user's explicit requirement, and README's "Fashion Mode" section for setup). Every failure mode
  * (service not running, timeout, malformed response) is caught here and turned into `null`, never
  * a thrown error - vision is an enhancement, not a dependency the add-garment flow can break on.
+ *
+ * Runs TWO passes per photo (see taxonomy.ts's candidateLabelsForVisionPass1/2): pass 1 gets
+ * type-independent traits plus `type` itself; pass 2, only once `type` is confidently known, asks
+ * about `category` scoped to JUST that type's own options (instead of competing against all ~45
+ * categories across every type at once - the single biggest classification-accuracy fix in this
+ * pipeline) plus whichever type-conditional attributes actually apply. This roughly doubles
+ * classification latency per photo (two sequential CPU inferences instead of one) - accepted
+ * deliberately in exchange for materially better accuracy, per an explicit choice to keep squeezing
+ * the free local model rather than switch to a paid vision API.
  */
 export class HttpVisionService implements VisionService {
-  async analyze(imageBuffer: Buffer, taxonomy: TaxonomyCandidates): Promise<VisionAnalysisResult | null> {
+  async analyze(imageBuffer: Buffer): Promise<VisionAnalysisResult | null> {
+    const pass1 = await this.runPass(imageBuffer, candidateLabelsForVisionPass1());
+    if (!pass1) return null;
+
+    const qualityIssues = pass1.quality?.issues ?? [];
+    const floor = env.fashion.vision.minConfidence;
+    const detectedType = pass1.type && pass1.type.confidence >= floor ? (pass1.type.value as GarmentType) : null;
+
+    // Can't scope pass 2's category candidates without a confident type - return pass 1 alone
+    // rather than asking about category across the full, unscoped taxonomy (that broad-competition
+    // approach is exactly the accuracy problem pass 2 exists to avoid).
+    if (!detectedType || !GARMENT_TYPES.includes(detectedType)) {
+      const result = this.toResult(pass1, null, qualityIssues);
+      this.logResult(result);
+      return result;
+    }
+
+    const pass2 = await this.runPass(imageBuffer, candidateLabelsForVisionPass2(detectedType));
+    const result = this.toResult(pass1, pass2, qualityIssues);
+    this.logResult(result);
+    return result;
+  }
+
+  /** One-line-per-field summary of what got detected and how confidently - the trace this pipeline
+   *  needs to diagnose a bad classification after the fact (the user's own "trazabilidad" ask)
+   *  without having to go dig through the raw ai_metadata JSON blob by hand. */
+  private logResult(result: VisionAnalysisResult): void {
+    const fields = Object.entries(result.fieldMeta)
+      .map(([field, meta]) => `${field}=${(result as unknown as Record<string, unknown>)[field] ?? '?'}(${meta.tier})`)
+      .join(' ');
+    console.log('[FASHION] Vision (modelo=%s): %s%s', result.modelName ?? '?', fields || '(nada por encima del umbral)', result.qualityIssues.length ? ` calidad=${result.qualityIssues.join(',')}` : '');
+  }
+
+  private async runPass(imageBuffer: Buffer, taxonomy: TaxonomyCandidates): Promise<AnalyzeResponse | null> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), env.fashion.vision.timeoutMs);
-
     try {
       const response = await this.postWithOneRetry(imageBuffer, taxonomy, controller.signal);
       clearTimeout(timeout);
-      if (!response) return null;
-      return this.toResult(response);
+      return response;
     } catch (err) {
       clearTimeout(timeout);
       console.error('[FASHION] Servicio de visión no disponible:', (err as Error).message);
@@ -103,29 +164,67 @@ export class HttpVisionService implements VisionService {
     }
   }
 
-  private toResult(response: AnalyzeResponse): VisionAnalysisResult {
+  private toResult(pass1: AnalyzeResponse, pass2: AnalyzeResponse | null, qualityIssues: string[]): VisionAnalysisResult {
     const floor = env.fashion.vision.minConfidence;
-    const confidence: Record<string, number> = {};
+    const fieldMeta: Record<string, FieldMeta> = {};
 
-    const pick = (field?: ScoredValue): string | null => {
+    // Below the floor -> unknown (null), matching the user's own "unknown antes que inventar" rule
+    // rather than storing a low-confidence guess. `fieldName` is the RESULT field name (camelCase,
+    // e.g. "waterResistance"), used as the key into fieldMeta/OBSERVED_FIELDS - independent from
+    // whatever key the Python side used (snake_case for some, e.g. "water_resistance").
+    const pick = (fieldName: string, field?: ScoredValue): string | null => {
       if (!field || field.confidence < floor) return null;
-      confidence[field.value] = field.confidence;
+      fieldMeta[fieldName] = {
+        confidence: field.confidence,
+        tier: confidenceTier(field.confidence),
+        certainty: OBSERVED_FIELDS.has(fieldName) ? 'observado' : 'inferido',
+      };
       return field.value;
     };
 
-    const style = (response.style ?? []).filter((s) => s.confidence >= floor).slice(0, 3);
-    for (const s of style) confidence[s.value] = s.confidence;
+    const style = (pass1.style ?? []).filter((s) => s.confidence >= floor).slice(0, 3);
+    if (style.length) {
+      const best = style.reduce((a, b) => (b.confidence > a.confidence ? b : a));
+      fieldMeta.style = { confidence: best.confidence, tier: confidenceTier(best.confidence), certainty: 'inferido' };
+    }
+
+    const secondaryColor = pick('secondaryColors', pass1.secondary_color);
+    const type = pick('type', pass1.type);
+
+    // Defensive consistency check (see the user's own "detección de contradicciones" requirement):
+    // pass 2's category candidates are already scoped to `type` (see candidateLabelsForVisionPass2),
+    // so this should never actually trigger in practice - but if it ever did (a stale/mismatched
+    // vision-service deployment, a manual taxonomy edit on one side only), silently storing a
+    // category that doesn't belong to its own type would be exactly the kind of inconsistency this
+    // whole pipeline exists to prevent. Dropped (not guessed at) and logged loudly if it happens.
+    let category = pick('category', pass2?.category);
+    if (category && type && typeForCategory(category) !== type) {
+      console.error('[FASHION] Inconsistencia categoría/tipo detectada (%s no pertenece a %s) - descartada.', category, type);
+      category = null;
+      delete fieldMeta.category;
+    }
 
     return {
-      type: pick(response.type),
-      category: pick(response.category),
-      color: pick(response.color),
-      secondaryColors: [],
-      pattern: pick(response.pattern),
+      type,
+      category,
+      color: pick('color', pass1.color),
+      secondaryColors: secondaryColor ? [secondaryColor] : [],
+      pattern: pick('pattern', pass1.pattern),
       style: style.map((s) => s.value),
-      formality: pick(response.formality),
-      confidence,
-      raw: response,
+      formality: pick('formality', pass1.formality),
+      fit: pick('fit', pass2?.fit),
+      material: pick('material', pass2?.material),
+      warmth: pick('warmth', pass2?.warmth),
+      waterResistance: pick('waterResistance', pass2?.water_resistance),
+      neckline: pick('neckline', pass2?.neckline),
+      sleeves: pick('sleeves', pass2?.sleeves),
+      closure: pick('closure', pass2?.closure),
+      pockets: pick('pockets', pass2?.pockets),
+      length: pick('length', pass2?.length),
+      fieldMeta,
+      qualityIssues,
+      modelName: pass2?.model ?? pass1.model ?? null,
+      raw: { pass1, pass2 },
     };
   }
 }

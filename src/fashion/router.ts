@@ -1,4 +1,5 @@
 import { fashionSessionsRepo } from '../db/repositories/fashion-sessions.repo.js';
+import { messagesRepo } from '../db/repositories/messages.repo.js';
 import { enterHome, handleHome, HOME_MENU } from './flows/home.flow.js';
 import { enterAddGarment, handleWaitingImage, handleManualType, handleManualCategory, handleManualColor, handleConfirmation } from './flows/add-garment.flow.js';
 import { enterWardrobeList, handleWardrobeList, parseFilterText } from './flows/list-garments.flow.js';
@@ -7,6 +8,8 @@ import { handleDeleteConfirm } from './flows/delete-garment.flow.js';
 import { enterOutfitRequest, handleOutfitResult, enterMyOutfits, handleMyOutfitsList } from './flows/outfit.flow.js';
 import { enterPdfImport, handlePdfReview } from './flows/add-garment-pdf.flow.js';
 import { isPdfDocument } from './image/pdf-intake.js';
+import { revalidateWardrobe, REVALIDATE_KEYWORDS } from './flows/revalidate-garments.flow.js';
+import { enterProfilePhoto, handleProfilePhotoWaiting, PROFILE_PHOTO_KEYWORDS } from './flows/profile-photo.flow.js';
 import type { FashionRouterContext, FashionRouterResult } from './router-types.js';
 import type { FashionState } from './types.js';
 
@@ -46,8 +49,30 @@ export async function handleFashionMessage(ctx: FashionRouterContext): Promise<F
 
   if (session.state !== 'FASHION_IDLE' && EXIT_KEYWORDS.includes(textLower)) {
     fashionSessionsRepo.clear(ctx.userId);
-    console.log('[FASHION] Usuario #%d salió de Fashion Mode.', ctx.userId);
+    // Same reasoning as agent/modes.ts's own mode-switch handling: a hard context boundary, so the
+    // AI's chat history (never used by Fashion's own state machine while inside it, but still very
+    // much read on the very next normal-chat turn) resets along with it - otherwise the first reply
+    // back in normal mode kept answering as if whatever was being discussed before Fashion Mode (or
+    // nothing at all, if the history was empty) were still the topic.
+    messagesRepo.clear(ctx.userId);
+    console.log('[FASHION] Usuario #%d salió de Fashion Mode (historial reiniciado).', ctx.userId);
     return { consumed: true, reply: '👋 Saliste de Fashion Mode.' };
+  }
+
+  // "Actualizar ropa" (or equivalent) re-runs vision on every already-saved garment, regardless of
+  // current state or even whether Fashion Mode was already entered - matches the user's own "cada
+  // que le diga actualizar ropa o algo similar" spec (an anytime command, not just a home-menu
+  // option). Session state is left untouched afterward; this is an out-of-band maintenance action,
+  // not a state transition.
+  if (REVALIDATE_KEYWORDS.includes(textLower)) {
+    return { consumed: true, reply: await revalidateWardrobe(ctx) };
+  }
+
+  // Saving a reference photo (see profile-photo.flow.ts) - same "works anytime" reasoning as
+  // revalidate above, and enters Fashion Mode from idle if it wasn't already active.
+  if (PROFILE_PHOTO_KEYWORDS.includes(textLower)) {
+    if (session.state === 'FASHION_IDLE') messagesRepo.clear(ctx.userId); // entering fresh - see the idle-entry block below for why
+    return { consumed: true, reply: enterProfilePhoto(ctx.userId) };
   }
 
   // A PDF is unambiguous - nothing else in this bot does anything with one, so it's routed here
@@ -62,7 +87,8 @@ export async function handleFashionMessage(ctx: FashionRouterContext): Promise<F
     const entry = matchFashionEntry(ctx.text);
     if (!entry.matched) return { consumed: false };
 
-    console.log('[FASHION] Usuario #%d entró a Fashion Mode.', ctx.userId);
+    console.log('[FASHION] Usuario #%d entró a Fashion Mode (historial reiniciado).', ctx.userId);
+    messagesRepo.clear(ctx.userId); // see the exit branch above for why
     if (entry.wardrobe) {
       return { consumed: true, reply: enterWardrobeList(ctx.userId, parseFilterText(entry.trailing)) };
     }
@@ -131,6 +157,8 @@ async function dispatch(state: FashionState, ctx: FashionRouterContext): Promise
       return handleOutfitResult(ctx);
     case 'FASHION_MY_OUTFITS_LIST':
       return handleMyOutfitsList(ctx);
+    case 'FASHION_PROFILE_WAITING_PHOTO':
+      return handleProfilePhotoWaiting(ctx);
     default:
       fashionSessionsRepo.setState(ctx.userId, 'FASHION_HOME', {});
       return { consumed: true, reply: HOME_MENU };

@@ -228,6 +228,26 @@ export function initSchema(): void {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- Styling profile (one per user, 1:1, same pattern as fashion_sessions above) - fed into the
+    -- outfit recommendation engine (see fashion/outfit/candidate-filter.ts /
+    -- fashion-profile.repo.ts) so it can pick from what actually suits this person instead of only
+    -- reacting to the one-off wording of each request. height_cm/build/size are stored for
+    -- reference and future use but NOT auto-applied as a fit-matching rule today - encoding
+    -- "this body type should wear this fit" as a hard rule would be a stereotype, not a fact, so
+    -- that nuance is deliberately left to the user's own free-text requests for now.
+    CREATE TABLE IF NOT EXISTS fashion_profiles (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      height_cm INTEGER,
+      build TEXT, -- see taxonomy.ts's BODY_BUILDS
+      size TEXT,  -- see taxonomy.ts's SIZES
+      preferred_colors TEXT, -- JSON array, see taxonomy.ts's COLORS
+      avoided_colors TEXT,   -- JSON array
+      preferred_styles TEXT, -- JSON array, see taxonomy.ts's STYLES
+      reference_photo_key TEXT,
+      reference_photo_url TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     -- A saved outfit (a combination of garments) - only persisted when the user explicitly saves
     -- one (see outfit.flow.ts). "role" on outfit_garments matches src/fashion/taxonomy.ts's
     -- GarmentType (TOP/BOTTOM/FULL_BODY/OUTERWEAR/FOOTWEAR/ACCESSORY) - reused directly instead of
@@ -429,6 +449,31 @@ export function initSchema(): void {
   // Validated at the application layer (usersRepo.setGender) rather than a DB CHECK constraint,
   // same reasoning as role/active_mode above - SQLite can't add one to an existing table via ALTER.
   ensureColumn('users', 'gender', 'gender TEXT');
+
+  // Deeper garment attributes (see taxonomy.ts's candidateLabelsForVisionPass2 / NECKLINES/SLEEVES/
+  // LENGTHS/CLOSURES/POCKETS) - only auto-detected for garment types where they're visually
+  // meaningful (see fashion/vision/http-vision.service.ts), so a NULL here can mean either "not
+  // applicable to this type" or "couldn't tell" - both already show as nothing to the user either way.
+  ensureColumn('garments', 'neckline', 'neckline TEXT');
+  ensureColumn('garments', 'sleeves', 'sleeves TEXT');
+  ensureColumn('garments', 'length', 'length TEXT');
+  ensureColumn('garments', 'closure', 'closure TEXT');
+  ensureColumn('garments', 'pockets', 'pockets TEXT');
+  // Generated purely from the structured fields above (see fashion/description.ts) - never
+  // free-generated text, so nothing in them can be something the vision pipeline didn't detect.
+  ensureColumn('garments', 'short_description', 'short_description TEXT');
+  ensureColumn('garments', 'long_description', 'long_description TEXT');
+  // Per-field confidence/tier/observado-vs-inferido (JSON, see vision.service.ts's FieldMeta) - the
+  // structured columns above only ever store the WINNING value, this is what lets the confirmation
+  // screen and any future audit see how sure the model actually was about each one, instead of
+  // treating every stored field as equally certain.
+  ensureColumn('garments', 'analysis_confidence', 'analysis_confidence TEXT');
+  // Which pipeline version produced this garment's auto-detected fields (see taxonomy.ts's
+  // ANALYSIS_VERSION) - lets "actualizar ropa" (see revalidate-garments.flow.ts) and any future
+  // audit tell which classification pass a garment's data came from, instead of it being anonymous.
+  ensureColumn('garments', 'analysis_model', 'analysis_model TEXT');
+  ensureColumn('garments', 'analysis_version', 'analysis_version INTEGER');
+  ensureColumn('garments', 'analyzed_at', 'analyzed_at TEXT');
 }
 
 /** Adds a column to `table` if it doesn't already exist (table/column names here are always our own constants, never user input). */

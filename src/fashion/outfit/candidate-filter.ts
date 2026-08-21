@@ -13,6 +13,11 @@ export interface OutfitContext {
   /** "hazme un outfit con esta camisa" - this garment MUST be included, others are filtered/scored
    *  around it instead of independently (see rules.ts). */
   requiredGarmentId?: number;
+  /** From the user's own stored profile (see fashion-profile.repo.ts / users.gender) - 'hombre' or
+   *  'mujer'. A garment explicitly tagged for the OTHER gender is hard-excluded; unisex or untagged
+   *  (null) garments are always eligible regardless. Never set from free-text per-request wording -
+   *  this is an identity fact from the profile, not something a single outfit request overrides. */
+  genderFilter?: string;
 }
 
 export interface ScoredGarment {
@@ -48,6 +53,7 @@ function isHardExcluded(garment: Garment, ctx: OutfitContext): boolean {
     if (weathers.length > 0 && !weathers.includes(ctx.weather)) return true;
   }
   if (ctx.colorsAvoided?.length && garment.color && ctx.colorsAvoided.includes(garment.color)) return true;
+  if (ctx.genderFilter && garment.gender && garment.gender !== 'unisex' && garment.gender !== ctx.genderFilter) return true;
   return false;
 }
 

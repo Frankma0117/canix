@@ -25,29 +25,40 @@ FALLBACK_MODEL_NAME = "openai/clip-vit-base-patch32"
 
 _model: CLIPModel | None = None
 _processor: CLIPProcessor | None = None
+# Whichever name actually ended up loaded (primary or fallback) - see current_model_name() below,
+# returned in every /analyze response so each garment's stored analysis_model is traceable to the
+# real model that produced it (the user's own "versionado del análisis" requirement), not just
+# whichever one MODEL_NAME nominally asked for.
+_loaded_model_name: str | None = None
 
 
 def load_model() -> None:
     """Loads the model once at process startup (not per-request) - called from app.py's startup
     event. Keeping it a module-level singleton, loaded exactly once, is what keeps steady-state
     RAM usage predictable (see README's "Uso de RAM" section for what to monitor)."""
-    global _model, _processor
+    global _model, _processor, _loaded_model_name
     if _model is not None:
         return
     try:
         logger.info("Cargando modelo de visión: %s", MODEL_NAME)
         _model = CLIPModel.from_pretrained(MODEL_NAME)
         _processor = CLIPProcessor.from_pretrained(MODEL_NAME)
+        _loaded_model_name = MODEL_NAME
     except Exception as err:  # noqa: BLE001 - any load failure falls back, never crashes the service
         logger.warning("No se pudo cargar %s (%s), usando %s en su lugar.", MODEL_NAME, err, FALLBACK_MODEL_NAME)
         _model = CLIPModel.from_pretrained(FALLBACK_MODEL_NAME)
         _processor = CLIPProcessor.from_pretrained(FALLBACK_MODEL_NAME)
+        _loaded_model_name = FALLBACK_MODEL_NAME
     _model.eval()
     logger.info("Modelo de visión listo.")
 
 
 def is_ready() -> bool:
     return _model is not None and _processor is not None
+
+
+def current_model_name() -> str | None:
+    return _loaded_model_name
 
 
 def classify_group(image: Image.Image, values: list[str]) -> list[tuple[str, float]]:

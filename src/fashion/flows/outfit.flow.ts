@@ -1,13 +1,47 @@
 import { fashionSessionsRepo } from '../../db/repositories/fashion-sessions.repo.js';
 import { garmentsRepo } from '../../db/repositories/garments.repo.js';
 import { outfitsRepo } from '../../db/repositories/outfits.repo.js';
+import { fashionProfileRepo } from '../../db/repositories/fashion-profile.repo.js';
+import { usersRepo } from '../../db/repositories/users.repo.js';
 import { parseOutfitIntent } from '../outfit/intent.js';
 import { recommendOutfit } from '../outfit/recommendation.service.js';
+import type { OutfitContext } from '../outfit/candidate-filter.js';
 import { CATEGORIES_BY_TYPE, GARMENT_TYPE_LABELS } from '../taxonomy.js';
 import type { GarmentType } from '../taxonomy.js';
 import type { FashionSessionData } from '../types.js';
 import type { FashionRouterContext, FashionRouterResult } from '../router-types.js';
 import { HOME_MENU } from './home.flow.js';
+
+const USER_GENDER_TO_GARMENT_GENDER: Record<string, string> = { male: 'hombre', female: 'mujer' };
+
+/**
+ * Layers the user's stored styling profile on top of what THIS request itself said - never
+ * overrides an explicit per-request color/style, only fills in what the request left unsaid, so
+ * "outfit boda pero de negro" still means negro even if the saved preference is otro color.
+ * genderFilter always comes from the profile (an identity fact, not a per-request wording) - see
+ * candidate-filter.ts's OutfitContext comment.
+ */
+function withProfileDefaults(userId: number, context: OutfitContext): OutfitContext {
+  const merged: OutfitContext = { ...context };
+
+  if (!merged.colorsPreferred?.length) {
+    const preferred = fashionProfileRepo.preferredColors(userId);
+    if (preferred.length) merged.colorsPreferred = preferred;
+  }
+  if (!merged.colorsAvoided?.length) {
+    const avoided = fashionProfileRepo.avoidedColors(userId);
+    if (avoided.length) merged.colorsAvoided = avoided;
+  }
+  if (!merged.style) {
+    const [firstPreferredStyle] = fashionProfileRepo.preferredStyles(userId);
+    if (firstPreferredStyle) merged.style = firstPreferredStyle;
+  }
+
+  const userGender = usersRepo.getById(userId)?.gender;
+  if (userGender) merged.genderFilter = USER_GENDER_TO_GARMENT_GENDER[userGender];
+
+  return merged;
+}
 
 const ROLE_EMOJI: Record<string, string> = {
   TOP: '👕', BOTTOM: '👖', FULL_BODY: '👗', OUTERWEAR: '🧥', FOOTWEAR: '👞', ACCESSORY: '⌚',
@@ -32,7 +66,7 @@ function categoryLabel(category: string): string {
 export async function enterOutfitRequest(ctx: FashionRouterContext, rawText: string): Promise<string> {
   await ctx.wa.sendText(ctx.jid, '🔎 Buscando el mejor outfit, dame un segundo...').catch(() => {});
 
-  const context = await parseOutfitIntent(ctx.userId, rawText);
+  const context = withProfileDefaults(ctx.userId, await parseOutfitIntent(ctx.userId, rawText));
   const result = await recommendOutfit(ctx.userId, context);
 
   if (result.emptyWardrobe) {
@@ -66,7 +100,11 @@ async function renderResult(
     if (!garment) continue;
     const emoji = ROLE_EMOJI[pick.role] ?? '👕';
     lines.push(`${emoji} ${categoryLabel(garment.category)}${garment.color ? ` ${garment.color}` : ''}`);
-    imagesToSend.push({ url: garment.thumbnail_url || garment.image_url, caption: `${emoji} ${categoryLabel(garment.category)}` });
+    // The full-resolution original, not the small wardrobe-listing thumbnail - this is the "here's
+    // what I picked for you" moment, where a handful of photos going out at once matters more than
+    // it does for scrolling through a whole wardrobe list (see list-garments.flow.ts, which still
+    // uses the thumbnail on purpose for that different case).
+    imagesToSend.push({ url: garment.image_url, caption: `${emoji} ${categoryLabel(garment.category)}` });
   }
 
   for (const role of missingRoles) {

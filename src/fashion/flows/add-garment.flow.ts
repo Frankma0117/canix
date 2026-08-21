@@ -4,11 +4,101 @@ import { garmentsRepo } from '../../db/repositories/garments.repo.js';
 import { intakeGarmentImage, extensionForMimetype } from '../image/image-intake.js';
 import { spacesStorageService } from '../storage/spaces-storage.service.js';
 import { httpVisionService } from '../vision/http-vision.service.js';
-import { candidateLabelsForVision, GARMENT_TYPES, GARMENT_TYPE_LABELS, CATEGORIES_BY_TYPE, normalizeColor } from '../taxonomy.js';
+import { GARMENT_TYPES, GARMENT_TYPE_LABELS, CATEGORIES_BY_TYPE, normalizeColor, ANALYSIS_VERSION } from '../taxonomy.js';
 import type { GarmentType } from '../taxonomy.js';
 import type { FashionSessionData, GarmentDraft } from '../types.js';
+import type { VisionAnalysisResult } from '../vision/vision.service.js';
+import { buildShortDescription, buildLongDescription } from '../description.js';
 import type { FashionRouterContext, FashionRouterResult } from '../router-types.js';
+import type { GarmentCreateFields } from '../../db/repositories/garments.repo.js';
 import { HOME_MENU } from './home.flow.js';
+
+/** Maps a fully-formed draft (type+category required) onto garmentsRepo.create()'s field shape -
+ *  shared by a single photo (below) and a PDF batch (add-garment-pdf.flow.ts) so the two save paths
+ *  can never drift on which fields actually get persisted. */
+export function draftToCreateFields(draft: GarmentDraft & { type: string; category: string }): GarmentCreateFields {
+  return {
+    publicId: draft.publicId,
+    storageKey: draft.storageKey,
+    imageUrl: draft.imageUrl,
+    thumbnailKey: draft.thumbnailKey,
+    thumbnailUrl: draft.thumbnailUrl,
+    type: draft.type,
+    category: draft.category,
+    color: draft.color,
+    secondaryColors: draft.secondaryColors,
+    pattern: draft.pattern,
+    material: draft.material,
+    fit: draft.fit,
+    style: draft.style,
+    formality: draft.formality,
+    warmth: draft.warmth,
+    waterResistance: draft.waterResistance,
+    neckline: draft.neckline,
+    sleeves: draft.sleeves,
+    length: draft.length,
+    closure: draft.closure,
+    pockets: draft.pockets,
+    shortDescription: draft.shortDescription,
+    longDescription: draft.longDescription,
+    analysisConfidence: draft.fieldMeta,
+    analysisModel: draft.analysisModel,
+    analysisVersion: draft.analysisVersion,
+    analyzedAt: draft.analyzedAt,
+    aiMetadata: draft.aiMetadata,
+  };
+}
+
+/**
+ * Copies a vision analysis result onto a garment draft - shared by a single photo (below), a PDF
+ * batch (add-garment-pdf.flow.ts), and re-analyzing an existing garment (revalidate-garments.flow.ts)
+ * so the "which fields count as auto-detected" logic can never drift between the three call sites.
+ * `detectedFields` (which the confirmation screen uses to say "detecté esto") only tracks the
+ * three fields confident enough to gate whether manual fallback is needed at all (type/category/
+ * color, see handleWaitingImage below) - fit/material/warmth/water_resistance/secondaryColors are
+ * still applied whenever present, just don't affect that decision.
+ */
+export function applyVisionAnalysis(draft: GarmentDraft, analysis: VisionAnalysisResult): void {
+  draft.detectedFields ??= [];
+  if (analysis.type) {
+    draft.type = analysis.type;
+    draft.detectedFields.push('type');
+  }
+  if (analysis.category) {
+    draft.category = analysis.category;
+    draft.detectedFields.push('category');
+  }
+  if (analysis.color) {
+    draft.color = analysis.color;
+    draft.detectedFields.push('color');
+  }
+  if (analysis.secondaryColors.length) draft.secondaryColors = analysis.secondaryColors;
+  if (analysis.pattern) draft.pattern = analysis.pattern;
+  if (analysis.style.length) draft.style = analysis.style;
+  if (analysis.formality) draft.formality = analysis.formality;
+  if (analysis.fit) draft.fit = analysis.fit;
+  if (analysis.material) draft.material = analysis.material;
+  if (analysis.warmth) draft.warmth = analysis.warmth;
+  if (analysis.waterResistance) draft.waterResistance = analysis.waterResistance;
+  if (analysis.neckline) draft.neckline = analysis.neckline;
+  if (analysis.sleeves) draft.sleeves = analysis.sleeves;
+  if (analysis.closure) draft.closure = analysis.closure;
+  if (analysis.pockets) draft.pockets = analysis.pockets;
+  if (analysis.length) draft.length = analysis.length;
+  draft.fieldMeta = analysis.fieldMeta;
+  draft.qualityIssues = analysis.qualityIssues;
+  draft.aiMetadata = analysis.raw;
+  if (analysis.modelName) {
+    draft.analysisModel = analysis.modelName;
+    draft.analysisVersion = ANALYSIS_VERSION;
+    draft.analyzedAt = new Date().toISOString();
+  }
+
+  if (draft.type && draft.category) {
+    draft.shortDescription = buildShortDescription(draft);
+    draft.longDescription = buildLongDescription(draft);
+  }
+}
 
 export function enterAddGarment(userId: number): string {
   fashionSessionsRepo.setState(userId, 'FASHION_ADD_GARMENT_WAITING_IMAGE', {});
@@ -59,25 +149,10 @@ export async function handleWaitingImage(ctx: FashionRouterContext): Promise<Fas
     detectedFields: [],
   };
 
-  const analysis = await httpVisionService.analyze(intake.analysisCopy, candidateLabelsForVision());
+  const analysis = await httpVisionService.analyze(intake.analysisCopy);
   if (analysis) {
     console.log('[FASHION] Prenda analizada para #%d (vision ok).', ctx.userId);
-    if (analysis.type) {
-      draft.type = analysis.type;
-      draft.detectedFields!.push('type');
-    }
-    if (analysis.category) {
-      draft.category = analysis.category;
-      draft.detectedFields!.push('category');
-    }
-    if (analysis.color) {
-      draft.color = analysis.color;
-      draft.detectedFields!.push('color');
-    }
-    if (analysis.pattern) draft.pattern = analysis.pattern;
-    if (analysis.style.length) draft.style = analysis.style;
-    if (analysis.formality) draft.formality = analysis.formality;
-    draft.aiMetadata = analysis.raw;
+    applyVisionAnalysis(draft, analysis);
   } else {
     console.log('[FASHION] Vision no disponible para #%d, sigue manual.', ctx.userId);
   }
@@ -88,10 +163,23 @@ export async function handleWaitingImage(ctx: FashionRouterContext): Promise<Fas
 
   // Vision unavailable or too unsure - manual fallback, cascading type -> category -> color.
   fashionSessionsRepo.setState(ctx.userId, 'FASHION_ADD_GARMENT_MANUAL_TYPE', { draft } satisfies FashionSessionData);
+  const intro = qualityIssueMessage(draft.qualityIssues) ?? 'No pude analizar la foto automáticamente 🙈';
   return {
     consumed: true,
-    reply: `No pude analizar la foto automáticamente 🙈 ¿me cuentas tú qué es?\n\n${renderTypeOptions()}`,
+    reply: `${intro} ¿me cuentas tú qué es?\n\n${renderTypeOptions()}`,
   };
+}
+
+/** A specific, helpful reason instead of the generic "no pude analizarla" when the photo itself was
+ *  flagged before classification even ran (see vision-service/quality.py) - null when nothing was
+ *  flagged, letting the caller fall back to its own generic wording. */
+function qualityIssueMessage(issues: string[] | undefined): string | null {
+  if (!issues?.length) return null;
+  if (issues.includes('too_small')) return 'La foto es muy pequeña para identificar bien la prenda 🙈';
+  if (issues.includes('blurry')) return 'La foto salió borrosa 🙈';
+  if (issues.includes('too_dark')) return 'La foto está muy oscura 🙈';
+  if (issues.includes('too_bright')) return 'La foto está sobreexpuesta (muy clara) 🙈';
+  return null;
 }
 
 export function renderTypeOptions(): string {
@@ -175,14 +263,29 @@ async function finishManualEntry(userId: number, data: FashionSessionData, draft
 function showConfirmation(userId: number, draft: GarmentDraft): string {
   fashionSessionsRepo.setState(userId, 'FASHION_ADD_GARMENT_CONFIRMATION', { draft } satisfies FashionSessionData);
 
-  const categoryLabel =
-    (draft.type ? CATEGORIES_BY_TYPE[draft.type as GarmentType]?.find((c) => c.value === draft.category)?.label : undefined) ??
-    draft.category;
+  const lines: string[] = [];
+  if (draft.longDescription) {
+    lines.push(draft.longDescription, '');
+  } else {
+    const categoryLabel =
+      (draft.type ? CATEGORIES_BY_TYPE[draft.type as GarmentType]?.find((c) => c.value === draft.category)?.label : undefined) ??
+      draft.category;
+    lines.push(`👕 ${categoryLabel ?? '(sin definir)'}`);
+  }
 
-  const lines = ['Detecté:', `👕 ${categoryLabel ?? '(sin definir)'}`];
-  if (draft.color) lines.push(`🎨 Color: ${draft.color}`);
-  if (draft.style?.length) lines.push(`✨ Estilo: ${draft.style.join(', ')}`);
-  if (draft.pattern) lines.push(`🧵 Patrón: ${draft.pattern}`);
+  if (draft.neckline) lines.push(`👔 Cuello: ${draft.neckline.replace(/_/g, ' ')}`);
+  if (draft.sleeves) lines.push(`👕 Mangas: ${draft.sleeves.replace(/_/g, ' ')}`);
+  if (draft.length) lines.push(`📏 Largo: ${draft.length.replace(/_/g, ' ')}`);
+  if (draft.closure) lines.push(`🔘 Cierre: ${draft.closure.replace(/_/g, ' ')}`);
+  if (draft.pockets) lines.push(`👝 Bolsillos: ${draft.pockets.replace(/_/g, ' ')}`);
+
+  const lowConfidenceFields = Object.entries(draft.fieldMeta ?? {}).filter(([, m]) => m.tier === 'baja');
+  if (lowConfidenceFields.length) {
+    lines.push('', '⚠️ Algunos datos son una estimación con confianza baja - corrígelos si algo no cuadra.');
+  }
+  const qualityNote = qualityIssueMessage(draft.qualityIssues);
+  if (qualityNote) lines.push('', `📷 ${qualityNote} Si algo quedó mal detectado, mandá una foto mejor y corrígelo.`);
+
   lines.push('', '1. Sí, guardar así', '2. Corregir algo', '3. Cancelar');
   return lines.join('\n');
 }
@@ -195,20 +298,7 @@ export async function handleConfirmation(ctx: FashionRouterContext): Promise<Fas
   const choice = ctx.text.trim();
 
   if (choice === '1' || /^s(i|í)/i.test(choice)) {
-    const id = garmentsRepo.create(ctx.userId, {
-      publicId: draft.publicId,
-      storageKey: draft.storageKey,
-      imageUrl: draft.imageUrl,
-      thumbnailKey: draft.thumbnailKey,
-      thumbnailUrl: draft.thumbnailUrl,
-      type: draft.type!,
-      category: draft.category!,
-      color: draft.color,
-      pattern: draft.pattern,
-      style: draft.style,
-      formality: draft.formality,
-      aiMetadata: draft.aiMetadata,
-    });
+    const id = garmentsRepo.create(ctx.userId, draftToCreateFields(draft as GarmentDraft & { type: string; category: string }));
     console.log('[FASHION] Prenda #%d guardada para el usuario #%d.', id, ctx.userId);
     fashionSessionsRepo.setState(ctx.userId, 'FASHION_HOME', {});
     return { consumed: true, reply: `✅ Prenda #${id} guardada en tu armario.\n\n${HOME_MENU}` };
