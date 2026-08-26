@@ -45,7 +45,11 @@ const MODE_TOOLS: Record<ModeKey, string[]> = {
   ],
   tareas: ['add_todo', 'list_todos', 'complete_todo', 'delete_todo', 'edit_todo'],
   notas: ['add_note', 'list_notes', 'edit_note', 'delete_note'],
-  contactos: ['add_contact', 'list_contacts', 'edit_contact', 'delete_contact', 'send_message'],
+  // send_message (the proactive USE of the contacts list - "dile a Juan que...") stays in
+  // ALWAYS_ON_TOOLS below, same reasoning as send_sticker in `stickers` further down - only the
+  // MANAGEMENT tools (add/list/edit/delete) live behind this mode. Sending a message shouldn't
+  // require first typing "contactos" and leaving whatever mode you're actually in.
+  contactos: ['add_contact', 'list_contacts', 'edit_contact', 'delete_contact'],
   comidas: ['plan_meal', 'list_meal_plan', 'delete_meal_plan', 'edit_meal_plan'],
   // Separado de "comidas" a pedido explícito del usuario (ver menu.ts's RECETAS category comment) -
   // mismas tools de siempre, solo agrupadas en su propio modo con entrada/salida propia.
@@ -95,6 +99,7 @@ export const ALWAYS_ON_TOOLS = [
   'set_user_permissions',
   'list_available_tools',
   'send_sticker',
+  'send_message',
   'announce_update',
   'set_user_gender',
   'set_voice_gender',
