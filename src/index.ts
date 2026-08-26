@@ -12,7 +12,7 @@ import { usersRepo } from './db/repositories/users.repo.js';
 import { ensureDailyAgendaReminder } from './agent/agenda.js';
 import { ensureWeeklyReportReminder } from './agent/weekly-report.js';
 import { ensureDailyResetReminder } from './agent/daily-reset.js';
-import { ensureDailyDedupReminder } from './agent/dedup.js';
+import { ensureDailyDedupReminder, dedupeAllUsers } from './agent/dedup.js';
 
 quietLibsignalLogs();
 
@@ -40,6 +40,13 @@ async function main() {
     ensureDailyResetReminder(user.id, user.jid);
     ensureDailyDedupReminder(user.id, user.jid);
   }
+
+  // Clean up duplicates for EVERY user on every boot (not just whenever each person's own daily
+  // 4am timer happens to fire) - so a deploy/restart always leaves everyone's data clean right
+  // away, per the user's own "limpia toda la data cada que actualizo en todos los clientes" ask.
+  // Runs before the WhatsApp session connects below, so nothing new can come in and create a fresh
+  // duplicate mid-sweep.
+  await dedupeAllUsers();
 
   // Backfill: every user needs their own panel_token now that the web panel is per-client instead
   // of admin-only (see server/auth.ts). The admin's is seeded from the old single shared

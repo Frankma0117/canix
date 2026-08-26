@@ -4,7 +4,7 @@ import { enterHome, handleHome, HOME_MENU } from './flows/home.flow.js';
 import { enterAddGarment, handleWaitingImage, handleManualType, handleManualCategory, handleManualColor, handleConfirmation } from './flows/add-garment.flow.js';
 import { enterWardrobeList, handleWardrobeList, parseFilterText } from './flows/list-garments.flow.js';
 import { handleGarmentDetail, handleEditSelect, handleEditField } from './flows/edit-garment.flow.js';
-import { handleDeleteConfirm } from './flows/delete-garment.flow.js';
+import { handleDeleteConfirm, enterDeleteAllConfirm, handleDeleteAllConfirm, DELETE_ALL_KEYWORDS } from './flows/delete-garment.flow.js';
 import { enterOutfitRequest, handleOutfitResult, enterMyOutfits, handleMyOutfitsList } from './flows/outfit.flow.js';
 import { enterPdfImport, handlePdfReview } from './flows/add-garment-pdf.flow.js';
 import { isPdfDocument } from './image/pdf-intake.js';
@@ -73,6 +73,13 @@ export async function handleFashionMessage(ctx: FashionRouterContext): Promise<F
   if (PROFILE_PHOTO_KEYWORDS.includes(textLower)) {
     if (session.state === 'FASHION_IDLE') messagesRepo.clear(ctx.userId); // entering fresh - see the idle-entry block below for why
     return { consumed: true, reply: enterProfilePhoto(ctx.userId) };
+  }
+
+  // Wiping the whole wardrobe (see delete-garment.flow.ts) - same "works anytime" reasoning, enters
+  // Fashion Mode from idle if needed so the confirmation step below has a session to live in.
+  if (DELETE_ALL_KEYWORDS.includes(textLower)) {
+    if (session.state === 'FASHION_IDLE') messagesRepo.clear(ctx.userId);
+    return { consumed: true, reply: enterDeleteAllConfirm(ctx.userId) };
   }
 
   // A PDF is unambiguous - nothing else in this bot does anything with one, so it's routed here
@@ -153,6 +160,8 @@ async function dispatch(state: FashionState, ctx: FashionRouterContext): Promise
       return handleEditField(ctx);
     case 'FASHION_DELETE_CONFIRM':
       return handleDeleteConfirm(ctx);
+    case 'FASHION_DELETE_ALL_CONFIRM':
+      return handleDeleteAllConfirm(ctx);
     case 'FASHION_OUTFIT_RESULT':
       return handleOutfitResult(ctx);
     case 'FASHION_MY_OUTFITS_LIST':

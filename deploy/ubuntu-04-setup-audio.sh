@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Descarga y deja listo todo lo que canix necesita para transcribir notas de voz (Vosk) y
-# responder con audio (Piper) - ambos locales, sin IA/tokens - y escribe las 3 variables
-# resultantes directo en .env, sin pasos manuales. Correr despues de ubuntu-02-deploy.sh (necesita
-# /opt/canix ya instalado, con .env ya creado). Seguro de re-correr: si algo ya esta descargado (o
-# la variable en .env ya tiene el valor correcto), lo omite.
+# responder con audio (Piper) - ambos locales, sin IA/tokens - y escribe las 4 variables
+# resultantes directo en .env, sin pasos manuales. Descarga DOS voces de Piper (masculina por
+# defecto + femenina) para que set_voice_gender ("quiero voz de mujer") funcione sin pasos
+# manuales extra - ver README > Audio. Correr despues de ubuntu-02-deploy.sh (necesita /opt/canix
+# ya instalado, con .env ya creado). Seguro de re-correr: si algo ya esta descargado (o la variable
+# en .env ya tiene el valor correcto), lo omite.
 set -euo pipefail
 
 # unzip no viene instalado por defecto en varias imagenes minimas de Ubuntu (curl casi siempre
@@ -32,6 +34,12 @@ VOSK_MODEL_DIR="$APP_DIR/models/vosk-es"
 
 PIPER_VOICE="es_ES-davefx-medium"
 PIPER_VOICE_URL_BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/davefx/medium"
+# Voz femenina (español, Argentina - la voz femenina en español mejor valorada del catálogo de
+# Piper) para PIPER_VOICE_PATH_FEMALE - ver set-voice-gender.tool.ts / README > Audio. Si preferís
+# otro acento, cambiá estas dos variables por cualquier otra voz de
+# https://huggingface.co/rhasspy/piper-voices (carpeta es/) y volvé a correr el script.
+PIPER_VOICE_FEMALE="es_AR-daniela-high"
+PIPER_VOICE_FEMALE_URL_BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_AR/daniela/high"
 PIPER_DIR="$APP_DIR/bin/piper"
 
 # Upsert de KEY=VALUE en .env - reemplaza la linea si ya existe (config manual previa, o un
@@ -101,10 +109,26 @@ fi
 set_env_var PIPER_VOICE_PATH "$voice_path"
 
 echo ""
-echo "== .env actualizado (VOSK_MODEL_PATH, PIPER_BIN_PATH$([ "$piper_ok" = true ] || echo ' [omitido, ver arriba]'), PIPER_VOICE_PATH) =="
+echo "== Voz femenina de Piper ($PIPER_VOICE_FEMALE) =="
+voice_female_path="$APP_DIR/models/piper-voices/$PIPER_VOICE_FEMALE.onnx"
+if [ -f "$voice_female_path" ]; then
+  echo "Ya existe la voz, omito descarga."
+else
+  curl -fL -o "$voice_female_path" "$PIPER_VOICE_FEMALE_URL_BASE/$PIPER_VOICE_FEMALE.onnx"
+  curl -fL -o "$voice_female_path.json" "$PIPER_VOICE_FEMALE_URL_BASE/$PIPER_VOICE_FEMALE.onnx.json"
+  echo "Listo: $voice_female_path"
+fi
+set_env_var PIPER_VOICE_PATH_FEMALE "$voice_female_path"
+
+echo ""
+echo "== .env actualizado (VOSK_MODEL_PATH, PIPER_BIN_PATH$([ "$piper_ok" = true ] || echo ' [omitido, ver arriba]'), PIPER_VOICE_PATH, PIPER_VOICE_PATH_FEMALE) =="
 if [ "$piper_ok" = true ]; then
-  echo "Todo quedo configurado. Reinicia el bot para que tome los valores nuevos:"
+  echo "Todo quedo configurado, con voz masculina (por defecto) y femenina listas. Reinicia el bot"
+  echo "para que tome los valores nuevos:"
   echo "  sudo systemctl restart canix   # o: pm2 restart cania"
+  echo ""
+  echo "Cada usuario elige su voz escribiendole al bot algo como \"quiero que me hables con voz de"
+  echo "mujer\" (usa la tool set_voice_gender) - no hace falta tocar el .env de nuevo para eso."
 else
   echo "Falta el binario de Piper (ver arriba) - una vez que lo tengas en $PIPER_DIR, corre este"
   echo "script de nuevo para que termine de escribir PIPER_BIN_PATH y reinicia el bot."

@@ -82,6 +82,12 @@ export const usersRepo = {
     db.prepare('UPDATE users SET gender = ? WHERE id = ?').run(gender, id);
   },
 
+  /** Stores this person's preferred TTS voice for voice-note replies (see set-voice-gender.tool.ts
+   *  and audio/tts.ts) - independent from setGender() above, which is grammatical, not audio. */
+  setVoiceGender(id: number, voiceGender: 'male' | 'female'): void {
+    db.prepare('UPDATE users SET voice_gender = ? WHERE id = ?').run(voiceGender, id);
+  },
+
   /** Parses a user's allowed_tools column. Null means unrestricted (every tool available). */
   getAllowedTools(user: User): string[] | null {
     if (!user.allowed_tools) return null;

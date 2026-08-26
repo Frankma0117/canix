@@ -49,8 +49,10 @@ simplificada para uso personal: sin multi-negocio, con SQLite en vez de MySQL.
   (`schedule_flexible_reminder`), para que no se sienta mecánico.
 - 🏆 **Premios y castigos**: te los pones tú mismo ligados a tus rutinas ("si cumplo la semana me
   premio con...") y quedan registrados, por chat o desde el panel.
-- 🎙️ **Notas de voz**: si le mandas un audio, lo transcribe localmente (Vosk, sin IA/tokens) y
-  te responde en texto y también con nota de voz (Piper, también local) — ver sección "Audio" más abajo.
+- 🎙️ **Notas de voz**: si le mandas un audio, lo transcribe localmente (Vosk, sin IA/tokens) y te
+  responde solo con nota de voz (Piper, también local) — sin texto, salvo que Piper no esté
+  configurado. Cada quien elige su voz (masculina/femenina, si el servidor tiene ambas) con
+  `set_voice_gender` — ver sección "Audio" más abajo.
 - 👥 **Multi-usuario**: le das acceso a alguien con `grant_access` ("dale acceso a 573001234567
   como Juan") y desde ahí tiene su propio bot — sus recordatorios, rutinas, contactos, links,
   categorías, todo separado del tuyo. Se lo quitas con `revoke_access`.
@@ -151,7 +153,8 @@ Todo lo demás no necesita comando - simplemente pedíselo al bot hablando norma
 - "Si cumplo la rutina de ejercicio toda la semana me premio con salir a cine" (premio ligado a rutina)
 - "Borra la rutina de ejercicio" / "elimina el contacto de Ana" / "borra esa categoría" (eliminar)
 - "Dale acceso a 573001234567 como Juan" (solo el admin — ver "Multi-usuario")
-- Mándale una nota de voz — la transcribe y te responde en texto + audio.
+- Mándale una nota de voz — la transcribe y te responde solo con audio (texto solo si Piper no está configurado).
+- "Quiero voz de mujer" / "cambia a voz masculina" — cambia la voz con la que te responde (`set_voice_gender`, ver sección "Audio").
 
 ## Multi-usuario
 
@@ -207,9 +210,14 @@ ninguna IA ni gastar tokens — son dos programas aparte que corren en tu propio
 - **Transcripción (Vosk)**: cuando mandas una nota de voz, se descarga, se convierte a PCM16
   16kHz con `ffmpeg` (incluido vía `ffmpeg-static`, no hace falta instalarlo aparte) y se pasa a
   un modelo de [Vosk](https://alphacephei.com/vosk/models) cargado localmente.
-- **Respuesta por voz (Piper)**: si te respondió a una nota de voz, además del texto intenta
-  generar una nota de voz con [Piper](https://github.com/rhasspy/piper) (voz neuronal offline,
-  bastante natural) y convertirla a ogg/opus para WhatsApp.
+- **Respuesta por voz (Piper)**: si le preguntaste por nota de voz, te responde SOLO con nota de
+  voz (sin el texto también) generada con [Piper](https://github.com/rhasspy/piper) (voz neuronal
+  offline, bastante natural) y convertida a ogg/opus para WhatsApp. Si Piper no está configurado o
+  falla, cae de vuelta al texto para que la respuesta nunca se pierda.
+- **Voz masculina/femenina**: podés configurar dos voces de Piper a la vez (`PIPER_VOICE_PATH` =
+  por defecto, `PIPER_VOICE_PATH_FEMALE` = opcional) y cada usuario elige cuál usar diciendo algo
+  como "quiero voz de mujer" (tool `set_voice_gender`, admin puede cambiarla por otro con
+  `target_user`). Si la femenina no está configurada, se sigue usando la voz por defecto.
 
 Ambas son **opcionales y se degradan solas**: si no configuras el modelo/binario, esa función
 simplemente queda desactivada (el bot te pide texto en vez de transcribir; responde solo en texto
@@ -240,7 +248,9 @@ audio (en ese caso reinicia el bot vos mismo al final, el script te lo recuerda)
    junto al ejecutable, no muevas solo el binario). Descarga una voz en español (par de archivos
    `.onnx` + `.onnx.json`) de https://huggingface.co/rhasspy/piper-voices — por ejemplo
    `es_ES-davefx-medium`. Define `PIPER_BIN_PATH` (ruta al ejecutable `piper` dentro de la carpeta
-   descomprimida) y `PIPER_VOICE_PATH` (ruta al `.onnx`) en tu `.env`.
+   descomprimida) y `PIPER_VOICE_PATH` (ruta al `.onnx`) en tu `.env`. Opcionalmente descarga una
+   segunda voz (otra `.onnx` en español) y apunta `PIPER_VOICE_PATH_FEMALE` ahí para ofrecer voz
+   femenina además de la de por defecto — ver "Voz masculina/femenina" arriba.
 
 ## Fashion Mode (armario y outfits)
 
@@ -555,7 +565,8 @@ reducen mucho ese riesgo:
 | `PANEL_URL` | URL pública del panel (opcional, solo para el mensaje de bienvenida a nuevos usuarios) | — |
 | `VOSK_MODEL_PATH` | Carpeta del modelo de Vosk (transcripción de audios). Ver sección Audio | `./models/vosk-es` |
 | `PIPER_BIN_PATH` | Ruta al binario de Piper (respuesta por voz). Vacío = desactivado | — |
-| `PIPER_VOICE_PATH` | Ruta al modelo de voz `.onnx` de Piper | — |
+| `PIPER_VOICE_PATH` | Ruta al modelo de voz `.onnx` de Piper (voz por defecto) | — |
+| `PIPER_VOICE_PATH_FEMALE` | Ruta a una segunda voz `.onnx` (femenina, opcional). Vacío = todos usan la de arriba | — |
 | `FASHION_MODE_ENABLED` | Interruptor del módulo Fashion Mode. En `false`, el bot se comporta exactamente igual que sin este módulo | `false` |
 | `FASHION_MAX_IMAGE_SIZE_MB` | Tamaño máximo aceptado para una foto de prenda | `8` |
 | `FASHION_MAX_PDF_SIZE_MB` | Tamaño máximo aceptado para un PDF de importación en lote | `15` |

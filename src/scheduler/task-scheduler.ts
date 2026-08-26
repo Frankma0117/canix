@@ -1,4 +1,5 @@
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
+import { usersRepo } from '../db/repositories/users.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { messagesRepo } from '../db/repositories/messages.repo.js';
 import { stickersRepo } from '../db/repositories/stickers.repo.js';
@@ -6,7 +7,7 @@ import { processDueCallReminders } from '../calls/call-reminders.service.js';
 import { nowLocal, addMinutes, addMonths, addDays, addSeconds, dateOnly, randomTimeOnDate } from '../util/datetime.js';
 import { buildAgendaMessage } from '../agent/agenda.js';
 import { buildWeeklyReportMessage } from '../agent/weekly-report.js';
-import { dedupeUser } from '../agent/dedup.js';
+import { dedupeUser, summaryTotal, summaryLine } from '../agent/dedup.js';
 import { plainReminderPrefix } from '../util/motivational.js';
 import { synthesizeVoiceNote } from '../audio/tts.js';
 import type { WaManager } from '../whatsapp/wa-manager.js';
@@ -255,14 +256,9 @@ export class TaskScheduler {
       messagesRepo.clear(reminder.user_id);
       console.log('[SCHEDULER] Historial de conversación reiniciado para el usuario #%d.', reminder.user_id);
     } else if (reminder.kind === 'daily_dedup') {
-      const { routinesMerged, remindersRemoved } = dedupeUser(reminder.user_id);
-      if (routinesMerged || remindersRemoved) {
-        console.log(
-          '[SCHEDULER] Usuario #%d: %d rutina(s) fusionada(s), %d recordatorio(s) duplicado(s) eliminado(s).',
-          reminder.user_id,
-          routinesMerged,
-          remindersRemoved,
-        );
+      const summary = await dedupeUser(reminder.user_id);
+      if (summaryTotal(summary) > 0) {
+        console.log('[SCHEDULER] Usuario #%d: %s.', reminder.user_id, summaryLine(summary));
       }
     }
   }
@@ -289,7 +285,8 @@ export class TaskScheduler {
       console.log('[SCHEDULER] Recordatorio por intervalo #%d enviado a %s (%s).', reminder.id, target, counter);
 
       if (reminder.with_audio) {
-        const voice = await synthesizeVoiceNote(text).catch(() => null);
+        const voiceGender = usersRepo.getById(reminder.user_id)?.voice_gender;
+        const voice = await synthesizeVoiceNote(text, voiceGender).catch(() => null);
         if (voice) await this.wa.sendAudio(target, voice).catch(() => {});
       }
     } catch (err) {

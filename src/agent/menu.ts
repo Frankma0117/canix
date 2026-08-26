@@ -33,7 +33,7 @@ const NAV_FOOTER = '\n\n↩️ /menu - volver al menú principal';
  *  in the menu below without an import cycle - modes.ts imports THIS constant, not the reverse.
  *  'stickers' lives outside CORE_CATEGORIES (see STICKERS_CATEGORY below, admin-gated like fashion/
  *  admin) but is still a real mode key - modes.ts merges the two when resolving mode entry. */
-export const MODE_KEYS = ['rutinas', 'tareas', 'notas', 'contactos', 'comidas', 'premios', 'resumenes', 'stickers'] as const;
+export const MODE_KEYS = ['rutinas', 'tareas', 'notas', 'contactos', 'comidas', 'recetas', 'premios', 'resumenes', 'stickers'] as const;
 
 /** Also the source of truth for which categories can become a special mode (see agent/modes.ts) -
  *  reuses these same keys/aliases/detail text so the /menu screen and the mode-entry command never
@@ -128,19 +128,34 @@ export const CORE_CATEGORIES: MenuCategory[] = [
     key: 'comidas',
     number: 7,
     emoji: '🍽️',
-    title: 'Comidas y recetas',
-    short: 'Planeá qué comer, guardá recetas y pedí sugerencias según lo que tengas.',
-    aliases: ['comida', 'comidas', 'receta', 'recetas'],
+    title: 'Comidas',
+    short: 'Planeá qué comer por fecha y tipo de comida (desayuno/almuerzo/cena).',
+    aliases: ['comida', 'comidas'],
     detail:
-      `🍽️ *Comidas y recetas*\n\n` +
+      `🍽️ *Comidas*\n\n` +
       `- Planear qué comer por fecha y tipo de comida (desayuno/almuerzo/cena)\n` +
-      `- Editar el plan\n` +
+      `- Editar el plan`,
+  },
+  // Separada de "comidas" (antes vivían juntas) a pedido explícito del usuario - dos conceptos
+  // distintos (planear qué comer un día puntual vs. una biblioteca de recetas que consultás cuando
+  // quieras) que se sentían mezclados en un solo modo. Reusa exactamente las mismas tools
+  // (save_recipe/list_recipes/get_recipe/delete_recipe, ver modes.ts) - solo cambió el agrupamiento.
+  {
+    key: 'recetas',
+    number: 8,
+    emoji: '📖',
+    title: 'Recetas',
+    short: 'Guardá tus recetas y pedí sugerencias según los ingredientes que tengas.',
+    aliases: ['receta', 'recetas'],
+    detail:
+      `📖 *Recetas*\n\n` +
       `- Guardar y consultar tus recetas\n` +
-      `- Pedir una sugerencia según ingredientes que tengas`,
+      `- Pedir una sugerencia según ingredientes que tengas\n` +
+      `- Editar o eliminar`,
   },
   {
     key: 'premios',
-    number: 8,
+    number: 9,
     emoji: '🏆',
     title: 'Premios y castigos',
     short: 'Registrá los que te pongas, ligados a tus hábitos y rutinas.',
@@ -152,7 +167,7 @@ export const CORE_CATEGORIES: MenuCategory[] = [
   },
   {
     key: 'resumenes',
-    number: 9,
+    number: 10,
     emoji: '📊',
     title: 'Resúmenes automáticos',
     short: 'Agenda cada mañana y reporte semanal, o pedilos cuando quieras.',
@@ -165,7 +180,7 @@ export const CORE_CATEGORIES: MenuCategory[] = [
   },
   {
     key: 'panel',
-    number: 10,
+    number: 11,
     emoji: '🌐',
     title: 'Panel web',
     short: 'Tu propio panel con token personal - pedime que te lo reenvíe si lo perdés.',
@@ -277,7 +292,8 @@ export function renderMainMenu(access: MenuAccess): string {
 
   for (const cat of CORE_CATEGORIES) {
     const modeHint = isModeCategory(cat.key) ? ` - escribe "${cat.aliases[0]}" para entrar` : '';
-    lines.push(`${NUMBER_EMOJI[(cat.number ?? 1) - 1]} ${cat.emoji} *${cat.title}*${modeHint}`);
+    const number = cat.number ?? 1;
+    lines.push(`${NUMBER_EMOJI[number - 1] ?? `${number}.`} ${cat.emoji} *${cat.title}*${modeHint}`);
     lines.push(`     ${cat.short}`);
   }
   if (access.callsEnabled) {

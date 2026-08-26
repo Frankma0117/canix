@@ -60,9 +60,14 @@ export const env = {
     // Local text-to-speech (Piper) for voice replies - also no AI/tokens. Download a binary from
     // https://github.com/rhasspy/piper/releases and a Spanish voice (.onnx + .onnx.json) from
     // https://huggingface.co/rhasspy/piper-voices. Voice replies are silently skipped if unset/missing.
+    // Two voice models can be configured side by side (PIPER_VOICE_PATH = male/default,
+    // PIPER_VOICE_PATH_FEMALE = female) - each user picks which one speaks their replies via the
+    // set_voice_gender tool (see set-voice-gender.tool.ts); PIPER_VOICE_PATH_FEMALE is optional, if
+    // unset every reply just uses the default voice regardless of preference (see audio/tts.ts).
     piper: {
       binPath: process.env.PIPER_BIN_PATH ?? '',
       voicePath: process.env.PIPER_VOICE_PATH ?? '',
+      voicePathFemale: process.env.PIPER_VOICE_PATH_FEMALE ?? '',
     },
   },
 

@@ -46,16 +46,10 @@ const MODE_TOOLS: Record<ModeKey, string[]> = {
   tareas: ['add_todo', 'list_todos', 'complete_todo', 'delete_todo', 'edit_todo'],
   notas: ['add_note', 'list_notes', 'edit_note', 'delete_note'],
   contactos: ['add_contact', 'list_contacts', 'edit_contact', 'delete_contact', 'send_message'],
-  comidas: [
-    'plan_meal',
-    'list_meal_plan',
-    'delete_meal_plan',
-    'edit_meal_plan',
-    'save_recipe',
-    'list_recipes',
-    'get_recipe',
-    'delete_recipe',
-  ],
+  comidas: ['plan_meal', 'list_meal_plan', 'delete_meal_plan', 'edit_meal_plan'],
+  // Separado de "comidas" a pedido explícito del usuario (ver menu.ts's RECETAS category comment) -
+  // mismas tools de siempre, solo agrupadas en su propio modo con entrada/salida propia.
+  recetas: ['save_recipe', 'list_recipes', 'get_recipe', 'delete_recipe'],
   premios: ['register_reward_punishment', 'list_rewards_punishments', 'delete_reward_punishment'],
   resumenes: ['get_today_agenda', 'get_week_report'],
   // send_sticker (the proactive USE of a sticker) stays in ALWAYS_ON_TOOLS below - only the
@@ -103,6 +97,7 @@ export const ALWAYS_ON_TOOLS = [
   'send_sticker',
   'announce_update',
   'set_user_gender',
+  'set_voice_gender',
   'set_fashion_profile',
 ];
 

@@ -374,17 +374,25 @@ export class BotManager {
       );
       console.log('[BOT] Respuesta final a #%d: "%s"', user.id, reply.length > 200 ? `${reply.slice(0, 200)}…` : reply);
       await sleep(typingDelayMs(reply));
-      await this.wa.sendText(jid, reply);
 
       if (fromAudio) {
-        // Also try a voice reply (local TTS, no AI/tokens - see audio/tts.ts). Best-effort - if
-        // Piper isn't configured, the text reply above stands alone and nothing else happens.
-        const voice = await synthesizeVoiceNote(reply).catch(() => null);
+        // Asked by voice -> answer with voice only, no text (see audio/tts.ts), using this
+        // person's preferred voice (set_voice_gender). Piper is local/best-effort though: if it
+        // isn't configured or synthesis fails, fall back to the text reply so the answer isn't
+        // lost - never send both when the voice note actually went out.
+        const voice = await synthesizeVoiceNote(reply, user.voice_gender).catch(() => null);
         if (voice) {
-          await this.wa.sendAudio(jid, voice).catch((err) => {
+          try {
+            await this.wa.sendAudio(jid, voice);
+          } catch (err) {
             console.error('[BOT] Error enviando nota de voz:', (err as Error).message);
-          });
+            await this.wa.sendText(jid, reply);
+          }
+        } else {
+          await this.wa.sendText(jid, reply);
         }
+      } else {
+        await this.wa.sendText(jid, reply);
       }
     } catch (err) {
       console.error('[BOT] Error inesperado manejando mensaje de %s:', jid, (err as Error).message);

@@ -450,6 +450,13 @@ export function initSchema(): void {
   // same reasoning as role/active_mode above - SQLite can't add one to an existing table via ALTER.
   ensureColumn('users', 'gender', 'gender TEXT');
 
+  // 'male'/'female'/NULL (not yet set - falls back to whichever voice PIPER_VOICE_PATH points at,
+  // see audio/tts.ts). Independent from `gender` above: that one is grammatical (how the AI talks
+  // TO you), this one is which TTS voice model is used to speak replies back. Set via
+  // set_voice_gender (self, or admin on behalf of another granted user, same pattern as
+  // set_user_gender). Validated at the application layer, same reasoning as gender above.
+  ensureColumn('users', 'voice_gender', 'voice_gender TEXT');
+
   // Deeper garment attributes (see taxonomy.ts's candidateLabelsForVisionPass2 / NECKLINES/SLEEVES/
   // LENGTHS/CLOSURES/POCKETS) - only auto-detected for garment types where they're visually
   // meaningful (see fashion/vision/http-vision.service.ts), so a NULL here can mean either "not

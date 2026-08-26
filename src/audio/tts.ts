@@ -8,6 +8,7 @@ import { env } from '../config/env.js';
 import { wavToOggOpus } from './ffmpeg.js';
 
 let unavailableLogged = false;
+let femaleUnavailableLogged = false;
 
 // Emoji/pictographs (👍🎉📞 etc.) plus the invisible joiner/variation-selector/keycap codepoints
 // that ride along with compound ones (needed for things like the "1️⃣" digit-in-a-box emoji used in
@@ -36,8 +37,30 @@ function sanitizeForSpeech(text: string): string {
     .trim();
 }
 
-function piperReady(): boolean {
-  const { binPath, voicePath } = env.audio.piper;
+/**
+ * Picks which Piper voice model file to use for this reply, based on the user's stored
+ * preference (see users.voice_gender / set-voice-gender.tool.ts). 'female' only wins when
+ * PIPER_VOICE_PATH_FEMALE is actually configured and exists - otherwise (unset, missing file, or
+ * no preference/'male') this silently falls back to the default PIPER_VOICE_PATH, so a caller
+ * never needs to branch on whether the female voice happens to be set up.
+ */
+function resolveVoicePath(voiceGender: 'male' | 'female' | null | undefined): string {
+  const { voicePath, voicePathFemale } = env.audio.piper;
+  if (voiceGender === 'female') {
+    if (voicePathFemale && existsSync(voicePathFemale)) return voicePathFemale;
+    if (!femaleUnavailableLogged) {
+      console.log(
+        '[TTS] Se pidio voz femenina pero PIPER_VOICE_PATH_FEMALE no esta configurado o no existe - ' +
+          'uso la voz por defecto. Descarga una voz en espanol de https://huggingface.co/rhasspy/piper-voices.',
+      );
+      femaleUnavailableLogged = true;
+    }
+  }
+  return voicePath;
+}
+
+function piperReady(voicePath: string): boolean {
+  const { binPath } = env.audio.piper;
   if (!binPath || !voicePath || !existsSync(binPath) || !existsSync(voicePath)) {
     if (!unavailableLogged) {
       console.log(
@@ -52,9 +75,9 @@ function piperReady(): boolean {
   return true;
 }
 
-function runPiper(text: string, outFile: string): Promise<void> {
+function runPiper(text: string, voicePath: string, outFile: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const { binPath, voicePath } = env.audio.piper;
+    const { binPath } = env.audio.piper;
     const proc = spawn(binPath, ['--model', voicePath, '--output_file', outFile]);
     const errChunks: Buffer[] = [];
     proc.stderr.on('data', (c: Buffer) => errChunks.push(c));
@@ -70,17 +93,25 @@ function runPiper(text: string, outFile: string): Promise<void> {
 
 /**
  * Synthesizes text into a WhatsApp-ready voice note (ogg/opus) using a local Piper voice - no
- * AI/tokens involved. Returns null when Piper isn't installed/configured; this is always a
- * best-effort extra on top of the text reply, never something a caller should block on.
+ * AI/tokens involved. `voiceGender` picks which voice model to speak with (see
+ * resolveVoicePath()) - pass a user's stored `voice_gender` (users.repo.ts); omit/null for the
+ * default voice. Returns null when Piper isn't installed/configured; callers that only ever show
+ * a voice note as an extra on top of a text reply should treat this as best-effort and never block
+ * on it - but see bot-manager.ts, where a voice-in question replies with voice-ONLY and only falls
+ * back to text when this returns null.
  */
-export async function synthesizeVoiceNote(text: string): Promise<Buffer | null> {
-  if (!piperReady()) return null;
+export async function synthesizeVoiceNote(
+  text: string,
+  voiceGender?: 'male' | 'female' | null,
+): Promise<Buffer | null> {
+  const voicePath = resolveVoicePath(voiceGender);
+  if (!piperReady(voicePath)) return null;
   const trimmed = sanitizeForSpeech(text);
   if (!trimmed) return null;
 
   const outFile = join(tmpdir(), `canix-tts-${randomUUID()}.wav`);
   try {
-    await runPiper(trimmed, outFile);
+    await runPiper(trimmed, voicePath, outFile);
     const wav = await readFile(outFile);
     return await wavToOggOpus(wav);
   } catch (err) {

@@ -86,8 +86,15 @@ export const sendMessageTool: Tool = {
     }
 
     // First time writing to a raw number that worked - save it as a contact so it's easy to
-    // reach again by name/number next time, instead of a one-off.
-    if (isNewRawNumber) {
+    // reach again by name/number next time, instead of a one-off. IMPORTANT: only when this jid
+    // truly has no contact yet. `isNewRawNumber` only means "not found by NAME" - searching by name
+    // with a string of digits as the query can never match a real name, so this branch is reached
+    // for EVERY raw-number send, including one to someone who already has a properly-named contact
+    // (found some other way, e.g. picked from a shared vCard). Upserting there unconditionally used
+    // to silently rename that contact to the raw digits - contacts.repo.ts's upsert() always
+    // overwrites `name` on conflict, and this was called with `to` (the raw phone string) as the
+    // name every single time. Checking for an existing row by jid first is what actually fixes it.
+    if (isNewRawNumber && !contactsRepo.getByJid(ctx.userId, targetJid)) {
       contactsRepo.upsert(ctx.userId, to, targetJid, null);
     }
 

@@ -33,6 +33,10 @@ export interface User {
   // comment for why this exists as its own stored field instead of re-inferred from the name/context
   // on every turn.
   gender: 'male' | 'female' | null;
+  // 'male'/'female'/NULL (not set, falls back to the default Piper voice) - which TTS voice reads
+  // voice-note replies back to this person. See set-voice-gender.tool.ts / audio/tts.ts. Separate
+  // from `gender` above (that's grammatical, this is audio).
+  voice_gender: 'male' | 'female' | null;
   created_at: string;
 }
 
