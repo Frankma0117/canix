@@ -12,6 +12,12 @@ export const env = {
   // ver ensureDailyAgendaReminder() en agent/agenda.ts.
   morningSummaryTime: process.env.MORNING_SUMMARY_TIME ?? '06:30',
 
+  // Hora (0-23, en TIMEZONE) a partir de la cual completar la última tarea/rutina pendiente del día
+  // dispara la despedida de "buenas noches" (ver agent/agenda.ts's maybeNightFarewell) - antes de
+  // esta hora, terminar todo temprano no dispara la despedida (ej. terminar todo a las 10am no es
+  // "buenas noches").
+  nightSummaryAfterHour: parseInt(process.env.NIGHT_SUMMARY_AFTER_HOUR ?? '18', 10),
+
   // Día y hora (en TIMEZONE) del reporte semanal automático - ver ensureWeeklyReportReminder() en
   // agent/weekly-report.ts. Día: 0=domingo .. 6=sábado (igual convención que weekdayName()/parseWall).
   weeklyReportDay: parseInt(process.env.WEEKLY_REPORT_DAY ?? '0', 10),

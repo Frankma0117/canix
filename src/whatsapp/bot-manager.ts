@@ -38,6 +38,11 @@ const ERROR_REPLY =
   '⚠️ Tuve un problema técnico procesando tu mensaje. Ya quedó registrado, intenta de nuevo en un ' +
   'momento - si te sigue pasando seguido, avísale al administrador.';
 
+/** Matches a short, unambiguous reply to the "¿eres hombre o mujer?" onboarding question - group 3
+ *  is the actual word. Deliberately whole-message-only (never mid-sentence) so normal conversation
+ *  that happens to contain "hombre"/"mujer" is never mistaken for answering it. */
+const GENDER_REPLY_RE = /^(?:soy\s+)?(?:un\s+|una\s+)?(hombre|mujer|male|female|masculino|femenino)$/i;
+
 const RESET_ALL_WARNING =
   '⚠️ Esto borra TODO tu contenido: recordatorios, rutinas, contactos, links, notas, categorías, ' +
   'premios/castigos e historial de chat - no se puede deshacer (tu acceso al bot no se toca). ' +
@@ -159,6 +164,18 @@ export class BotManager {
         // install - the token is printed here too, at the moment it's actually created, so a
         // first-time setup always sees it somewhere.
         console.log('[AUTH] Token de acceso del administrador: %s', panelToken);
+
+        // One-shot onboarding question (the user's own ask) instead of silently guessing from the
+        // name or never asking at all - answered by the short-reply interceptor further down
+        // ("hombre"/"mujer"), which sets both the grammatical gender AND the default voice together.
+        await this.wa
+          .sendText(
+            admin.jid,
+            '👋 ¡Hola! Soy Canix, tu asistente virtual. Antes de arrancar: ¿eres hombre o mujer? Así te ' +
+              'hablo en el género correcto y uso la voz que corresponde en las notas de voz (respóndeme ' +
+              'solo "hombre" o "mujer").',
+          )
+          .catch(() => {});
       }
 
       let user = usersRepo.getByJidOrLid(phoneJid) ?? usersRepo.getByJidOrLid(jid);
@@ -205,6 +222,27 @@ export class BotManager {
         stickersRepo.setLabel(pendingSticker.id, label);
         console.log('[STICKER] Sticker #%d etiquetado como "%s".', pendingSticker.id, label);
         await this.wa.sendText(jid, `✅ Guardado como "${label}" - lo uso cuando calce en la conversación, sin que me lo pidas.`);
+        return;
+      }
+
+      // Answer to the onboarding "¿eres hombre o mujer?" question (sent on first contact - see the
+      // admin-bootstrap block above and grant_access.tool.ts) - a short, unambiguous reply, handled
+      // here deterministically (zero AI tokens) instead of leaving it to the AI's own set_user_gender
+      // tool, which by design only infers it from an unambiguous NAME and otherwise stays neutral.
+      // Also fires for anyone who never got asked but just says it unprompted. Sets both the
+      // grammatical gender AND (if not already chosen) the voice for notes, together, in one answer.
+      if (!user.gender && GENDER_REPLY_RE.test(command)) {
+        const word = command.match(GENDER_REPLY_RE)![1].toLowerCase();
+        const gender: 'male' | 'female' = word === 'mujer' || word === 'female' || word === 'femenino' ? 'female' : 'male';
+        usersRepo.setGender(user.id, gender);
+        if (!user.voice_gender) usersRepo.setVoiceGender(user.id, gender);
+        console.log('[BOT] Usuario #%d fijó su género como "%s" (respuesta corta).', user.id, gender);
+        await this.wa.sendText(
+          jid,
+          gender === 'female'
+            ? '✅ Listo, te hablo en femenino y uso voz de mujer en las notas de voz (puedes pedirme cambiar la voz cuando quieras).'
+            : '✅ Listo, te hablo en masculino y uso voz de hombre en las notas de voz (puedes pedirme cambiar la voz cuando quieras).',
+        );
         return;
       }
 

@@ -76,6 +76,10 @@ async def analyze(image: UploadFile = File(...), labels: str = Form(...)) -> JSO
     for group_def in groups:
         group = group_def.get("group")
         values = group_def.get("values") or []
+        # Optional natural-language English phrase per value, aligned by index - see
+        # model.py's docstring for why (bare taxonomy slugs are weak CLIP text prompts).
+        # Ignored (falls back to the old behavior) if missing or length-mismatched.
+        prompts = group_def.get("prompts") or None
         if not group or not values:
             continue
 
@@ -91,7 +95,7 @@ async def analyze(image: UploadFile = File(...), labels: str = Form(...)) -> JSO
                 result["secondary_color"] = {"value": sec_name, "confidence": sec_confidence}
             continue
 
-        scored = model.classify_group(pil_image, values)
+        scored = model.classify_group(pil_image, values, prompts)
         if not scored:
             continue
 
@@ -102,6 +106,16 @@ async def analyze(image: UploadFile = File(...), labels: str = Form(...)) -> JSO
         else:
             top_value, top_conf = scored[0]
             result[group] = {"value": top_value, "confidence": round(top_conf, 4)}
+            if group == "type":
+                # Always alongside the single top pick above (never replacing it, for backward
+                # compatibility with any caller still only reading result["type"]) - lets the Node
+                # side retry pass 2's category classification against the runner-up type when the
+                # top one didn't clear its own confidence floor, instead of giving up entirely (see
+                # http-vision.service.ts's analyze() and taxonomy.ts's VISION_PROMPTS comment for
+                # why type-only confidence used to leave BOTTOM garments with zero category, ever).
+                result["type_candidates"] = [
+                    {"value": v, "confidence": round(c, 4)} for v, c in scored[:2]
+                ]
 
     elapsed_ms = round((time.monotonic() - started) * 1000)
     logger.info(

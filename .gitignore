@@ -24,3 +24,4 @@ bin/
 # commitear" y se niega a hacer git pull en cualquier corrida futura.
 vision-service/.venv/
 vision-service/.cache/
+vision-service/__pycache__/

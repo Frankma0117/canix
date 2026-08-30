@@ -63,7 +63,9 @@ export const grantAccessTool: Tool = {
         jid,
         `¡Hola ${user.name}! Soy Canix, tu asistente virtual 🤖 Ya tienes acceso: te ayudo con recordatorios, ` +
           `tareas, rutinas y hábitos, links guardados por categoría, notas y más - escribe /menu cuando quieras ver ` +
-          `todo el detalle. También puedes entrar al panel web en ${panelLine}`,
+          `todo el detalle. También puedes entrar al panel web en ${panelLine}\n\n` +
+          '👤 Una última cosa: ¿eres hombre o mujer? Así te hablo en el género correcto y uso la voz que ' +
+          'corresponde en las notas de voz (respóndeme solo "hombre" o "mujer").',
       );
     } catch (err) {
       console.error('[TOOL] grant_access: no se pudo avisar el token del panel a %s:', jid, (err as Error).message);

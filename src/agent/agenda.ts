@@ -2,7 +2,7 @@ import { todosRepo } from '../db/repositories/todos.repo.js';
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { todayLocal, weekdayName, dateOnly, nowLocal, addDays } from '../util/datetime.js';
-import { dailyAgendaIntro } from '../util/motivational.js';
+import { dailyAgendaIntro, nightFarewellMessage } from '../util/motivational.js';
 import { env } from '../config/env.js';
 
 interface AgendaItem {
@@ -105,4 +105,31 @@ export function ensureDailyAgendaReminder(userId: number, targetJid: string): vo
     kind: 'daily_agenda',
   });
   console.log('[AGENDA] Aviso matutino diario programado para el usuario #%d a las %s:%s.', userId, hh, mm);
+}
+
+/** How many of today's todos/routines are still pending right now - used by maybeNightFarewell()
+ *  below to know whether a just-completed one was the LAST one. Mirrors buildAgendaMessage's own
+ *  notion of "today's work" (today-scope todos + routines), minus the items already marked done. */
+function remainingTodayCount(userId: number): number {
+  const today = todayLocal();
+  const todosToday = todosRepo.list(userId, { scope: 'today', status: 'pending' }).length;
+  const routines = todosRepo.list(userId, { scope: 'routine' });
+  const routinesPending = routines.filter((r) => !habitLogsRepo.getForDate(r.id, today)?.done).length;
+  return todosToday + routinesPending;
+}
+
+/**
+ * Returns a "buenas noches" message when completing something (complete_todo/checkin_routine, see
+ * those tools) just cleared the LAST pending todo/routine for today AND it's already late enough
+ * (env.nightSummaryAfterHour, default 18h) - the user's own ask: mirror the automatic "buenos días"
+ * on the morning agenda with a symmetric goodnight when the day's work is actually done, instead of
+ * only ever greeting in the morning. Returns null otherwise (still tasks left, or too early in the
+ * day to call it "night" even if everything happened to get done already) - callers should treat a
+ * null as "say nothing extra", not an error.
+ */
+export function maybeNightFarewell(userId: number): string | null {
+  const hour = Number(nowLocal().slice(11, 13));
+  if (hour < env.nightSummaryAfterHour) return null;
+  if (remainingTodayCount(userId) > 0) return null;
+  return nightFarewellMessage();
 }

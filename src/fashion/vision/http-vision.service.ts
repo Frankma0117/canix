@@ -20,6 +20,7 @@ interface AnalyzeResponse {
   quality?: { ok: boolean; issues: string[] };
   model?: string | null;
   type?: ScoredValue;
+  type_candidates?: ScoredValue[];
   category?: ScoredValue;
   color?: ScoredValue;
   secondary_color?: ScoredValue;
@@ -69,17 +70,44 @@ export class HttpVisionService implements VisionService {
     const floor = env.fashion.vision.minConfidence;
     const detectedType = pass1.type && pass1.type.confidence >= floor ? (pass1.type.value as GarmentType) : null;
 
-    // Can't scope pass 2's category candidates without a confident type - return pass 1 alone
-    // rather than asking about category across the full, unscoped taxonomy (that broad-competition
-    // approach is exactly the accuracy problem pass 2 exists to avoid).
-    if (!detectedType || !GARMENT_TYPES.includes(detectedType)) {
-      const result = this.toResult(pass1, null, qualityIssues);
+    if (detectedType && GARMENT_TYPES.includes(detectedType)) {
+      const pass2 = await this.runPass(imageBuffer, candidateLabelsForVisionPass2(detectedType));
+      const result = this.toResult(pass1, pass2, qualityIssues);
       this.logResult(result);
       return result;
     }
 
-    const pass2 = await this.runPass(imageBuffer, candidateLabelsForVisionPass2(detectedType));
-    const result = this.toResult(pass1, pass2, qualityIssues);
+    // Pass 1's own `type` call wasn't confident enough on its own - before giving up entirely (the
+    // old behavior, and the direct cause of BOTTOM garments never getting a category at all: see
+    // taxonomy.ts's VISION_PROMPTS comment), try pass 2's category classification against each of
+    // the top-2 runner-up types (see app.py's type_candidates) and keep whichever produced the
+    // single highest-confidence category. A garment's actual category ("jeans", "falda") is often
+    // easier for CLIP to pin down than the abstract type label itself, so this recovers a real
+    // answer in exactly the cases that used to come back empty - at the cost of up to one extra
+    // local (free, no-API) inference pass, only when the fast path above didn't already succeed.
+    const runnerUpTypes = (pass1.type_candidates ?? [])
+      .map((c) => c.value as GarmentType)
+      .filter((t) => GARMENT_TYPES.includes(t));
+
+    let bestPass2: AnalyzeResponse | null = null;
+    let bestType: GarmentType | null = null;
+    for (const type of runnerUpTypes) {
+      const pass2 = await this.runPass(imageBuffer, candidateLabelsForVisionPass2(type));
+      if (pass2?.category && (!bestPass2?.category || pass2.category.confidence > bestPass2.category.confidence)) {
+        bestPass2 = pass2;
+        bestType = type;
+      }
+    }
+
+    // Only actually adopt the recovered type/category if the category itself cleared the
+    // confidence floor - otherwise this is still a genuine "no sé", and toResult()'s own
+    // pick()/consistency-check already handle reporting that honestly instead of guessing.
+    const recovered = bestPass2?.category && bestType && bestPass2.category.confidence >= floor;
+    const effectivePass1 = recovered
+      ? { ...pass1, type: { value: bestType!, confidence: bestPass2!.category!.confidence } }
+      : pass1;
+
+    const result = this.toResult(effectivePass1, recovered ? bestPass2 : null, qualityIssues);
     this.logResult(result);
     return result;
   }

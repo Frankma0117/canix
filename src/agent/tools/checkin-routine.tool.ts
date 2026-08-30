@@ -3,7 +3,11 @@ import { todosRepo } from '../../db/repositories/todos.repo.js';
 import { habitLogsRepo } from '../../db/repositories/habit-logs.repo.js';
 import { todayLocal } from '../../util/datetime.js';
 import { pickCelebrationSticker } from '../../util/stickers.js';
+import { stickersRepo } from '../../db/repositories/stickers.repo.js';
+import { maybeNightFarewell } from '../agenda.js';
 import { resolveActingUser } from './act-on-behalf.js';
+
+const NIGHT_STICKER_KEYWORDS = ['buenas_noches', 'buena_noche', 'good_night', 'buenasnoches'];
 
 export const checkinRoutineTool: Tool = {
   name: 'checkin_routine',
@@ -39,16 +43,28 @@ export const checkinRoutineTool: Tool = {
 
     const streak = habitLogsRepo.currentStreak(id, todayLocal());
 
+    let farewell: string | null = null;
     if (done) {
       // Only celebrate an actual completion - never send a "congrats" sticker for a checkin that
       // marks the routine as NOT done (see util/stickers.ts). Best-effort, never blocks the reply.
       pickCelebrationSticker()
         .then((webp) => (webp ? ctx.wa.sendSticker(targetJid, webp) : undefined))
         .catch(() => {});
+
+      // Same "buenas noches" close-of-day check as complete_todo.tool.ts - only when checking in as
+      // done (not when marking NOT done, since that isn't "finishing" anything) and only for today's
+      // date (a late check-in/backfill for a past date shouldn't trigger tonight's farewell).
+      if (date === todayLocal()) {
+        farewell = maybeNightFarewell(userId);
+        if (farewell) {
+          const nightSticker = stickersRepo.findByKeywords(NIGHT_STICKER_KEYWORDS);
+          if (nightSticker) ctx.wa.sendSticker(targetJid, nightSticker.data).catch(() => {});
+        }
+      }
     }
 
     return done
-      ? `¡"${todo.title}" hecha el ${date}! 🎉 Racha actual: ${streak} día(s).`
+      ? `¡"${todo.title}" hecha el ${date}! 🎉 Racha actual: ${streak} día(s).${farewell ? `\n\n${farewell}` : ''}`
       : `Ok, marqué "${todo.title}" como NO hecha el ${date}. Racha actual: ${streak} día(s).`;
   },
 };

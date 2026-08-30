@@ -1,7 +1,11 @@
 import type { Tool } from '../tool-registry.js';
 import { todosRepo } from '../../db/repositories/todos.repo.js';
 import { pickCelebrationSticker } from '../../util/stickers.js';
+import { stickersRepo } from '../../db/repositories/stickers.repo.js';
+import { maybeNightFarewell } from '../agenda.js';
 import { resolveActingUser } from './act-on-behalf.js';
+
+const NIGHT_STICKER_KEYWORDS = ['buenas_noches', 'buena_noche', 'good_night', 'buenasnoches'];
 
 export const completeTodoTool: Tool = {
   name: 'complete_todo',
@@ -38,6 +42,15 @@ export const completeTodoTool: Tool = {
       .then((webp) => (webp ? ctx.wa.sendSticker(targetJid, webp) : undefined))
       .catch(() => {});
 
-    return `Tarea #${id} "${todo.title}" marcada como hecha. 🎉`;
+    // If this was the LAST pending todo/routine for today (and it's late enough), also close the
+    // day with a "buenas noches" - symmetric to the automatic morning "buenos días" agenda (see
+    // agent/agenda.ts's maybeNightFarewell). Best-effort sticker, same as the celebration one above.
+    const farewell = maybeNightFarewell(userId);
+    if (farewell) {
+      const nightSticker = stickersRepo.findByKeywords(NIGHT_STICKER_KEYWORDS);
+      if (nightSticker) ctx.wa.sendSticker(targetJid, nightSticker.data).catch(() => {});
+    }
+
+    return `Tarea #${id} "${todo.title}" marcada como hecha. 🎉${farewell ? `\n\n${farewell}` : ''}`;
   },
 };

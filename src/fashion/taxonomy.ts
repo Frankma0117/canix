@@ -83,6 +83,85 @@ export const GARMENT_TYPE_LABELS: Record<GarmentType, string> = {
   ACCESSORY: 'Accesorio',
 };
 
+/**
+ * Natural-language ENGLISH phrase used to embed each `type`/`category` slug for the vision
+ * microservice's CLIP text encoder - see vision-service/model.py's docstring for the full "why".
+ * In short: fashion-clip is fine-tuned on English retail copy, so a bare Spanish slug ("chaleco")
+ * or a bare abstract English enum word ("bottom") embeds far more weakly than a real descriptive
+ * phrase ("a vest" / "pants, jeans, shorts or a skirt worn on the legs") - this was the direct cause
+ * of BOTTOM garments almost never crossing the confidence floor at pass 1 (and therefore NEVER
+ * getting a category at all, since pass 2 only runs once `type` is confident - see
+ * http-vision.service.ts). Only the TEXT fed to the model changes here; the taxonomy slug returned
+ * as the actual value is untouched, so nothing downstream (DB, tools, UI) needs to know this exists.
+ * Every GARMENT_TYPES and CATEGORIES_BY_TYPE value must have an entry here (enforced in dev by
+ * candidateLabelsForVisionPass1/2 below, which would otherwise silently fall back to a weaker
+ * prompt for whichever one is missing).
+ */
+const VISION_PROMPTS: Record<string, string> = {
+  // type
+  TOP: 'a top, shirt, blouse or sweater worn on the upper body',
+  BOTTOM: 'pants, jeans, shorts or a skirt worn on the legs',
+  FULL_BODY: 'a dress, jumpsuit or full one-piece outfit',
+  OUTERWEAR: 'a jacket, coat or blazer worn over other clothes',
+  FOOTWEAR: 'shoes, sneakers or boots',
+  ACCESSORY: 'a fashion accessory like a belt, hat, bag or watch',
+  // category - TOP
+  camiseta: 'a t-shirt',
+  camisa: 'a button-up shirt',
+  polo: 'a polo shirt',
+  blusa: 'a blouse',
+  top: 'a fitted top or tank top',
+  sweater: 'a sweater or pullover',
+  sudadera: 'a sweatshirt',
+  hoodie: 'a hoodie with a hood',
+  chaleco: 'a vest',
+  // category - BOTTOM
+  jeans: 'blue denim jeans',
+  pantalon: 'trousers or pants',
+  chino: 'chino pants',
+  pantalon_vestir: 'formal dress pants',
+  short: 'shorts',
+  falda: 'a skirt',
+  // category - FULL_BODY
+  vestido: 'a dress',
+  enterizo: 'a jumpsuit or romper',
+  traje: 'a full suit',
+  // category - OUTERWEAR
+  chaqueta: 'a jacket',
+  blazer: 'a blazer',
+  abrigo: 'a winter coat',
+  impermeable: 'a raincoat',
+  gabardina: 'a trench coat',
+  // category - FOOTWEAR
+  tenis: 'athletic sneakers',
+  sneakers: 'casual sneakers',
+  zapatos: 'formal dress shoes',
+  botas: 'boots',
+  sandalias: 'sandals',
+  mocasines: 'loafers',
+  // category - ACCESSORY
+  reloj: 'a wristwatch',
+  cinturon: 'a belt',
+  gorra: 'a baseball cap',
+  sombrero: 'a hat',
+  gafas: 'sunglasses or eyeglasses',
+  bolso: 'a handbag or purse',
+  mochila: 'a backpack',
+  corbata: 'a necktie',
+  bufanda: 'a scarf',
+  joyeria: 'jewelry',
+  otros: 'a fashion accessory',
+};
+
+/** Aligned English prompt per value, only when EVERY value has one - a partial map would silently
+ *  mix strong and weak (naive-fallback) prompts within the same softmax comparison, which is worse
+ *  than not sending prompts at all (see model.py's classify_group: prompts are all-or-nothing per
+ *  call). Returns undefined (not sent) when any value in this particular candidate list is unmapped. */
+function visionPromptsFor(values: readonly string[]): string[] | undefined {
+  const prompts = values.map((v) => VISION_PROMPTS[v]);
+  return prompts.every((p) => typeof p === 'string') ? prompts : undefined;
+}
+
 export const COLORS = [
   'blanco', 'negro', 'gris', 'beige', 'café', 'azul', 'azul_claro', 'azul_marino', 'verde',
   'verde_oliva', 'rojo', 'vino', 'rosado', 'morado', 'amarillo', 'naranja', 'dorado', 'plateado',
@@ -197,7 +276,7 @@ export function formalityIndex(value: string | null | undefined): number | undef
  *  source of truth for the taxonomy lives here, never duplicated into the Python side, so they
  *  can't drift out of sync. */
 export interface TaxonomyCandidates {
-  groups: { group: string; values: string[] }[];
+  groups: { group: string; values: string[]; prompts?: string[] }[];
 }
 
 /**
@@ -206,7 +285,7 @@ export interface TaxonomyCandidates {
  * `analysis_version` (see garments.repo.ts) so "actualizar ropa" and any future audit can tell
  * which pass produced which data instead of guessing. Plain integer, bump by 1 per meaningful change.
  */
-export const ANALYSIS_VERSION = 2;
+export const ANALYSIS_VERSION = 3;
 
 /**
  * PASS 1 of garment vision analysis - type-independent groups only. `category` is deliberately
@@ -218,7 +297,7 @@ export const ANALYSIS_VERSION = 2;
 export function candidateLabelsForVisionPass1(): TaxonomyCandidates {
   return {
     groups: [
-      { group: 'type', values: [...GARMENT_TYPES] },
+      { group: 'type', values: [...GARMENT_TYPES], prompts: visionPromptsFor(GARMENT_TYPES) },
       { group: 'pattern', values: [...PATTERNS] },
       { group: 'style', values: [...STYLES] },
       { group: 'formality', values: [...FORMALITY] },
@@ -242,8 +321,9 @@ const LENGTH_TYPES: readonly GarmentType[] = ['BOTTOM', 'FULL_BODY', 'OUTERWEAR'
  * actually meaningful for this type (see the lookups above).
  */
 export function candidateLabelsForVisionPass2(type: GarmentType): TaxonomyCandidates {
-  const groups: { group: string; values: string[] }[] = [
-    { group: 'category', values: CATEGORIES_BY_TYPE[type].map((c) => c.value) },
+  const categoryValues = CATEGORIES_BY_TYPE[type].map((c) => c.value);
+  const groups: { group: string; values: string[]; prompts?: string[] }[] = [
+    { group: 'category', values: categoryValues, prompts: visionPromptsFor(categoryValues) },
     { group: 'fit', values: [...FITS] },
     { group: 'material', values: [...MATERIALS] },
     { group: 'warmth', values: [...WARMTH] },

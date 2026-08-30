@@ -31,9 +31,16 @@ simplificada para uso personal: sin multi-negocio, con SQLite en vez de MySQL.
   notas sobre wifi" o "muéstrame mis notas de trabajo" (categoría opcional, misma tabla de
   categorías que usan los links).
 - 🌅 **Agenda del día**: cada mañana (hora configurable, `MORNING_SUMMARY_TIME`) te llega
-  automáticamente el orden del día completo - rutinas, recordatorios y tareas de hoy, empezando
-  por lo primero. Pregúntalo en cualquier momento ("¿qué tengo hoy?", "¿cómo va mi día?") y también
-  te dice qué rutina ya pasó de hora sin marcarse, para que la reprogrames el mismo día si quieres.
+  automáticamente el orden del día completo con un saludo de "¡Buenos días!" - rutinas,
+  recordatorios y tareas de hoy, empezando por lo primero - y si el administrador le enseñó al bot
+  un sticker etiquetado `buenos_dias` (el admin lo envía como sticker de WhatsApp y el bot pregunta
+  con qué etiqueta guardarlo), lo manda junto al mensaje. Pregúntalo en cualquier momento ("¿qué
+  tengo hoy?", "¿cómo va mi día?") y también te dice qué rutina ya pasó de hora sin marcarse, para
+  que la reprogrames el mismo día si quieres.
+- 🌙 **Despedida de "buenas noches"**: al completar una tarea o rutina (`complete_todo`/
+  `checkin_routine`) que resulta ser la ÚLTIMA pendiente del día, y ya pasada cierta hora
+  (`NIGHT_SUMMARY_AFTER_HOUR`, default 18), te llega un mensaje de "¡Buenas noches!" junto con el
+  sticker etiquetado `buenas_noches` si el administrador guardó uno - simétrico al saludo matutino.
 - 📊 **Resumen semanal**: cada semana (día/hora configurable, `WEEKLY_REPORT_DAY`/`WEEKLY_REPORT_TIME`)
   te llega cuánto cumpliste en los últimos 7 días, separado en rutinas (días cumplidos + racha) y
   tareas de una sola vez (cumplidas vs pendientes). Pregúntalo en cualquier momento ("¿cómo me fue
@@ -218,6 +225,12 @@ ninguna IA ni gastar tokens — son dos programas aparte que corren en tu propio
   por defecto, `PIPER_VOICE_PATH_FEMALE` = opcional) y cada usuario elige cuál usar diciendo algo
   como "quiero voz de mujer" (tool `set_voice_gender`, admin puede cambiarla por otro con
   `target_user`). Si la femenina no está configurada, se sigue usando la voz por defecto.
+- **Se pregunta una sola vez, al primer contacto**: en vez de adivinar por el nombre, el bot le
+  pregunta a cada persona nueva (el admin en su primer mensaje, o alguien recién invitado con
+  `grant_access`) "¿eres hombre o mujer?" - respondiendo "hombre" o "mujer" (sin pasar por la IA,
+  cero tokens) fija de una vez tanto el género gramatical (`gender`) como la voz por defecto
+  (`voice_gender`), y cada una se puede cambiar después por separado con "háblame en femenino"/
+  "cambia mi voz a hombre" cuando se quiera.
 
 Ambas son **opcionales y se degradan solas**: si no configuras el modelo/binario, esa función
 simplemente queda desactivada (el bot te pide texto en vez de transcribir; responde solo en texto
@@ -555,6 +568,7 @@ reducen mucho ese riesgo:
 | `PORT` | Puerto del panel/API | `3000` |
 | `TIMEZONE` | Zona horaria IANA (todo el bot usa esta para "ahora"/"hoy") | `America/Bogota` |
 | `MORNING_SUMMARY_TIME` | Hora `HH:mm` de la agenda automática diaria | `06:30` |
+| `NIGHT_SUMMARY_AFTER_HOUR` | Hora (0-23) desde la que completar la última tarea/rutina del día dispara la despedida "buenas noches" | `18` |
 | `WEEKLY_REPORT_DAY` | Día del resumen semanal automático (`0`=domingo .. `6`=sábado) | `0` |
 | `WEEKLY_REPORT_TIME` | Hora `HH:mm` del resumen semanal automático | `19:00` |
 | `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY` / `AI_BASE_URL` | Config de IA (compatible OpenAI) | — |

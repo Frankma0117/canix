@@ -1,4 +1,4 @@
-import type { WAMessage } from 'baileys';
+import { normalizeMessageContent, type WAMessage } from 'baileys';
 
 export interface ParsedVcard {
   name: string;
@@ -31,8 +31,11 @@ export function parseVcard(vcard: string, fallbackName?: string | null): ParsedV
  * failing the whole batch, so one bad card can't block the rest.
  */
 export function extractSharedContacts(message: WAMessage): ParsedVcard[] {
-  const single = message.message?.contactMessage;
-  const array = message.message?.contactsArrayMessage;
+  // Same ephemeral/view-once unwrapping as wa-manager.ts's message parsing - a shared contact sent
+  // in a chat with disappearing messages on would otherwise be invisible here.
+  const content = normalizeMessageContent(message.message);
+  const single = content?.contactMessage;
+  const array = content?.contactsArrayMessage;
   const cards = single ? [single] : (array?.contacts ?? []);
 
   const parsed: ParsedVcard[] = [];

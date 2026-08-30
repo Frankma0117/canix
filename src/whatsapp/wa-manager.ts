@@ -4,6 +4,7 @@ import makeWASocket, {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   downloadMediaMessage,
+  normalizeMessageContent,
   DisconnectReason,
   type WASocket,
   type ConnectionState,
@@ -218,30 +219,38 @@ export class WaManager {
           }
         }
 
-        let text =
-          m.message?.conversation ??
-          m.message?.extendedTextMessage?.text ??
-          m.message?.imageMessage?.caption ??
-          '';
+        // WhatsApp wraps a message's real content under `ephemeralMessage`/`viewOnceMessage*` in
+        // several very common cases (disappearing messages turned on for the chat, "view once"
+        // photos/stickers, some client versions' default). Reading `m.message?.stickerMessage`
+        // directly missed every one of those - the sticker (or image/contact) was silently there,
+        // just one level deeper, so it fell through the `!text.trim() && !imageMessage && ...`
+        // check below and got dropped with no error, no log, nothing - exactly the "a veces no lee
+        // el sticker" symptom this was. `normalizeMessageContent` (from baileys) unwraps all of
+        // that in a loop, so every extraction below sees the real content either way.
+        const content = normalizeMessageContent(m.message);
+
+        let text = content?.conversation ?? content?.extendedTextMessage?.text ?? content?.imageMessage?.caption ?? '';
         let fromAudio = false;
         // Present only when this message carries an image - see IncomingHandler's comment. Passed
         // through as-is (never downloaded here); a bare image with no caption used to be silently
         // dropped by the `continue` below - now it reaches the handler, which restores that same
         // silent-drop behavior itself whenever Fashion Mode doesn't consume it (flag off, or the
-        // user isn't actually waiting on one) - see bot-manager.ts.
-        const imageMessage = m.message?.imageMessage ? m : undefined;
+        // user isn't actually waiting on one) - see bot-manager.ts. Still passed as the original
+        // `m` (not `content`): downloadMediaMessage() unwraps ephemeral/view-once itself given the
+        // full message, so nothing downstream needs to change.
+        const imageMessage = content?.imageMessage ? m : undefined;
         // Same idea for documents (Fashion Mode's PDF bulk-import) - passed through untouched for
         // anything that isn't a fashion PDF, exactly like a document was ignored before this field
         // existed.
-        const documentMessage = m.message?.documentMessage ? m : undefined;
+        const documentMessage = content?.documentMessage ? m : undefined;
         // Same idea for stickers (the bot's sticker pack, see bot-manager.ts) - passed through
         // untouched; only an admin's incoming sticker is ever actually downloaded.
-        const stickerMessage = m.message?.stickerMessage ? m : undefined;
+        const stickerMessage = content?.stickerMessage ? m : undefined;
         // A shared contact (or several at once) - see util/vcard.ts / bot-manager.ts's save-with-
         // confirmation flow. No media download involved, the vCard(s) are already inline.
-        const contactMessage = m.message?.contactMessage || m.message?.contactsArrayMessage ? m : undefined;
+        const contactMessage = content?.contactMessage || content?.contactsArrayMessage ? m : undefined;
 
-        if (!text.trim() && m.message?.audioMessage) {
+        if (!text.trim() && content?.audioMessage) {
           const transcribed = await this.transcribeIncomingAudio(m);
           if (transcribed) {
             text = transcribed;
