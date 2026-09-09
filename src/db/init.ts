@@ -181,6 +181,26 @@ export function initSchema(): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- Listas para ir marcando de a poco (juegos que quiero, películas por ver, etc.) - viven dentro
+    -- de modo "tareas" pero son su propia entidad, no un todo: una colección con varios ítems que se
+    -- agregan sueltos y se marcan/desmarcan uno por uno, sin fecha, hora ni "completar la lista
+    -- entera" (ver checklists.repo.ts / create-list.tool.ts y demás herramientas de listas).
+    CREATE TABLE IF NOT EXISTS checklists (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS checklist_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      checklist_id INTEGER NOT NULL REFERENCES checklists(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      checked INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     -- Fashion Mode (armario/outfits, ver src/fashion/): una prenda registrada por foto. La
     -- taxonomia (type/category/style/etc.) vive en código (src/fashion/taxonomy.ts), no aquí
     -- adrede - así agregar una categoría nueva es un cambio de un array, no una migración.
@@ -372,6 +392,9 @@ export function initSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_exercises_user ON exercises(user_id);
     CREATE INDEX IF NOT EXISTS idx_meal_plans_user_date ON meal_plans(user_id, plan_date);
     CREATE INDEX IF NOT EXISTS idx_recipes_user ON recipes(user_id);
+    CREATE INDEX IF NOT EXISTS idx_checklists_user ON checklists(user_id);
+    CREATE INDEX IF NOT EXISTS idx_checklist_items_checklist ON checklist_items(checklist_id);
+    CREATE INDEX IF NOT EXISTS idx_checklist_items_user ON checklist_items(user_id);
 
     CREATE INDEX IF NOT EXISTS idx_links_category ON links(category_id);
     CREATE INDEX IF NOT EXISTS idx_reminders_status_run_at ON reminders(status, run_at);

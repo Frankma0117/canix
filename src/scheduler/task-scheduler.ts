@@ -10,8 +10,18 @@ import { buildWeeklyReportMessage } from '../agent/weekly-report.js';
 import { dedupeUser, summaryTotal, summaryLine } from '../agent/dedup.js';
 import { plainReminderPrefix } from '../util/motivational.js';
 import { synthesizeVoiceNote } from '../audio/tts.js';
+import { sleep } from '../util/human-delay.js';
 import type { WaManager } from '../whatsapp/wa-manager.js';
 import type { Reminder, DueReminder } from '../types/index.js';
+
+/** Small pause between reminder sends within the same tick - without it, a tick where several
+ *  reminders happen to fall due at once (e.g. many users' daily agenda all firing around the same
+ *  hour) fires that whole burst of WhatsApp sends back to back with zero spacing, which is exactly
+ *  the kind of "unusual traffic pattern" that increases account-review risk. Same reasoning already
+ *  used for announce_update's per-recipient pause (see announce-update.tool.ts). Kept short since a
+ *  tick can have several genuinely due reminders and none of this should visibly delay any one of
+ *  them by much. */
+const BETWEEN_SENDS_MS = 350;
 
 /** Computes the next run_at for a recurring reminder. */
 function nextRunAt(reminder: Reminder): string | undefined {
@@ -164,6 +174,7 @@ export class TaskScheduler {
 
         if (reminder.kind === 'interval') {
           await this.handleIntervalReminder(reminder, target);
+          await sleep(BETWEEN_SENDS_MS);
           continue;
         }
 
@@ -228,6 +239,7 @@ export class TaskScheduler {
               });
             }
           }
+          await sleep(BETWEEN_SENDS_MS);
         } catch (err) {
           console.error('[SCHEDULER] Recordatorio #%d falló:', reminder.id, (err as Error).message);
           // Best-effort only: a one-off reminder gets marked failed so it's visible; a recurring

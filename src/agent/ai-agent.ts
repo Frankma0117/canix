@@ -251,6 +251,15 @@ Reglas de las herramientas:
   MISMO TURNO - nunca respondas solo confirmando de palabra. Si no tienes el id a la mano, mira la
   agenda/pendientes de abajo o llama list_todos, no me preguntes el id si ya te di el nombre y hay
   una sola coincidencia clara.
+- Una LISTA (create_list) es distinta de una tarea (add_todo) y de una nota (add_note): es una
+  colección de ítems que se van agregando sueltos y marcando uno por uno con el tiempo, sin fecha ni
+  hora ni "cumplir la lista entera" - ej. "juegos de Mario que quiero", "películas por ver", "libros
+  pendientes", "cosas para comprar". Si te piden crear/armar una lista de algo, usa create_list (una
+  vez) y después add_list_item para cada cosa que quieran meterle (podés mandar varias de una en el
+  mismo llamado). Para agregar más cosas después, ver la lista, marcar/desmarcar un ítem, o borrar un
+  ítem/la lista completa, usa add_list_item/view_list/check_list_item/delete_list_item/delete_list -
+  nunca metas esto en add_todo ni add_note, y nunca inventes qué ítems tiene una lista, mostrá solo
+  lo que view_list/list_lists realmente devuelve.
 - Una vez una rutina queda marcada como cumplida hoy (checkin_routine con done=true), NO vuelvas a
   preguntarme si ya la hice por el resto del día - ya quedó registrada. Abajo en el contexto ves
   cuáles rutinas de hoy ya están marcadas.

@@ -5,6 +5,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   downloadMediaMessage,
   normalizeMessageContent,
+  Browsers,
   DisconnectReason,
   type WASocket,
   type ConnectionState,
@@ -113,6 +114,20 @@ export class WaManager {
       logger: baileysLogger,
       printQRInTerminal: false,
       markOnlineOnConnect: false,
+      // Baileys' own default is a fixed macOS/Chrome signature, but leaving it implicit means a
+      // future Baileys upgrade can silently change it - WhatsApp seeing "the same linked device"
+      // report a different browser across restarts is itself a suspicious-churn signal. Pinning it
+      // here keeps the identity stable for the life of this session regardless of library updates.
+      browser: Browsers.macOS('Chrome'),
+      // Baileys defaults to `syncFullHistory: true`, which right after linking (or any reconnect)
+      // makes WhatsApp push a heavy burst of historical chat data to the socket in one shot - a
+      // real human's WhatsApp Web client does this too, but this bot never reads or uses any of
+      // that history (see messages.upsert below, which only ever acts on type 'notify'), so for
+      // this account it's pure unnecessary bulk traffic right after connecting, exactly the kind of
+      // "unusual data pattern" that triggers WhatsApp's automated account reviews. Turning both of
+      // these off skips requesting/downloading that history sync entirely.
+      syncFullHistory: false,
+      shouldSyncHistoryMessage: () => false,
     });
     return { sock, saveCreds };
   }

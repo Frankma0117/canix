@@ -19,6 +19,8 @@ export function resetAllUserData(userId: number): void {
       'exercises',
       'meal_plans',
       'recipes',
+      'checklist_items',
+      'checklists',
       'todos',
       'notes',
       'links',

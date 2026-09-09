@@ -179,6 +179,22 @@ export interface Todo {
   created_at: string;
 }
 
+export interface Checklist {
+  id: number;
+  user_id: number;
+  name: string;
+  created_at: string;
+}
+
+export interface ChecklistItem {
+  id: number;
+  user_id: number;
+  checklist_id: number;
+  title: string;
+  checked: number;
+  created_at: string;
+}
+
 export interface HabitLog {
   id: number;
   todo_id: number;

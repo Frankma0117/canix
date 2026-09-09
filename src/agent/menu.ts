@@ -76,13 +76,15 @@ export const CORE_CATEGORIES: MenuCategory[] = [
     number: 3,
     emoji: '✅',
     title: 'Tareas',
-    short: 'Pendientes para hoy o para después - marcalas como hechas cuando las cumplas.',
+    short: 'Pendientes para hoy o para después, y listas para ir marcando (juegos, películas, etc.).',
     aliases: ['tarea', 'tareas', 'todo', 'todos', 'pendientes'],
     detail:
       `✅ *Tareas*\n\n` +
       `- Agregar para hoy o para después\n` +
       `- Editar, marcar como hecha, eliminar\n` +
-      `- Ver tu lista de pendientes`,
+      `- Ver tu lista de pendientes\n` +
+      `- Listas para ir marcando de a poco (distintas de una tarea suelta): "crea una lista de juegos de Mario que ` +
+      `quiero", "agrega Super Mario Odyssey a esa lista", "marca Odyssey", "muéstrame la lista de películas por ver"`,
   },
   {
     key: 'notas',

@@ -78,6 +78,13 @@ import { announceUpdateTool } from './announce-update.tool.js';
 import { setUserGenderTool } from './set-user-gender.tool.js';
 import { setVoiceGenderTool } from './set-voice-gender.tool.js';
 import { setFashionProfileTool } from './set-fashion-profile.tool.js';
+import { createListTool } from './create-list.tool.js';
+import { addListItemTool } from './add-list-item.tool.js';
+import { listListsTool } from './list-lists.tool.js';
+import { viewListTool } from './view-list.tool.js';
+import { checkListItemTool } from './check-list-item.tool.js';
+import { deleteListItemTool } from './delete-list-item.tool.js';
+import { deleteListTool } from './delete-list.tool.js';
 
 /** Registers every tool the agent can use. Called once at boot. */
 export function registerTools(): void {
@@ -160,4 +167,11 @@ export function registerTools(): void {
   registry.register(setUserGenderTool);
   registry.register(setVoiceGenderTool);
   registry.register(setFashionProfileTool);
+  registry.register(createListTool);
+  registry.register(addListItemTool);
+  registry.register(listListsTool);
+  registry.register(viewListTool);
+  registry.register(checkListItemTool);
+  registry.register(deleteListItemTool);
+  registry.register(deleteListTool);
 }

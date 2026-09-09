@@ -43,7 +43,22 @@ const MODE_TOOLS: Record<ModeKey, string[]> = {
     'edit_exercise',
     'delete_exercise',
   ],
-  tareas: ['add_todo', 'list_todos', 'complete_todo', 'delete_todo', 'edit_todo'],
+  tareas: [
+    'add_todo',
+    'list_todos',
+    'complete_todo',
+    'delete_todo',
+    'edit_todo',
+    // Listas para ir marcando de a poco (juegos, películas, libros, compras) - viven en modo
+    // "tareas" pero son su propia entidad, no un todo (ver checklists.repo.ts).
+    'create_list',
+    'add_list_item',
+    'list_lists',
+    'view_list',
+    'check_list_item',
+    'delete_list_item',
+    'delete_list',
+  ],
   notas: ['add_note', 'list_notes', 'edit_note', 'delete_note'],
   // send_message (the proactive USE of the contacts list - "dile a Juan que...") stays in
   // ALWAYS_ON_TOOLS below, same reasoning as send_sticker in `stickers` further down - only the

@@ -11,6 +11,7 @@ import type { GarmentType } from '../taxonomy.js';
 import type { FashionSessionData } from '../types.js';
 import type { FashionRouterContext, FashionRouterResult } from '../router-types.js';
 import { HOME_MENU } from './home.flow.js';
+import { sleep } from '../../util/human-delay.js';
 
 const USER_GENDER_TO_GARMENT_GENDER: Record<string, string> = { male: 'hombre', female: 'mujer' };
 
@@ -116,7 +117,16 @@ async function renderResult(
 
   // Best-effort, never blocks the text summary above (which already went out via the returned
   // reply) - a few photos, not the whole wardrobe, matching the "no enviar todo de golpe" spirit.
-  Promise.all(imagesToSend.slice(0, 5).map((img) => ctx.wa.sendImage(ctx.jid, img.url, img.caption))).catch(() => {});
+  // Sent one at a time with a small gap rather than all at once (Promise.all) - a burst of several
+  // media messages fired in the same instant is one more "obviously scripted" pattern worth
+  // avoiding, same reasoning as the reminder/broadcast pacing (see task-scheduler.ts,
+  // announce-update.tool.ts).
+  void (async () => {
+    for (const img of imagesToSend.slice(0, 5)) {
+      await ctx.wa.sendImage(ctx.jid, img.url, img.caption).catch(() => {});
+      await sleep(300);
+    }
+  })();
 
   return lines.join('\n');
 }
