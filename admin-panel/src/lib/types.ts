@@ -24,7 +24,7 @@ export interface Contact {
   created_at: string;
 }
 
-export type ReminderStatus = 'pending' | 'executed' | 'failed' | 'cancelled';
+export type ReminderStatus = 'pending' | 'executed' | 'failed' | 'cancelled' | 'missed' | 'suspended';
 export type RecurrenceFreq = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 export type ReminderKind =
   | 'reminder'
@@ -32,6 +32,9 @@ export type ReminderKind =
   | 'flexible'
   | 'routine_reminder'
   | 'routine_checkin'
+  | 'weekly_report'
+  | 'interval'
+  // Deprecated - no longer auto-created, kept only so pre-existing (cancelled) rows still type-check.
   | 'daily_agenda';
 
 export interface Reminder {
@@ -47,6 +50,8 @@ export interface Reminder {
   kind: ReminderKind;
   window_start: string | null;
   window_end: string | null;
+  awaiting_confirmation: number;
+  missed_confirmations: number;
   created_at: string;
 }
 

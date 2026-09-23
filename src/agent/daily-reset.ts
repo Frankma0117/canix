@@ -4,9 +4,9 @@ import { env } from '../config/env.js';
 
 /**
  * Creates the recurring "daily_reset" reminder for a user if they don't already have one - same
- * idempotent-bootstrap pattern as ensureDailyAgendaReminder (see agent/agenda.ts), called from the
- * same three registration points (bot-manager.ts bootstrap, grant-access.tool.ts, index.ts backfill
- * loop). Fires daily at DAILY_RESET_TIME; task-scheduler.ts handles this kind by silently clearing
+ * idempotent-bootstrap pattern as ensureWeeklyReportReminder (see agent/weekly-report.ts), called
+ * from the same registration points (bot-manager.ts bootstrap, grant-access.tool.ts, index.ts
+ * backfill loop). Fires daily at DAILY_RESET_TIME; task-scheduler.ts handles this kind by silently clearing
  * that user's conversation history (messages table only, same narrow scope as the manual /reset
  * command) - no WhatsApp message is ever sent for this, it's purely internal housekeeping so the
  * LLM doesn't drag stale/loose context forward day after day.

@@ -57,19 +57,8 @@ const FLEXIBLE_PREFIXES = [
   '🍃 Métele un rato a:',
 ] as const;
 
-// Every variant explicitly says "Buenos días" - the user's own ask: the automatic morning agenda
-// (kind: 'daily_agenda', see task-scheduler.ts) should always greet with it, not just sometimes
-// happen to (the old pool had "Vamos con toda la energía hoy" with no greeting at all in it).
-const AGENDA_INTROS = [
-  '🌞 ¡Buenos días! Vamos con todo hoy.',
-  '☕ ¡Buenos días! Arrancando el día - esto es lo tuyo:',
-  '🙌 ¡Buenos días! Nuevo día, nueva oportunidad de cumplir todo:',
-  '💪 ¡Buenos días! A darle - así se ve tu día:',
-  '✨ ¡Buenos días! Aquí va lo que tienes:',
-  '🔥 ¡Buenos días! Vamos con toda la energía hoy:',
-] as const;
-
-// Mirrors AGENDA_INTROS for the other end of the day - see agent/agenda.ts's maybeNightFarewell(),
+// Mirrors the (now-removed) automatic morning agenda's greeting, for the other end of the day -
+// see agent/agenda.ts's maybeNightFarewell(),
 // fired from complete_todo/checkin_routine when finishing one of these was the LAST pending
 // task/routine for today (and it's already late enough, see env.nightSummaryAfterHour) - the
 // user's own "al hacer la última tarea, un mensaje y buenas noches" ask.
@@ -109,10 +98,6 @@ export function importantDateNoticeMessage(title: string, advanceDays: number): 
 
 export function flexibleReminderMessage(message: string): string {
   return `${pick(FLEXIBLE_PREFIXES)} ${message}`;
-}
-
-export function dailyAgendaIntro(): string {
-  return pick(AGENDA_INTROS);
 }
 
 export function nightFarewellMessage(): string {

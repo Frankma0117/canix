@@ -5,11 +5,10 @@ import { assertDbConnection } from './db/pool.js';
 import { initSchema } from './db/init.js';
 import { registerTools } from './agent/tools/index.js';
 import { BotManager } from './whatsapp/bot-manager.js';
-import { TaskScheduler } from './scheduler/task-scheduler.js';
+import { TaskScheduler, reconcileMissedReminders } from './scheduler/task-scheduler.js';
 import { createServer } from './server/http-server.js';
 import { legacyAdminToken } from './server/auth.js';
 import { usersRepo } from './db/repositories/users.repo.js';
-import { ensureDailyAgendaReminder } from './agent/agenda.js';
 import { ensureWeeklyReportReminder } from './agent/weekly-report.js';
 import { ensureDailyResetReminder } from './agent/daily-reset.js';
 import { ensureDailyDedupReminder, dedupeAllUsers } from './agent/dedup.js';
@@ -31,11 +30,12 @@ async function main() {
   // 2) Agent tools
   registerTools();
 
-  // Backfill: users bootstrapped before the daily-agenda feature existed never got their
-  // recurring reminder created (that only happens at bootstrap/grant_access time) - this makes
-  // every upgrade pick it up too. No-op for users that already have one (see agent/agenda.ts).
+  // Backfill: users bootstrapped before these features existed never got their recurring reminder
+  // created (that only happens at bootstrap/grant_access time) - this makes every upgrade pick it
+  // up too. No-op for users that already have one. The daily agenda auto-push used to be backfilled
+  // here too; it's been removed (proactive messaging is now limited to notifications the user
+  // actually scheduled themselves - see the boot migration in db/init.ts).
   for (const user of usersRepo.listAll()) {
-    ensureDailyAgendaReminder(user.id, user.jid);
     ensureWeeklyReportReminder(user.id, user.jid);
     ensureDailyResetReminder(user.id, user.jid);
     ensureDailyDedupReminder(user.id, user.jid);
@@ -47,6 +47,15 @@ async function main() {
   // Runs before the WhatsApp session connects below, so nothing new can come in and create a fresh
   // duplicate mid-sweep.
   await dedupeAllUsers();
+
+  // Anything left 'pending' with run_at already in the past at this exact instant was due at some
+  // point while the process wasn't running (crash/deploy/manual restart) - reconcile it silently
+  // (recurring ones fast-forwarded to their next real occurrence, one-offs marked 'missed') instead
+  // of letting the first tick below dump the whole backlog the moment WhatsApp reconnects. See
+  // reconcileMissedReminders()'s own comment in scheduler/task-scheduler.ts. If the admin wants to
+  // actually tell everyone the bot's back, that's their call to make (send_message/announce_update),
+  // never automatic.
+  reconcileMissedReminders();
 
   // Backfill: every user needs their own panel_token now that the web panel is per-client instead
   // of admin-only (see server/auth.ts). The admin's is seeded from the old single shared

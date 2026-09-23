@@ -18,6 +18,7 @@ import { toPcm16Mono16k } from '../audio/ffmpeg.js';
 import { transcribePcm } from '../audio/stt.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { contactsRepo } from '../db/repositories/contacts.repo.js';
+import { recordFirstConnect, stats as sendGuardStats } from './send-guard.js';
 
 /** After this many consecutive failed reconnects, stop retrying automatically (see start()). */
 const MAX_RECONNECT_ATTEMPTS = 6;
@@ -107,6 +108,11 @@ export class WaManager {
 
   private async buildSocket() {
     const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
+    // Whether this session was ALREADY linked before this start() call (vs. a fresh QR pairing) -
+    // captured here, before connecting, so the send-guard warm-up ramp (see recordFirstConnect()
+    // below) knows not to restart its clock on an ordinary reconnect/restart of an established
+    // number, only on a genuinely new pairing.
+    const wasAlreadyLinked = Boolean(state.creds.registered);
     const version = await this.resolveVersion();
     const sock = makeWASocket({
       ...(version ? { version } : {}),
@@ -129,7 +135,7 @@ export class WaManager {
       syncFullHistory: false,
       shouldSyncHistoryMessage: () => false,
     });
-    return { sock, saveCreds };
+    return { sock, saveCreds, wasAlreadyLinked };
   }
 
   async start(): Promise<void> {
@@ -141,7 +147,7 @@ export class WaManager {
       this.connecting = false;
       throw err;
     });
-    const { sock, saveCreds } = built;
+    const { sock, saveCreds, wasAlreadyLinked } = built;
     this.sock = sock;
 
     sock.ev.on('creds.update', saveCreds);
@@ -160,6 +166,7 @@ export class WaManager {
         this.qr = undefined;
         this.reconnectAttempt = 0;
         this.banSuspected = false;
+        recordFirstConnect(this.session, wasAlreadyLinked);
         console.log('[WA] Conectado a WhatsApp.');
       }
 
@@ -451,6 +458,12 @@ export class WaManager {
 
   isConnected(): boolean {
     return this.connectionState === 'open';
+  }
+
+  /** Current send-guard budget snapshot for this session (see send-guard.ts) - used by the admin
+   *  panel's Connection page so the daily caps/warm-up ramp are actually visible, not just trusted. */
+  sendGuardStats() {
+    return sendGuardStats(this.session);
   }
 
   /**

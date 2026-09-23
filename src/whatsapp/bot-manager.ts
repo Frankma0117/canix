@@ -11,7 +11,6 @@ import { phoneToJid } from '../util/jid.js';
 import { resetAllUserData, resetFashionData } from '../db/reset-user.js';
 import { spacesStorageService } from '../fashion/storage/spaces-storage.service.js';
 import { processMessage } from '../agent/ai-agent.js';
-import { ensureDailyAgendaReminder } from '../agent/agenda.js';
 import { ensureWeeklyReportReminder } from '../agent/weekly-report.js';
 import { ensureDailyResetReminder } from '../agent/daily-reset.js';
 import { ensureDailyDedupReminder } from '../agent/dedup.js';
@@ -142,7 +141,6 @@ export class BotManager {
       if (!usersRepo.hasAny()) {
         const admin = usersRepo.create({ jid: phoneJid, name: name ?? null, role: 'admin' });
         if (lid) usersRepo.setLid(phoneJid, lid);
-        ensureDailyAgendaReminder(admin.id, admin.jid);
         ensureWeeklyReportReminder(admin.id, admin.jid);
         ensureDailyResetReminder(admin.id, admin.jid);
         ensureDailyDedupReminder(admin.id, admin.jid);

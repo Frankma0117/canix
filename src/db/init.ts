@@ -18,6 +18,26 @@ export function initSchema(): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- Anti-ban send governor (see whatsapp/send-guard.ts): a log of every 'proactive' (scheduler-
+    -- pushed) and 'cold' (send_message to someone who's never written in) send, so the daily caps
+    -- survive a restart - a crash-loop can't be used to bypass them. Pruned to the last 7 days on
+    -- every write, only ever queried for "since start of today" plus a short admin-panel window.
+    CREATE TABLE IF NOT EXISTS wa_send_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category TEXT NOT NULL CHECK (category IN ('proactive', 'cold')),
+      jid TEXT NOT NULL,
+      sent_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_wa_send_log_category_sent_at ON wa_send_log(category, sent_at);
+
+    -- When each WhatsApp session was first ever linked (see send-guard.ts's recordFirstConnect) -
+    -- the starting point for the warm-up ramp that ease a new number's daily send cap up over its
+    -- first two weeks instead of letting it run at full volume from day one.
+    CREATE TABLE IF NOT EXISTS wa_session_meta (
+      session TEXT PRIMARY KEY,
+      first_connected_at TEXT NOT NULL
+    );
+
     -- Multi-user: the admin (you) plus anyone you grant access to (see grant_access tool).
     -- Every other table below is scoped to a user_id - nothing is shared between users.
     CREATE TABLE IF NOT EXISTS users (
@@ -504,6 +524,20 @@ export function initSchema(): void {
   ensureColumn('garments', 'analysis_model', 'analysis_model TEXT');
   ensureColumn('garments', 'analysis_version', 'analysis_version INTEGER');
   ensureColumn('garments', 'analyzed_at', 'analyzed_at TEXT');
+
+  // Confirmation tracking for recurring/repeating notifications (needsConfirmation() in
+  // task-scheduler.ts) - if the user never writes back between one send and the next, the
+  // reminder auto-suspends instead of piling up as a one-way broadcast. See reminders.repo.ts's
+  // confirmForUser()/setConfirmationState()/suspendForNoConfirmation().
+  ensureColumn('reminders', 'awaiting_confirmation', 'awaiting_confirmation INTEGER NOT NULL DEFAULT 0');
+  ensureColumn('reminders', 'missed_confirmations', 'missed_confirmations INTEGER NOT NULL DEFAULT 0');
+
+  // The daily "agenda del día" auto-push (kind 'daily_agenda') is no longer created (see
+  // agent/agenda.ts) - the user's own ask was to stop all proactive messaging beyond notifications
+  // they actually scheduled themselves. This cancels any already-scheduled ones left over from
+  // before this change, on every boot, so existing users stop getting it without needing to touch
+  // each row by hand. No-op once there are none left (WHERE only matches 'pending' rows).
+  db.prepare(`UPDATE reminders SET status = 'cancelled' WHERE kind = 'daily_agenda' AND status = 'pending'`).run();
 }
 
 /** Adds a column to `table` if it doesn't already exist (table/column names here are always our own constants, never user input). */

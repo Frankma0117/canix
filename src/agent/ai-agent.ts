@@ -2,6 +2,7 @@ import type OpenAI from 'openai';
 import { getAiClient } from './provider.js';
 import { registry, type ToolContext } from './tool-registry.js';
 import { messagesRepo } from '../db/repositories/messages.repo.js';
+import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { categoriesRepo } from '../db/repositories/categories.repo.js';
 import { todosRepo } from '../db/repositories/todos.repo.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
@@ -441,6 +442,10 @@ export async function processMessage(
   const previousTurnWasQuestion = !!lastAssistantMsg && looksLikeQuestion(lastAssistantMsg.content);
 
   messagesRepo.add(user.id, 'user', userText);
+  // Any inbound message at all is proof this chat is genuinely two-way - clears the
+  // awaiting-confirmation flag on anything of theirs still waiting on a reply, and auto-resumes
+  // anything that got suspended for lack of one (see task-scheduler.ts's needsConfirmation()).
+  remindersRepo.confirmForUser(user.id);
 
   const messages: ChatMsg[] = [
     {

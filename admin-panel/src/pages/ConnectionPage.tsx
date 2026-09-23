@@ -6,11 +6,19 @@ import { Card } from '../components/ui/Card.tsx';
 import { Badge } from '../components/ui/Badge.tsx';
 import { Button } from '../components/ui/Button.tsx';
 
+interface SendGuardStats {
+  daysSinceFirstConnect: number;
+  warmupDone: boolean;
+  proactive: { usedToday: number; cap: number };
+  cold: { usedToday: number; cap: number };
+}
+
 interface ConnectionStatus {
   connection: string;
   connected: boolean;
   hasQr: boolean;
   banSuspected: boolean;
+  sendGuard: SendGuardStats;
 }
 
 export function ConnectionPage() {
@@ -168,6 +176,41 @@ export function ConnectionPage() {
           </p>
         )}
       </Card>
+
+      {status?.sendGuard && (
+        <Card className="mt-4 p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-ink dark:text-white">Límite diario de envíos</h2>
+            {!status.sendGuard.warmupDone && (
+              <Badge tone="warning">Calentando: día {status.sendGuard.daysSinceFirstConnect + 1}/14</Badge>
+            )}
+          </div>
+          <p className="mb-4 text-xs text-gray-dark">
+            Protección contra bloqueos: cuántos mensajes automáticos (recordatorios/rutinas) y a números nuevos
+            (send_message a alguien que nunca le ha escrito al bot) se han mandado hoy, contra el límite
+            configurado. Un número recién vinculado empieza con límites mucho más bajos y suben solos en 14 días.
+          </p>
+          <SendGuardBar label="Automáticos (recordatorios, rutinas, resumen semanal)" used={status.sendGuard.proactive.usedToday} cap={status.sendGuard.proactive.cap} />
+          <SendGuardBar label="A números nuevos (send_message en frío)" used={status.sendGuard.cold.usedToday} cap={status.sendGuard.cold.cap} className="mt-3" />
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function SendGuardBar({ label, used, cap, className }: { label: string; used: number; cap: number; className?: string }) {
+  const unlimited = cap < 0; // -1 sentinel for "uncapped" (see send-guard.ts's capForWire)
+  const pct = unlimited ? 0 : Math.min(100, Math.round((used / Math.max(1, cap)) * 100));
+  const tone = unlimited ? 'bg-primary' : pct >= 90 ? 'bg-error' : pct >= 60 ? 'bg-warning' : 'bg-primary';
+  return (
+    <div className={className}>
+      <div className="mb-1 flex items-center justify-between text-xs text-gray-dark">
+        <span>{label}</span>
+        <span>{unlimited ? `${used} / sin límite` : `${used} / ${cap}`}</span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-medium/40">
+        {!unlimited && <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />}
+      </div>
     </div>
   );
 }

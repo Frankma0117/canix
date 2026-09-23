@@ -30,13 +30,11 @@ simplificada para uso personal: sin multi-negocio, con SQLite en vez de MySQL.
   se marca como cumplida. "Anota que el wifi de la oficina es tal clave", y después "busca mis
   notas sobre wifi" o "muéstrame mis notas de trabajo" (categoría opcional, misma tabla de
   categorías que usan los links).
-- 🌅 **Agenda del día**: cada mañana (hora configurable, `MORNING_SUMMARY_TIME`) te llega
-  automáticamente el orden del día completo con un saludo de "¡Buenos días!" - rutinas,
-  recordatorios y tareas de hoy, empezando por lo primero - y si el administrador le enseñó al bot
-  un sticker etiquetado `buenos_dias` (el admin lo envía como sticker de WhatsApp y el bot pregunta
-  con qué etiqueta guardarlo), lo manda junto al mensaje. Pregúntalo en cualquier momento ("¿qué
-  tengo hoy?", "¿cómo va mi día?") y también te dice qué rutina ya pasó de hora sin marcarse, para
-  que la reprogrames el mismo día si quieres.
+- 🌅 **Agenda del día**: pregúntalo en cualquier momento ("¿qué tengo hoy?", "¿cómo va mi día?")
+  para ver rutinas, recordatorios y tareas de hoy ordenados, empezando por lo primero, y qué rutina
+  ya pasó de hora sin marcarse (para reprogramarla el mismo día si quieres). Ya NO llega
+  automáticamente cada mañana - el bot solo manda avisos de cosas que tú programaste (un
+  recordatorio, una rutina, una fecha importante), nunca mensajes propios sin que se los pidas.
 - 🌙 **Despedida de "buenas noches"**: al completar una tarea o rutina (`complete_todo`/
   `checkin_routine`) que resulta ser la ÚLTIMA pendiente del día, y ya pasada cierta hora
   (`NIGHT_SUMMARY_AFTER_HOUR`, default 18), te llega un mensaje de "¡Buenas noches!" junto con el
@@ -89,6 +87,10 @@ número" más abajo.
   `preinstall`). Si el `node` por defecto de tu sistema es más viejo (como en esta máquina, que
   tiene Node 18), usa el Node 20 que ya tienes en `C:\Users\Asus\node20` — los scripts
   `install.cmd`/`start.cmd`/`db-init.cmd` ya lo hacen por ti.
+- **`better-sqlite3` está fijado a `12.11.1` (sin `^`) a propósito**: la versión 13 exige Node 22+ y
+  su binario nativo directamente **hace segfault** en Node 20 en vez de fallar con un error normal.
+  No lo actualices sin subir también el Node del proyecto a 22+ y volver a probar (ver el
+  comentario en `src/db/pool.ts`).
 
 ## Instalación
 
@@ -560,6 +562,47 @@ reducen mucho ese riesgo:
     `bot-manager.ts`): una pausa corta al "leer" tu mensaje, más un tiempo de "escribiendo…"
     proporcional al largo de la respuesta. Contestar instantáneo a todo es una de las señales que
     delatan un bot automatizado — no lo quites para "que responda más rápido".
+11. **Ninguna notificación recurrente sigue sonando si la persona dejó de responder.** Cada vez
+    que un recordatorio/rutina/resumen semanal se repite se manda igual, pero si la persona no ha
+    escrito NADA en el chat desde el aviso anterior, cuenta como una respuesta sin confirmar; a la
+    segunda vez seguida sin respuesta, ese aviso se suspende solo (en vez de seguir insistiendo) y
+    se avisa una sola vez que quedó en pausa - vuelve a activarse automáticamente en cuanto la
+    persona escriba cualquier cosa (`needsConfirmation()`/`suspendForNoConfirmation()` en
+    `src/scheduler/task-scheduler.ts`). Esto es justo lo que evita que el bot se convierta en un
+    canal de solo-envío hacia un número que ya no interactúa, el patrón que más atrae revisión de
+    cuenta.
+12. **Un reinicio o caída del servidor nunca dispara un aluvión de mensajes atrasados.** Si el
+    bot estuvo apagado (crash, deploy, reinicio manual) y quedaron recordatorios que debieron
+    salir mientras tanto, al arrancar NO se mandan todos de golpe: los recurrentes se
+    reprograman en silencio a su próxima ocurrencia real, y los de una sola vez se marcan como
+    "perdidos" sin enviarse (`reconcileMissedReminders()` en `src/scheduler/task-scheduler.ts`,
+    se corre una vez al arrancar - ver log `[SCHEDULER] Reconciliación de arranque: ...`). Avisar
+    que el servicio volvió es una decisión explícita del administrador (`send_message` a alguien
+    puntual, o `announce_update` a todos), nunca algo automático.
+13. **Hay un límite diario duro de mensajes, con rampa de calentamiento automática para un número
+    nuevo.** `src/whatsapp/send-guard.ts` lleva la cuenta de cuánto se ha mandado hoy en dos
+    categorías separadas y bloquea el envío (no solo lo registra) si se pasa: **proactivos**
+    (recordatorios/rutinas/resumen semanal, `MAX_DAILY_PROACTIVE_MESSAGES`, default 300/día) y
+    **en frío** (`send_message` a alguien que nunca le ha escrito al bot, `MAX_DAILY_COLD_MESSAGES`,
+    default 20/día - deliberadamente mucho más bajo, es el patrón que más se vigila). Un número
+    recién vinculado arranca con una fracción de esos límites (15% los primeros 3 días, 40% hasta
+    el día 7, 70% hasta el día 14) que sube sola con el tiempo - convierte el "caliente el número
+    gradualmente" del punto 4 en algo que el código realmente impone, no solo un recordatorio para
+    el administrador. Un número que ya estaba vinculado antes de esta función (no un QR nuevo)
+    arranca directamente con el límite completo, no se le reinicia el calentamiento por actualizar
+    el código. El contador sobrevive reinicios (queda en SQLite), así que un crash-loop no sirve
+    para saltárselo. Visible en vivo en el panel → Conexión.
+14. **Los envíos en frío tienen su propio espaciado mínimo**, además del límite diario - si el
+    administrador (o la IA en su nombre) le pide al bot escribirle a varios números nuevos seguidos
+    en un mismo turno, `send_message` rechaza el segundo si pasa muy poco tiempo desde el primero
+    en vez de dispararlos todos de corrido.
+15. **Revisa de vez en cuando que Baileys esté razonablemente al día** (`npm outdated baileys`, o
+    compara la versión en `package-lock.json` contra la última en npm). Baileys reimplementa el
+    protocolo de WhatsApp Web sin ser un cliente oficial - cuando WhatsApp cambia algo del lado del
+    protocolo, quedarse en una versión vieja es en sí mismo una señal de "cliente no oficial
+    desactualizado" que aumenta el riesgo de detección, aparte de perderte los propios ajustes que
+    el proyecto Baileys hace para seguir pareciendo tráfico normal. No hace falta estar el mismo
+    día que cada release candidate nueva, pero no lo dejes meses sin mirar tampoco.
 
 ## Variables de entorno
 
@@ -567,13 +610,15 @@ reducen mucho ese riesgo:
 |----------|-------------|---------|
 | `PORT` | Puerto del panel/API | `3000` |
 | `TIMEZONE` | Zona horaria IANA (todo el bot usa esta para "ahora"/"hoy") | `America/Bogota` |
-| `MORNING_SUMMARY_TIME` | Hora `HH:mm` de la agenda automática diaria | `06:30` |
+| `MORNING_SUMMARY_TIME` | Ya no dispara ningún aviso propio (la agenda diaria automática se quitó) - solo referencia horaria para `DAILY_RESET_TIME` | `06:30` |
 | `NIGHT_SUMMARY_AFTER_HOUR` | Hora (0-23) desde la que completar la última tarea/rutina del día dispara la despedida "buenas noches" | `18` |
 | `WEEKLY_REPORT_DAY` | Día del resumen semanal automático (`0`=domingo .. `6`=sábado) | `0` |
 | `WEEKLY_REPORT_TIME` | Hora `HH:mm` del resumen semanal automático | `19:00` |
 | `AI_PROVIDER` / `AI_MODEL` / `AI_API_KEY` / `AI_BASE_URL` | Config de IA (compatible OpenAI) | — |
 | `DB_PATH` | Ruta del archivo SQLite | `./data/app.db` |
 | `WA_SESSION` | Nombre de la sesión de Baileys (carpeta en `auth_info/`) | `personal-agent` |
+| `MAX_DAILY_PROACTIVE_MESSAGES` | Límite diario de mensajes proactivos (recordatorios/rutinas/resumen semanal) - ver "Cómo evitar que WhatsApp bloquee/restrinja el número". `0` = sin límite | `300` |
+| `MAX_DAILY_COLD_MESSAGES` | Límite diario de mensajes en frío (`send_message` a alguien que nunca le ha escrito al bot) - mucho más bajo a propósito | `20` |
 | `ADMIN_TOKEN` | Token del administrador para el panel. Vacío = se genera solo. Cada otro usuario recibe el suyo automáticamente | — |
 | `AI_HISTORY_TURNS` | Mensajes pasados que se reenvían como contexto en cada llamada a la IA | `14` |
 | `PANEL_URL` | URL pública del panel (opcional, solo para el mensaje de bienvenida a nuevos usuarios) | — |

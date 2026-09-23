@@ -106,6 +106,9 @@ export function createServer(bot: BotManager): Express {
         connected: wa.isConnected(),
         hasQr: Boolean(wa.qr),
         banSuspected: wa.banSuspected,
+        // Anti-ban daily send governor snapshot (see whatsapp/send-guard.ts) - lets the admin panel
+        // actually show the safety net is working instead of just trusting it's there.
+        sendGuard: wa.sendGuardStats(),
       });
     }),
   );

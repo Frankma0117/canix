@@ -54,8 +54,8 @@ export function buildWeeklyReportMessage(userId: number): string {
 
 /**
  * Creates the recurring "weekly_report" reminder for a user if they don't already have one -
- * same idempotent bootstrap/grant_access/backfill pattern as ensureDailyAgendaReminder() (see
- * agenda.ts). Fires weekly on WEEKLY_REPORT_DAY at WEEKLY_REPORT_TIME; content is built fresh at
+ * idempotent bootstrap/grant_access/backfill pattern (called once per user, no-op if it already
+ * exists). Fires weekly on WEEKLY_REPORT_DAY at WEEKLY_REPORT_TIME; content is built fresh at
  * send time by buildWeeklyReportMessage() above.
  */
 export function ensureWeeklyReportReminder(userId: number, targetJid: string): void {

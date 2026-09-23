@@ -1,7 +1,6 @@
 import type { Tool } from '../tool-registry.js';
 import { usersRepo } from '../../db/repositories/users.repo.js';
 import { phoneToJid } from '../../util/jid.js';
-import { ensureDailyAgendaReminder } from '../agenda.js';
 import { ensureWeeklyReportReminder } from '../weekly-report.js';
 import { ensureDailyResetReminder } from '../daily-reset.js';
 import { ensureDailyDedupReminder } from '../dedup.js';
@@ -33,7 +32,6 @@ export const grantAccessTool: Tool = {
 
     const jid = phoneToJid(phone);
     const user = usersRepo.create({ jid, name, role: 'user', username });
-    ensureDailyAgendaReminder(user.id, user.jid);
     ensureWeeklyReportReminder(user.id, user.jid);
     ensureDailyResetReminder(user.id, user.jid);
     ensureDailyDedupReminder(user.id, user.jid);

@@ -165,6 +165,40 @@ export const remindersRepo = {
     db.prepare('UPDATE reminders SET status = ? WHERE id = ?').run(status, id);
   },
 
+  /** Sets both confirmation-tracking columns directly - used right after a needsConfirmation()
+   *  reminder is sent (see task-scheduler.ts). */
+  setConfirmationState(id: number, awaitingConfirmation: boolean, missedConfirmations: number): void {
+    db.prepare('UPDATE reminders SET awaiting_confirmation = ?, missed_confirmations = ? WHERE id = ?').run(
+      awaitingConfirmation ? 1 : 0,
+      missedConfirmations,
+      id,
+    );
+  },
+
+  /** Silences a reminder that went too long without a confirming reply - status 'suspended' takes
+   *  it out of listDue() entirely (unlike paused_until, which is date-bounded and still visited by
+   *  the scheduler's pause/fast-forward logic), and `nextRunAt` is pre-computed so the moment it
+   *  gets resumed (confirmForUser(), any inbound message) it just continues its normal cadence with
+   *  no extra bookkeeping needed. See task-scheduler.ts's suspendForNoConfirmation(). */
+  suspendForNoConfirmation(id: number, nextRunAt: string): void {
+    db.prepare(
+      "UPDATE reminders SET status = 'suspended', run_at = ?, awaiting_confirmation = 0, missed_confirmations = 0 WHERE id = ?",
+    ).run(nextRunAt, id);
+  },
+
+  /** Called on every inbound message from a user (see ai-agent.ts's processMessage) - proof the
+   *  chat is genuinely two-way, so: (1) clears the awaiting-confirmation flag on anything of theirs
+   *  still waiting on a reply, and (2) resumes anything of theirs that got auto-suspended for lack
+   *  of one, back to 'pending' with a clean slate. */
+  confirmForUser(userId: number): void {
+    db.prepare(
+      "UPDATE reminders SET awaiting_confirmation = 0, missed_confirmations = 0 WHERE user_id = ? AND awaiting_confirmation = 1",
+    ).run(userId);
+    db.prepare(
+      "UPDATE reminders SET status = 'pending', awaiting_confirmation = 0, missed_confirmations = 0 WHERE user_id = ? AND status = 'suspended'",
+    ).run(userId);
+  },
+
   cancel(userId: number, id: number): void {
     db.prepare("UPDATE reminders SET status = 'cancelled' WHERE id = ? AND user_id = ?").run(id, userId);
   },

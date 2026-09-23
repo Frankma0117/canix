@@ -1,4 +1,10 @@
-import 'dotenv/config';
+import { config as loadDotenv } from 'dotenv';
+
+// dotenv 18 prints a "◇ injected env (N) from .env" line by default on every load - explicit call
+// (instead of the implicit `import 'dotenv/config'` side-effect) so `quiet` can actually be set:
+// the only other way is the DOTENV_CONFIG_QUIET env var, which can't be set from inside .env itself
+// (chicken-and-egg - that file is what this call is busy loading).
+loadDotenv({ quiet: true });
 
 /**
  * Central configuration read from environment variables (.env).
@@ -8,8 +14,9 @@ export const env = {
 
   timezone: process.env.TIMEZONE ?? 'America/Bogota',
 
-  // Hora 'HH:mm' (en TIMEZONE) a la que cada usuario recibe su agenda del día automáticamente -
-  // ver ensureDailyAgendaReminder() en agent/agenda.ts.
+  // Ya no dispara ningún aviso propio (el push automático de la agenda diaria se quitó - ver el
+  // comentario de 'daily_agenda' en types/index.ts) - se conserva solo como el punto de referencia
+  // horario que dailyResetTime usa más abajo para decidir su propio horario.
   morningSummaryTime: process.env.MORNING_SUMMARY_TIME ?? '06:30',
 
   // Hora (0-23, en TIMEZONE) a partir de la cual completar la última tarea/rutina pendiente del día
@@ -55,6 +62,18 @@ export const env = {
     // this, a number saved/typed without indicativo produces an invalid jid that silently can't
     // be messaged (see util/jid.ts). Set to '' to disable and always use numbers exactly as given.
     defaultCountryCode: process.env.DEFAULT_COUNTRY_CODE ?? '57',
+
+    // Daily send caps enforced by whatsapp/send-guard.ts - a last line of defense against the
+    // "one-way broadcast" pattern that gets numbers flagged (see README "Cómo evitar que WhatsApp
+    // bloquee/restrinja el número"). A brand-new number gets a fraction of these (warm-up ramp,
+    // hardcoded in send-guard.ts, eases up over its first 14 days) - these are the steady-state
+    // ceiling once warmed up. 0 = uncapped (not recommended). Defaults are generous for personal/
+    // small multi-tenant use; lower them if this deploy has many granted users.
+    maxDailyProactiveMessages: parseInt(process.env.MAX_DAILY_PROACTIVE_MESSAGES ?? '300', 10),
+    // Much lower default: cold sends (send_message to someone who's never written to the bot) are
+    // the single riskiest pattern - this should stay close to genuine day-to-day personal use, not
+    // scaled up "just in case".
+    maxDailyColdMessages: parseInt(process.env.MAX_DAILY_COLD_MESSAGES ?? '20', 10),
   },
 
   audio: {

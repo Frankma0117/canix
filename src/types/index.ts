@@ -84,7 +84,12 @@ export interface Contact {
   created_at: string;
 }
 
-export type ReminderStatus = 'pending' | 'executed' | 'failed' | 'cancelled';
+// 'missed': was due while the process was down (crash/restart/deploy) and deliberately NOT sent
+// on recovery, instead of dumping the whole backlog at once - see reconcileMissedReminders() in
+// task-scheduler.ts. 'suspended': a recurring/repeating notification that went unconfirmed for too
+// long (see needsConfirmation() in task-scheduler.ts) - silenced until the user writes anything at
+// all, which auto-resumes it (remindersRepo.confirmForUser()).
+export type ReminderStatus = 'pending' | 'executed' | 'failed' | 'cancelled' | 'missed' | 'suspended';
 export type RecurrenceFreq = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 export type ReminderKind =
   | 'reminder'
@@ -92,9 +97,12 @@ export type ReminderKind =
   | 'flexible'
   | 'routine_reminder'
   | 'routine_checkin'
-  // One per user, auto-created on bootstrap/grant_access: fires daily at MORNING_SUMMARY_TIME.
-  // Its `message` is ignored at send time - task-scheduler.ts builds the agenda text fresh every
-  // time from that day's routines/todos/reminders (see agent/agenda.ts).
+  // DEPRECATED - no longer auto-created (used to be a daily unsolicited "agenda del día" push,
+  // one per user, fired at MORNING_SUMMARY_TIME). Removed per the user's own ask: no proactive
+  // messaging beyond notifications the user actually scheduled themselves - see the boot migration
+  // in db/init.ts that cancels any pre-existing ones. The on-demand get_today_agenda tool
+  // (agent/agenda.ts's buildAgendaMessage) still works exactly the same, only the auto-push is gone.
+  // Kind kept in the type only so old rows/history still type-check.
   | 'daily_agenda'
   // One per user, auto-created on bootstrap/grant_access: fires weekly (WEEKLY_REPORT_DAY/TIME).
   // Same "ignore stored message, build fresh at send time" pattern as daily_agenda - see
@@ -147,6 +155,14 @@ export interface Reminder {
   // pause-routine.tool.ts). NULL = not paused. A user-level pause (users.paused_until) also
   // silences this row even when this column itself is NULL - see task-scheduler.ts.
   paused_until: string | null;
+  // 1 right after a needsConfirmation() reminder was sent and the user hasn't written anything
+  // (any message at all) since - cleared the moment they do (remindersRepo.confirmForUser(), called
+  // from every inbound message). See task-scheduler.ts's confirmation gate.
+  awaiting_confirmation: number;
+  // How many times in a row this fired while still awaiting_confirmation from the previous send -
+  // reaching the limit auto-suspends it (status 'suspended') instead of sending again. Reset to 0
+  // the moment the user writes anything.
+  missed_confirmations: number;
   created_at: string;
 }
 

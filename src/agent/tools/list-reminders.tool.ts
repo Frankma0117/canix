@@ -14,8 +14,11 @@ export const listRemindersTool: Tool = {
       category: { type: 'string', description: 'Nombre de categoría para filtrar (opcional).' },
       status: {
         type: 'string',
-        enum: ['pending', 'executed', 'failed', 'cancelled'],
-        description: 'Estado a filtrar (default: pending).',
+        enum: ['pending', 'executed', 'failed', 'cancelled', 'missed', 'suspended'],
+        description:
+          'Estado a filtrar (default: pending). "missed" = quedó atrasado mientras el bot estuvo caído y no se ' +
+          'mandó. "suspended" = se pausó solo por falta de confirmación (ver needsConfirmation en task-scheduler.ts) ' +
+          'y se reactiva apenas la persona escriba cualquier cosa.',
       },
       target_user: {
         type: 'string',
@@ -48,7 +51,9 @@ export const listRemindersTool: Tool = {
       .map((r) => {
         const link = r.link_id ? linksRepo.getById(userId, r.link_id) : undefined;
         const pausedNote = r.paused_until ? ` ⏸️ pausado hasta ${r.paused_until.slice(0, 10)}` : '';
-        return `#${r.id} ${r.run_at} — ${r.message}${link ? ` 🔗${link.url}` : ''}${pausedNote}`;
+        const suspendedNote = r.status === 'suspended' ? ' ⏸️ suspendido por falta de confirmación (se reactiva solo)' : '';
+        const missedNote = r.status === 'missed' ? ' ⚠️ no se envió (el bot estuvo caído)' : '';
+        return `#${r.id} ${r.run_at} — ${r.message}${link ? ` 🔗${link.url}` : ''}${pausedNote}${suspendedNote}${missedNote}`;
       })
       .join('\n');
   },

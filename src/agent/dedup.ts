@@ -73,8 +73,8 @@ export function reminderDedupeKey(r: {
 
 /**
  * Creates the recurring "daily_dedup" reminder for a user if they don't already have one - same
- * idempotent-bootstrap pattern as ensureDailyAgendaReminder (see agent/agenda.ts), called from the
- * same three registration points. Fires daily at DAILY_DEDUP_TIME; task-scheduler.ts handles this
+ * idempotent-bootstrap pattern as ensureWeeklyReportReminder (see agent/weekly-report.ts), called
+ * from the same registration points. Fires daily at DAILY_DEDUP_TIME; task-scheduler.ts handles this
  * kind by silently running dedupeUser() below - no WhatsApp message is ever sent, this is purely
  * internal housekeeping ("no es necesario repetir las cosas").
  */

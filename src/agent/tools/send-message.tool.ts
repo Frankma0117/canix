@@ -1,6 +1,9 @@
 import type { Tool } from '../tool-registry.js';
 import { contactsRepo } from '../../db/repositories/contacts.repo.js';
+import { usersRepo } from '../../db/repositories/users.repo.js';
 import { phoneToJid, normalizePhoneDigits, isJid } from '../../util/jid.js';
+import { checkBudget, recordSend } from '../../whatsapp/send-guard.js';
+import { env } from '../../config/env.js';
 
 export const sendMessageTool: Tool = {
   name: 'send_message',
@@ -76,9 +79,21 @@ export const sendMessageTool: Tool = {
       }
     }
 
+    // "Cold" = the target has never written to this bot (not a registered user) - the riskiest
+    // pattern for a WhatsApp number (see whatsapp/send-guard.ts), so it gets its own, much lower
+    // daily cap + minimum spacing on top of the general connection health checks above. A message
+    // to someone who already uses the bot (a registered user) is a warm, established conversation
+    // and isn't gated here at all.
+    const isCold = !usersRepo.getByJidOrLid(targetJid);
+    if (isCold) {
+      const budget = checkBudget('cold', env.wa.session);
+      if (!budget.ok) return `${budget.reason} Intenta de nuevo más tarde.`;
+    }
+
     console.log('[TOOL] send_message: enviando a %s...', targetJid);
     try {
       await ctx.wa.sendText(targetJid, message);
+      if (isCold) recordSend('cold', targetJid);
       console.log('[TOOL] send_message: sock.sendMessage() confirmo el envio a %s sin error.', targetJid);
     } catch (err) {
       console.error('[TOOL] send_message: fallo el envio a %s:', targetJid, (err as Error).message);

@@ -147,7 +147,10 @@ export class HttpVisionService implements VisionService {
 
   private async post(imageBuffer: Buffer, taxonomy: TaxonomyCandidates, signal: AbortSignal): Promise<AnalyzeResponse | null> {
     const form = new FormData();
-    form.append('image', new Blob([imageBuffer]), 'garment.jpg');
+    // Uint8Array.from() (not just wrapping imageBuffer directly) makes a definite plain-ArrayBuffer-
+    // backed copy - newer @types/node types Buffer's underlying buffer as ArrayBufferLike (it could
+    // in principle be a SharedArrayBuffer), which Blob's BlobPart type no longer accepts as-is.
+    form.append('image', new Blob([Uint8Array.from(imageBuffer)]), 'garment.jpg');
     form.append('labels', JSON.stringify(taxonomy.groups));
 
     const res = await fetch(`${env.fashion.vision.serviceUrl}/analyze`, { method: 'POST', body: form, signal });
@@ -174,7 +177,8 @@ export class HttpVisionService implements VisionService {
 
     try {
       const form = new FormData();
-      form.append('file', new Blob([pdfBuffer]), 'garments.pdf');
+      // Same Uint8Array.from() fix as post() above - see its comment.
+      form.append('file', new Blob([Uint8Array.from(pdfBuffer)]), 'garments.pdf');
       form.append('max_images', String(maxImages));
 
       const res = await fetch(`${env.fashion.vision.serviceUrl}/extract-pdf`, { method: 'POST', body: form, signal: controller.signal });

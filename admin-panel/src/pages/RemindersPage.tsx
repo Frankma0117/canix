@@ -13,6 +13,17 @@ const STATUS_TONE: Record<ReminderStatus, 'success' | 'warning' | 'error' | 'neu
   executed: 'success',
   failed: 'error',
   cancelled: 'neutral',
+  missed: 'error',
+  suspended: 'neutral',
+};
+
+const STATUS_LABEL: Record<ReminderStatus, string> = {
+  pending: 'Pendientes',
+  executed: 'Enviados',
+  failed: 'Fallidos',
+  cancelled: 'Cancelados',
+  missed: 'No enviados (bot caído)',
+  suspended: 'Suspendidos (sin confirmar)',
 };
 
 const RECURRENCE_LABEL: Record<string, string> = {
@@ -57,10 +68,11 @@ export function RemindersPage() {
       <div className="mb-6 flex items-center justify-between">
         <h1 className="font-display text-2xl font-semibold text-ink dark:text-white">Recordatorios</h1>
         <Select value={status} onChange={(e) => setStatus(e.target.value as ReminderStatus)} className="max-w-[10rem]">
-          <option value="pending">Pendientes</option>
-          <option value="executed">Enviados</option>
-          <option value="failed">Fallidos</option>
-          <option value="cancelled">Cancelados</option>
+          {(Object.keys(STATUS_LABEL) as ReminderStatus[]).map((s) => (
+            <option key={s} value={s}>
+              {STATUS_LABEL[s]}
+            </option>
+          ))}
         </Select>
       </div>
 

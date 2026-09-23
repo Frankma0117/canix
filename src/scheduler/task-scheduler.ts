@@ -2,13 +2,13 @@ import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { messagesRepo } from '../db/repositories/messages.repo.js';
-import { stickersRepo } from '../db/repositories/stickers.repo.js';
 import { processDueCallReminders } from '../calls/call-reminders.service.js';
 import { nowLocal, addMinutes, addMonths, addDays, addSeconds, dateOnly, randomTimeOnDate } from '../util/datetime.js';
-import { buildAgendaMessage } from '../agent/agenda.js';
 import { buildWeeklyReportMessage } from '../agent/weekly-report.js';
 import { dedupeUser, summaryTotal, summaryLine } from '../agent/dedup.js';
 import { plainReminderPrefix } from '../util/motivational.js';
+import { checkBudget, recordSend } from '../whatsapp/send-guard.js';
+import { env } from '../config/env.js';
 import { synthesizeVoiceNote } from '../audio/tts.js';
 import { sleep } from '../util/human-delay.js';
 import type { WaManager } from '../whatsapp/wa-manager.js';
@@ -64,28 +64,110 @@ function isRecurringKind(reminder: Reminder): boolean {
 }
 
 /**
- * Fast-forwards a recurring reminder's run_at past a pause window, silently (no send) - so
- * unpausing doesn't dump a backlog of missed occurrences; the next fire is just the next natural
- * occurrence after resume, exactly as if nothing happened during the pause. Capped as a runaway
- * guard against a pathological pause length + tight recurrence combination.
+ * Core fast-forward loop shared by advancePastPause() and the other callers below: walks a
+ * recurring reminder's run_at forward, occurrence by occurrence, until it lands strictly after
+ * `threshold` - never sending anything along the way. Capped as a runaway guard against a
+ * pathological (very tight recurrence + very long gap) combination, in which case it just returns
+ * the threshold itself as a good-enough landing spot; the next tick moves it along normally from
+ * there. Returns `{ terminal: true }` if the chain has nowhere left to go (recurrence_freq 'none' -
+ * only possible here for a kind that's normally recurring but got edited down to a one-off mid
+ * chain; every caller treats this as "nothing sensible to reschedule to").
  */
-function advancePastPause(reminder: Reminder, pausedUntil: string): void {
+function fastForwardPast(reminder: Reminder, threshold: string): { runAt: string } | { terminal: true } {
   let current: Reminder = reminder;
   for (let i = 0; i < 500; i++) {
     const next = nextRunAt(current);
-    if (!next) {
-      remindersRepo.markStatus(current.id, 'executed');
-      return;
-    }
-    if (next > pausedUntil) {
-      remindersRepo.reschedule(current.id, next);
-      return;
-    }
+    if (!next) return { terminal: true };
+    if (next > threshold) return { runAt: next };
     current = { ...current, run_at: next };
   }
-  // Pathological case (very tight recurrence + very long pause) - just park it right at the
-  // pause's end instead of looping further; the next tick will move it along normally from there.
-  remindersRepo.reschedule(current.id, pausedUntil);
+  return { runAt: threshold };
+}
+
+/**
+ * Fast-forwards a recurring reminder's run_at past a pause window, silently (no send) - so
+ * unpausing doesn't dump a backlog of missed occurrences; the next fire is just the next natural
+ * occurrence after resume, exactly as if nothing happened during the pause.
+ */
+function advancePastPause(reminder: Reminder, pausedUntil: string): void {
+  const forward = fastForwardPast(reminder, pausedUntil);
+  if ('terminal' in forward) remindersRepo.markStatus(reminder.id, 'executed');
+  else remindersRepo.reschedule(reminder.id, forward.runAt);
+}
+
+/**
+ * True for the notification kinds that require a confirming reply (any inbound message at all,
+ * not necessarily on-topic - see reminders.repo.ts's confirmForUser()) before they're allowed to
+ * fire again: recurring plain reminders/flexible/important-date, routines, and the weekly report -
+ * anything that would otherwise keep pushing messages indefinitely into a chat that's gone quiet,
+ * which is exactly the one-way-broadcast pattern that gets WhatsApp numbers flagged. Deliberately
+ * EXCLUDES: one-off (non-recurring) reminders (nothing "next" to gate), 'interval' (a short, self-
+ * terminating burst the user just triggered seconds ago - already bounded, not a standing
+ * subscription), and the silent maintenance kinds (never send a message to confirm in the first
+ * place). See the suspend/resume flow in tick() below.
+ */
+function needsConfirmation(reminder: Reminder): boolean {
+  if (reminder.kind === 'routine_reminder' || reminder.kind === 'routine_checkin' || reminder.kind === 'weekly_report') {
+    return true;
+  }
+  return (
+    (reminder.kind === 'reminder' || reminder.kind === 'flexible' || reminder.kind === 'important_date') &&
+    reminder.recurrence_freq !== 'none'
+  );
+}
+
+/** How many consecutive unconfirmed sends a notification gets before it's auto-suspended (see
+ *  needsConfirmation() above) - one full miss is tolerated (people get busy for a day), suspending
+ *  only once a SECOND one in a row also goes unanswered. */
+const CONFIRMATION_MISS_LIMIT = 2;
+
+/**
+ * One-time reconciliation run once at boot, before the scheduler starts ticking normally (see
+ * index.ts) - reminders that are already 'pending' with run_at in the past at this exact moment
+ * were, by definition, due at some point while the process wasn't running (crash, deploy, manual
+ * restart). Sending all of those now, in one burst right as the WhatsApp session reconnects, is
+ * both a bad experience (a pile of stale reminders) and exactly the kind of "unusual traffic
+ * pattern" that increases account-review risk. So instead: recurring ones are silently fast-
+ * forwarded to their next real future occurrence (same as a pause - see advancePastPause above),
+ * and one-off ones (nothing to fast-forward to) are marked 'missed' without ever being sent. If the
+ * admin wants to actually tell people the bot's back, that's a deliberate, explicit action on their
+ * part (send_message / announce_update), never automatic.
+ */
+export function reconcileMissedReminders(): void {
+  const now = nowLocal();
+  const due = remindersRepo.listDue(now);
+  let rescheduled = 0;
+  let missed = 0;
+
+  for (const reminder of due) {
+    // Silent maintenance kinds never send anything - safe to just let the first normal tick
+    // process them like any other day.
+    if (reminder.kind === 'daily_reset' || reminder.kind === 'daily_dedup') continue;
+
+    if (isRecurringKind(reminder)) {
+      const forward = fastForwardPast(reminder, now);
+      if ('terminal' in forward) {
+        remindersRepo.markStatus(reminder.id, 'missed');
+        missed++;
+      } else {
+        remindersRepo.reschedule(reminder.id, forward.runAt);
+        rescheduled++;
+      }
+    } else {
+      // One-off reminder or an 'interval' mid-burst - no sensible "next" occurrence to move to,
+      // and stale interval math (elapsed seconds while the process was down) isn't worth chasing.
+      remindersRepo.markStatus(reminder.id, 'missed');
+      missed++;
+    }
+  }
+
+  if (rescheduled > 0 || missed > 0) {
+    console.log(
+      '[SCHEDULER] Reconciliación de arranque: %d recordatorio(s) atrasado(s) reprogramado(s), %d marcado(s) como perdido(s) (sin enviar).',
+      rescheduled,
+      missed,
+    );
+  }
 }
 
 /** Later of two possibly-null pause timestamps ('YYYY-MM-DD HH:mm:ss'), or null if neither is set. */
@@ -197,6 +279,28 @@ export class TaskScheduler {
           }
         }
 
+        // Confirmation gate (see needsConfirmation()'s comment): if the LAST send of this exact
+        // notification is still awaiting a reply and this would be its second such send in a row,
+        // suspend it instead - a suspension notice, not the normal message, goes out this time.
+        if (needsConfirmation(reminder) && reminder.awaiting_confirmation) {
+          const missedAfter = reminder.missed_confirmations + 1;
+          if (missedAfter >= CONFIRMATION_MISS_LIMIT) {
+            await this.suspendForNoConfirmation(reminder, target);
+            continue;
+          }
+        }
+
+        // Daily send-volume governor (see whatsapp/send-guard.ts) - a last line of defense against
+        // a runaway loop or misconfiguration pushing an unusual volume of proactive messages in one
+        // day. Checked BEFORE committing the reschedule below so a capped reminder just stays due
+        // and gets retried on a later tick once budget frees up (past midnight, or the admin raises
+        // MAX_DAILY_PROACTIVE_MESSAGES) instead of being silently lost.
+        const budget = checkBudget('proactive', env.wa.session);
+        if (!budget.ok) {
+          console.error('[SCHEDULER] Recordatorio #%d retenido: %s', reminder.id, budget.reason);
+          continue;
+        }
+
         const next = nextRunAt(reminder);
         try {
           // Commit the state transition BEFORE sending: if the process crashes/restarts in the
@@ -207,16 +311,13 @@ export class TaskScheduler {
           if (next) remindersRepo.reschedule(reminder.id, next);
           else remindersRepo.markStatus(reminder.id, 'executed');
 
-          // kind 'daily_agenda'/'weekly_report' ignore their stored `message` and build the real
-          // content fresh at send time (see agent/agenda.ts, agent/weekly-report.ts) - that's the
-          // whole point, it must reflect whatever changed since the reminder was created, not a
-          // stale snapshot.
+          // kind 'weekly_report' ignores its stored `message` and builds the real content fresh at
+          // send time (see agent/weekly-report.ts) - it must reflect whatever changed since the
+          // reminder was created, not a stale snapshot.
           const text =
-            reminder.kind === 'daily_agenda'
-              ? buildAgendaMessage(reminder.user_id, { withIntro: true })
-              : reminder.kind === 'weekly_report'
-                ? buildWeeklyReportMessage(reminder.user_id)
-                : // Plain reminders get a rotating warm/motivational lead-in (see util/motivational.ts) so
+            reminder.kind === 'weekly_report'
+              ? buildWeeklyReportMessage(reminder.user_id)
+              : // Plain reminders get a rotating warm/motivational lead-in (see util/motivational.ts) so
                 // they read like a friend's nudge instead of a flat notification; every other kind
                 // already carries its own emoji/wording at creation time (important_date, flexible,
                 // routine_reminder/checkin - see schedule-important-date.tool.ts,
@@ -224,21 +325,16 @@ export class TaskScheduler {
                 `${reminder.kind === 'reminder' ? `${plainReminderPrefix()} ` : ''}${reminder.message}`;
 
           await this.wa.sendText(target, text);
+          recordSend('proactive', target);
           console.log('[SCHEDULER] Recordatorio #%d enviado a %s.', reminder.id, target);
 
-          // Best-effort "good morning" sticker alongside the daily agenda - this push never goes
-          // through the AI loop (no model turn to decide "does a sticker fit?"), so it's a plain
-          // keyword match against whatever the admin actually labeled a sticker (see
-          // stickers.repo.ts's findByKeywords) instead of an LLM judgment call. Silently does
-          // nothing if no matching sticker exists yet.
-          if (reminder.kind === 'daily_agenda') {
-            const morningSticker = stickersRepo.findByKeywords(['buenos_dias', 'buen_dia', 'good_morning', 'buenosdias']);
-            if (morningSticker) {
-              await this.wa.sendSticker(target, morningSticker.data).catch((err) => {
-                console.error('[SCHEDULER] No se pudo enviar el sticker de buenos días:', (err as Error).message);
-              });
-            }
+          // Now that it actually went out, start/continue tracking whether it gets confirmed - see
+          // needsConfirmation()'s comment and the gate above.
+          if (needsConfirmation(reminder)) {
+            const missedNow = reminder.awaiting_confirmation ? reminder.missed_confirmations + 1 : 0;
+            remindersRepo.setConfirmationState(reminder.id, true, missedNow);
           }
+
           await sleep(BETWEEN_SENDS_MS);
         } catch (err) {
           console.error('[SCHEDULER] Recordatorio #%d falló:', reminder.id, (err as Error).message);
@@ -282,6 +378,12 @@ export class TaskScheduler {
    * crash-safety reason (see the comment above in tick()).
    */
   private async handleIntervalReminder(reminder: Reminder, target: string): Promise<void> {
+    const budget = checkBudget('proactive', env.wa.session);
+    if (!budget.ok) {
+      console.error('[SCHEDULER] Recordatorio por intervalo #%d retenido: %s', reminder.id, budget.reason);
+      return; // stays at its current run_at, retried on a later tick like the main loop's own gate
+    }
+
     const firedCountAfter = reminder.fired_count + 1;
     const done = !reminder.repeat_count || firedCountAfter >= reminder.repeat_count;
     const next = done ? null : addSeconds(reminder.run_at, reminder.interval_seconds ?? 30);
@@ -294,6 +396,7 @@ export class TaskScheduler {
       const text = `🔁 ${counter} — ${reminder.message}${closing}`;
 
       await this.wa.sendText(target, text);
+      recordSend('proactive', target);
       console.log('[SCHEDULER] Recordatorio por intervalo #%d enviado a %s (%s).', reminder.id, target, counter);
 
       if (reminder.with_audio) {
@@ -305,5 +408,39 @@ export class TaskScheduler {
       console.error('[SCHEDULER] Recordatorio por intervalo #%d falló:', reminder.id, (err as Error).message);
       if (done) remindersRepo.markStatus(reminder.id, 'failed');
     }
+  }
+
+  /**
+   * Suspends a notification that went CONFIRMATION_MISS_LIMIT sends without a reply, instead of
+   * sending it again - see needsConfirmation()'s comment and the gate in tick(). A routine's two
+   * linked rows (routine_reminder + routine_checkin, same todo_id) are suspended together so the
+   * whole routine goes quiet at once rather than half of it still pinging. Never mentions ban risk
+   * to the user - just that there's been no reply, and that writing anything brings it back.
+   */
+  private async suspendForNoConfirmation(reminder: DueReminder, target: string): Promise<void> {
+    const isRoutine = reminder.kind === 'routine_reminder' || reminder.kind === 'routine_checkin';
+    const linked = isRoutine && reminder.todo_id ? remindersRepo.listByTodo(reminder.todo_id) : [reminder];
+
+    for (const r of linked) {
+      if (r.status !== 'pending') continue;
+      const forward = fastForwardPast(r, nowLocal());
+      if ('terminal' in forward) {
+        remindersRepo.markStatus(r.id, 'executed');
+      } else {
+        remindersRepo.suspendForNoConfirmation(r.id, forward.runAt);
+      }
+    }
+
+    const label = isRoutine ? `tu rutina "${reminder.message}"` : `"${reminder.message}"`;
+    const notice =
+      `⏸️ Voy a dejar en pausa ${label} porque no he tenido respuesta tuya desde los últimos avisos. ` +
+      'Escríbeme cualquier cosa cuando quieras y se reactiva sola.';
+    try {
+      await this.wa.sendText(target, notice);
+      console.log('[SCHEDULER] Recordatorio #%d suspendido por falta de confirmación.', reminder.id);
+    } catch (err) {
+      console.error('[SCHEDULER] No se pudo avisar la suspensión del #%d:', reminder.id, (err as Error).message);
+    }
+    await sleep(BETWEEN_SENDS_MS);
   }
 }
