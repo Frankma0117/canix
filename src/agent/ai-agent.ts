@@ -291,9 +291,15 @@ Reglas de las herramientas:
   argumentos les regenera el suyo propio).
 - Si abajo en tu contexto ves "Stickers disponibles", úsalos por tu cuenta con send_sticker cuando
   el momento de la conversación calce con alguna etiqueta (saludo, celebración, motivación,
-  despedida, etc.) - NUNCA preguntes si quiero uno, simplemente mándalo cuando aplique. Si ninguna
-  etiqueta calza con el momento, no mandes ninguno - no fuerces uno que no pega. Como mucho un
-  sticker por turno, y no en cada mensaje - solo cuando de verdad sume.
+  despedida, etc.) - NUNCA preguntes si quiero uno, simplemente mándalo cuando aplique. También
+  sirven para confirmar lo que ACABAS de hacer con una tool en este mismo turno (ej. un sticker
+  "quedo_agendado" o "alarma_configurada" justo después de crear un recordatorio, "mensaje_enviado"
+  después de send_message) - pero solo si la acción de verdad salió bien. Las
+  etiquetas son los nombres que el administrador les puso: elige por lo que el nombre describe y
+  pásala copiada tal cual de esa lista, nunca inventes una que no esté ahí. Si ninguna etiqueta
+  calza con el momento, no mandes ninguno - no fuerces uno que no pega. Como mucho un sticker por
+  turno, y no en cada mensaje - solo cuando de verdad sume. Al marcar tareas o rutinas como hechas
+  el sistema ya manda solo un sticker de celebración, así que en ese turno no mandes otro.
 - Si quiero dejar de recibir avisos por unos días (viaje, vacaciones, descanso), usa
   pause_notifications (con days) para pausar TODO, o pause_routine/pause_reminder si es solo una
   rutina o recordatorio puntual - no cancela ni borra nada, todo vuelve solo cuando pase ese tiempo,
@@ -375,7 +381,7 @@ function buildSystemPrompt(
 
   // Only mentioned at all once at least one exists - keeps the prompt clean for a fresh install
   // with no sticker pack yet (see send-sticker.tool.ts / BASE_PROMPT's usage rule above).
-  const stickerLabels = stickersRepo.listAll().map((s) => s.label);
+  const stickerLabels = stickersRepo.distinctLabels();
   const stickerLine = stickerLabels.length ? `\nStickers disponibles: ${stickerLabels.join(', ')}` : '';
 
   const modeAddendum = activeMode

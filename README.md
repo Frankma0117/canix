@@ -44,7 +44,9 @@ simplificada para uso personal: sin multi-negocio, con SQLite en vez de MySQL.
   tareas de una sola vez (cumplidas vs pendientes). Pregúntalo en cualquier momento ("¿cómo me fue
   esta semana?") con `get_week_report`.
 - 🎉 **Stickers de celebración**: al marcar una tarea o rutina como hecha, además del mensaje de
-  confirmación te llega un sticker (100% local, generado sin IA/tokens - ver `util/stickers.ts`).
+  confirmación te llega un sticker de la colección del administrador cuyo nombre sea de celebración
+  (`celebracion`, `felicitaciones`, `bien_hecho`, `logro`, `aplausos`... - ver `util/stickers.ts`). Si no
+  hay ninguno así, no se manda sticker.
 - 💬 **Enviar mensajes**: "envíale un mensaje a Juan diciéndole que..." — busca el contacto
   guardado y lo envía por WhatsApp.
 - 📅 **Fechas importantes**: cumpleaños, aniversarios, reuniones que no puedes dejar pasar. A

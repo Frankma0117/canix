@@ -12,6 +12,7 @@
     "start": "tsx src/index.ts",
     "build": "tsc",
     "db:init": "tsx src/db/init.ts",
+    "stickers:audit": "tsx src/scripts/audit-stickers.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

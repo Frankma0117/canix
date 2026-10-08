@@ -1,11 +1,8 @@
 import type { Tool } from '../tool-registry.js';
 import { todosRepo } from '../../db/repositories/todos.repo.js';
-import { pickCelebrationSticker } from '../../util/stickers.js';
-import { stickersRepo } from '../../db/repositories/stickers.repo.js';
+import { sendAutoSticker, TODO_DONE_KEYWORDS, NIGHT_KEYWORDS } from '../../util/stickers.js';
 import { maybeNightFarewell } from '../agenda.js';
 import { resolveActingUser } from './act-on-behalf.js';
-
-const NIGHT_STICKER_KEYWORDS = ['buenas_noches', 'buena_noche', 'good_night', 'buenasnoches'];
 
 export const completeTodoTool: Tool = {
   name: 'complete_todo',
@@ -36,20 +33,14 @@ export const completeTodoTool: Tool = {
     if (todo.scope === 'routine') return `#${id} "${todo.title}" es una rutina - usa checkin_routine para marcarla, no complete_todo.`;
     todosRepo.complete(userId, id);
 
-    // Best-effort celebration sticker alongside the text reply - never let this delay/break the
-    // actual confirmation (see util/stickers.ts).
-    pickCelebrationSticker()
-      .then((webp) => (webp ? ctx.wa.sendSticker(targetJid, webp) : undefined))
-      .catch(() => {});
-
     // If this was the LAST pending todo/routine for today (and it's late enough), also close the
     // day with a "buenas noches" - symmetric to the automatic morning "buenos días" agenda (see
-    // agent/agenda.ts's maybeNightFarewell). Best-effort sticker, same as the celebration one above.
+    // agent/agenda.ts's maybeNightFarewell). One sticker either way, from the admin's own pack
+    // (see util/stickers.ts) - the night one wins over the celebration when both apply, and
+    // nothing is sent if no saved sticker fits. Best-effort, never blocks the confirmation.
     const farewell = maybeNightFarewell(userId);
-    if (farewell) {
-      const nightSticker = stickersRepo.findByKeywords(NIGHT_STICKER_KEYWORDS);
-      if (nightSticker) ctx.wa.sendSticker(targetJid, nightSticker.data).catch(() => {});
-    }
+    if (farewell) sendAutoSticker(ctx.wa, targetJid, NIGHT_KEYWORDS, { force: true });
+    else sendAutoSticker(ctx.wa, targetJid, TODO_DONE_KEYWORDS);
 
     return `Tarea #${id} "${todo.title}" marcada como hecha. 🎉${farewell ? `\n\n${farewell}` : ''}`;
   },

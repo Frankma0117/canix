@@ -3,7 +3,7 @@ import { WaManager } from './wa-manager.js';
 import { handleFashionMessage } from '../fashion/router.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { messagesRepo } from '../db/repositories/messages.repo.js';
-import { stickersRepo, normalizeStickerLabel } from '../db/repositories/stickers.repo.js';
+import { stickersRepo, normalizeStickerLabel, isWebp } from '../db/repositories/stickers.repo.js';
 import { pendingContactsRepo } from '../db/repositories/pending-contacts.repo.js';
 import { contactsRepo } from '../db/repositories/contacts.repo.js';
 import { extractSharedContacts } from '../util/vcard.js';
@@ -41,6 +41,10 @@ const ERROR_REPLY =
  *  is the actual word. Deliberately whole-message-only (never mid-sentence) so normal conversation
  *  that happens to contain "hombre"/"mujer" is never mistaken for answering it. */
 const GENDER_REPLY_RE = /^(?:soy\s+)?(?:un\s+|una\s+)?(hombre|mujer|male|female|masculino|femenino)$/i;
+
+/** A sticker name longer than this is treated as normal chat sent while a sticker was still waiting
+ *  for its name, not as the name itself (see the pending-sticker block in handle()). */
+const STICKER_LABEL_MAX_CHARS = 40;
 
 const RESET_ALL_WARNING =
   '⚠️ Esto borra TODO tu contenido: recordatorios, rutinas, contactos, links, notas, categorías, ' +
@@ -198,11 +202,40 @@ export class BotManager {
           try {
             const data = (await downloadMediaMessage(stickerMessage, 'buffer', {})) as Buffer;
             const mimetype = stickerMessage.message?.stickerMessage?.mimetype ?? 'image/webp';
+
+            // Only WebP can be sent back as a sticker (see stickers.repo.ts's isWebp) - saving a
+            // Lottie/other one would just make every later send of it fail silently.
+            if (!isWebp(data)) {
+              console.warn('[STICKER] Sticker del admin ignorado: formato no soportado (%s).', mimetype);
+              await this.wa.sendText(
+                jid,
+                '⚠️ Ese sticker es de un formato que WhatsApp no me deja reenviar (los animados nuevos tipo Lottie). Prueba con otro.',
+              );
+              return;
+            }
+
+            const existing = stickersRepo.findByData(data);
+            if (existing) {
+              await this.wa.sendText(
+                jid,
+                existing.label
+                  ? `👌 Ese sticker ya lo tengo guardado como "${existing.label}".`
+                  : '👌 Ese sticker ya lo recibí y está esperando nombre.',
+              );
+              return;
+            }
+
             const saved = stickersRepo.createPending(user.id, data, mimetype);
-            console.log('[STICKER] Sticker #%d recibido del admin #%d, pendiente de etiqueta.', saved.id, user.id);
+            const pendingCount = stickersRepo.countPendingFor(user.id);
+            console.log('[STICKER] Sticker #%d recibido del admin #%d, pendiente de etiqueta (%d en cola).', saved.id, user.id, pendingCount);
             await this.wa.sendText(
               jid,
-              '🏷️ Sticker recibido. ¿Con qué etiqueta lo guardo? (ej. "buenos_dias", "celebracion", "motivacion")',
+              pendingCount === 1
+                ? '🏷️ Sticker recibido. ¿Con qué nombre lo guardo? Usa un nombre que diga cuándo usarlo ' +
+                    '(ej. "buenos dias", "celebracion", "buenas noches", "motivacion", "gato feliz"). ' +
+                    'Escribe "cancelar" si no lo quieres guardar.'
+                : `🏷️ Recibido, queda en cola (${pendingCount} sin nombre). Los nombres que me escribas se aplican en el ` +
+                    'orden en que me mandaste los stickers - te reenvío cada uno cuando toque.',
             );
           } catch (err) {
             console.error('[STICKER] Error descargando el sticker del admin:', (err as Error).message);
@@ -212,14 +245,39 @@ export class BotManager {
         return; // nothing else to do with this turn either way
       }
 
-      // If the admin just sent a sticker and hasn't named it yet, their next plain-text message
-      // (not a raw command like /menu) is that label. Checked early for the same reason as above.
+      // If the admin sent a sticker and hasn't named it yet, their next plain-text message (not a
+      // raw command like /menu) is that label - applied to the OLDEST pending one, so a burst of
+      // stickers gets named in the order sent. Checked early for the same reason as above.
       const pendingSticker = user.role === 'admin' ? stickersRepo.getPendingFor(user.id) : undefined;
       if (pendingSticker && text.trim() && !command.startsWith('/')) {
-        const label = normalizeStickerLabel(text);
-        stickersRepo.setLabel(pendingSticker.id, label);
-        console.log('[STICKER] Sticker #%d etiquetado como "%s".', pendingSticker.id, label);
-        await this.wa.sendText(jid, `✅ Guardado como "${label}" - lo uso cuando calce en la conversación, sin que me lo pidas.`);
+        const raw = text.trim();
+        const label = normalizeStickerLabel(raw);
+
+        if (/^(cancelar|cancela|descartar|descarta|no lo guardes|borralo|bórralo)$/i.test(raw)) {
+          stickersRepo.delete(pendingSticker.id);
+          console.log('[STICKER] Sticker #%d descartado por el admin.', pendingSticker.id);
+          await this.wa.sendText(jid, '🗑️ Listo, no lo guardé.');
+        } else if (!label || raw.length > STICKER_LABEL_MAX_CHARS || raw.includes('?')) {
+          // A full sentence/question is almost certainly normal chat, not a name - don't silently
+          // save "recuérdame comprar pan mañana" as a sticker label; ask instead.
+          await this.wa.sendText(
+            jid,
+            '🏷️ Tengo un sticker esperando nombre. Mándame solo un nombre corto (ej. "celebracion", ' +
+              '"buenas noches") o "cancelar" para descartarlo, y seguimos.',
+          );
+          await this.wa.sendSticker(jid, pendingSticker.data).catch(() => {});
+          return;
+        } else {
+          stickersRepo.setLabel(pendingSticker.id, label);
+          console.log('[STICKER] Sticker #%d etiquetado como "%s".', pendingSticker.id, label);
+          await this.wa.sendText(jid, `✅ Guardado como "${label}" - lo uso cuando calce en la conversación, sin que me lo pidas.`);
+        }
+
+        const next = stickersRepo.getPendingFor(user.id);
+        if (next) {
+          await this.wa.sendSticker(jid, next.data).catch(() => {});
+          await this.wa.sendText(jid, '🏷️ ¿Y este cómo se llama? (o "cancelar")');
+        }
         return;
       }
 

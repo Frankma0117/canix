@@ -2,12 +2,9 @@ import type { Tool } from '../tool-registry.js';
 import { todosRepo } from '../../db/repositories/todos.repo.js';
 import { habitLogsRepo } from '../../db/repositories/habit-logs.repo.js';
 import { todayLocal } from '../../util/datetime.js';
-import { pickCelebrationSticker } from '../../util/stickers.js';
-import { stickersRepo } from '../../db/repositories/stickers.repo.js';
+import { sendAutoSticker, ROUTINE_DONE_KEYWORDS, NIGHT_KEYWORDS } from '../../util/stickers.js';
 import { maybeNightFarewell } from '../agenda.js';
 import { resolveActingUser } from './act-on-behalf.js';
-
-const NIGHT_STICKER_KEYWORDS = ['buenas_noches', 'buena_noche', 'good_night', 'buenasnoches'];
 
 export const checkinRoutineTool: Tool = {
   name: 'checkin_routine',
@@ -45,22 +42,16 @@ export const checkinRoutineTool: Tool = {
 
     let farewell: string | null = null;
     if (done) {
-      // Only celebrate an actual completion - never send a "congrats" sticker for a checkin that
-      // marks the routine as NOT done (see util/stickers.ts). Best-effort, never blocks the reply.
-      pickCelebrationSticker()
-        .then((webp) => (webp ? ctx.wa.sendSticker(targetJid, webp) : undefined))
-        .catch(() => {});
-
       // Same "buenas noches" close-of-day check as complete_todo.tool.ts - only when checking in as
       // done (not when marking NOT done, since that isn't "finishing" anything) and only for today's
       // date (a late check-in/backfill for a past date shouldn't trigger tonight's farewell).
-      if (date === todayLocal()) {
-        farewell = maybeNightFarewell(userId);
-        if (farewell) {
-          const nightSticker = stickersRepo.findByKeywords(NIGHT_STICKER_KEYWORDS);
-          if (nightSticker) ctx.wa.sendSticker(targetJid, nightSticker.data).catch(() => {});
-        }
-      }
+      if (date === todayLocal()) farewell = maybeNightFarewell(userId);
+
+      // Only celebrate an actual completion - never a "congrats" sticker for a checkin marking the
+      // routine as NOT done. One sticker from the admin's pack (night one wins when it's the close
+      // of the day), nothing if none fits - see util/stickers.ts. Best-effort, never blocks.
+      if (farewell) sendAutoSticker(ctx.wa, targetJid, NIGHT_KEYWORDS, { force: true });
+      else sendAutoSticker(ctx.wa, targetJid, ROUTINE_DONE_KEYWORDS);
     }
 
     return done

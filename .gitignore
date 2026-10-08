@@ -25,3 +25,4 @@ bin/
 vision-service/.venv/
 vision-service/.cache/
 vision-service/__pycache__/
+data/stickers-export/

@@ -1,5 +1,6 @@
 import type { Tool } from '../tool-registry.js';
 import { stickersRepo } from '../../db/repositories/stickers.repo.js';
+import { sendPackSticker, stickerOnCooldown } from '../../util/stickers.js';
 
 /**
  * Lets the AI agent send a sticker from the bot's pack (see bot-manager.ts's admin-upload flow)
@@ -16,7 +17,10 @@ export const sendStickerTool: Tool = {
   parameters: {
     type: 'object',
     properties: {
-      label: { type: 'string', description: 'La etiqueta EXACTA del sticker a enviar, de las que ves en tu contexto.' },
+      label: {
+        type: 'string',
+        description: 'La etiqueta del sticker a enviar, copiada tal cual de "Stickers disponibles" en tu contexto - nunca inventes una.',
+      },
     },
     required: ['label'],
     additionalProperties: false,
@@ -26,16 +30,30 @@ export const sendStickerTool: Tool = {
     const label = String(args.label ?? '').trim();
     if (!label) return 'Me falta la etiqueta del sticker.';
 
+    // Shared with the automatic celebration/night stickers (util/stickers.ts) - stops the agent
+    // from doubling a sticker complete_todo/checkin_routine already sent this same turn.
+    if (stickerOnCooldown(ctx.ownerJid)) {
+      return 'Ya se envió un sticker hace muy poco en este chat - no mandes otro ahora, sigue solo con texto.';
+    }
+
+    // Tolerant lookup (accents/spaces/emoji/partial name - see stickers.repo.ts's findLabelMatch),
+    // so a slightly-off label from the model still sends the right sticker instead of failing.
     const sticker = stickersRepo.getByLabel(label);
-    if (!sticker) return `No tengo ningún sticker guardado con la etiqueta "${label}".`;
+    if (!sticker) {
+      const available = stickersRepo.distinctLabels();
+      console.warn('[TOOL] send_sticker: etiqueta "%s" no existe.', label);
+      return available.length
+        ? `No hay ningún sticker "${label}". Las únicas etiquetas válidas son: ${available.join(', ')}. ` +
+            'Si ninguna calza con el momento, no mandes sticker.'
+        : 'No hay stickers guardados todavía - no mandes ninguno.';
+    }
 
     try {
-      await ctx.wa.sendSticker(ctx.ownerJid, sticker.data);
-      console.log('[TOOL] send_sticker: enviado "%s" a %s.', label, ctx.ownerJid);
-      return `Listo, mandé el sticker "${label}".`;
+      await sendPackSticker(ctx.wa, ctx.ownerJid, sticker);
+      return `Listo, mandé el sticker "${sticker.label}".`;
     } catch (err) {
-      console.error('[TOOL] send_sticker: fallo enviando "%s":', label, (err as Error).message);
-      return `No pude enviar el sticker "${label}".`;
+      console.error('[TOOL] send_sticker: fallo enviando "%s":', sticker.label, (err as Error).message);
+      return `No pude enviar el sticker "${sticker.label}".`;
     }
   },
 };

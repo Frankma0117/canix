@@ -2,9 +2,9 @@ import { runFfmpeg } from '../../audio/ffmpeg.js';
 
 /**
  * Resizes/compresses a garment photo (JPEG/PNG/WebP in, always JPEG out) via the same
- * ffmpeg-static spawn pattern already used for audio conversion and sticker generation (see
- * audio/ffmpeg.ts, util/stickers.ts) - deliberately NOT sharp/jimp, which this project has already
- * avoided once for native-binding/Node-version risk (see util/stickers.ts's comment). `-f mjpeg`
+ * ffmpeg-static spawn pattern already used for audio conversion (see audio/ffmpeg.ts) -
+ * deliberately NOT sharp/jimp, to avoid the native-binding/Node-version risk better-sqlite3
+ * already causes on this project. `-f mjpeg`
  * (not `image2`) is required for a single still frame piped to stdout - `image2` expects a
  * filename pattern and errors on `pipe:1`.
  */
