@@ -1,6 +1,7 @@
 import type { Tool } from '../tool-registry.js';
 import { usersRepo } from '../../db/repositories/users.repo.js';
 import { permissionsRepo } from '../../db/repositories/permissions.repo.js';
+import { describeIdentity } from '../../util/jid.js';
 
 export const listUsersTool: Tool = {
   name: 'list_users',
@@ -21,7 +22,7 @@ export const listUsersTool: Tool = {
         }
         const usernameNote = u.username ? ` @${u.username}` : '';
         const pausedNote = u.paused_until ? ` — 🔕 pausado hasta ${u.paused_until.slice(0, 10)}` : '';
-        return `#${u.id} ${u.name ?? '(sin nombre)'}${usernameNote} (${u.jid.split('@')[0]})${access}${pausedNote}`;
+        return `#${u.id} ${u.name ?? '(sin nombre)'}${usernameNote} (${describeIdentity(u.jid).label})${access}${pausedNote}`;
       })
       .join('\n');
   },

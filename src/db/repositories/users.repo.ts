@@ -51,6 +51,22 @@ export const usersRepo = {
     return this.getByJidOrLid(fields.jid)!;
   },
 
+  /**
+   * Replaces a user's stored identity with their real phone jid - for people first registered
+   * under their WhatsApp @lid (privacy id) because the phone number wasn't known yet. The old lid
+   * is kept in `lid` so lookups by either keep working. Refuses (returns false) if that phone jid
+   * already belongs to someone else.
+   */
+  setPhoneJid(id: number, phoneJid: string): boolean {
+    const user = this.getById(id);
+    if (!user) return false;
+    const other = db.prepare('SELECT id FROM users WHERE jid = ? AND id != ?').get(phoneJid, id);
+    if (other) return false;
+    const lid = user.lid ?? (user.jid.endsWith('@lid') ? user.jid : null);
+    db.prepare('UPDATE users SET jid = ?, lid = ? WHERE id = ?').run(phoneJid, lid, id);
+    return true;
+  },
+
   setLid(jid: string, lid: string): void {
     db.prepare('UPDATE users SET lid = ? WHERE jid = ?').run(lid, jid);
   },

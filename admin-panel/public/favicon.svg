@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="hex" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2f8bff"/>
+      <stop offset="0.55" stop-color="#5b4cf5"/>
+      <stop offset="1" stop-color="#8b3fe4"/>
+    </linearGradient>
+    <linearGradient id="helmet" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e4e9fb"/>
+    </linearGradient>
+  </defs>
+  <polygon points="50,5 89,27.5 89,72.5 50,95 11,72.5 11,27.5" fill="url(#hex)" stroke="url(#hex)" stroke-width="8" stroke-linejoin="round"/>
+  <rect x="19" y="41" width="11" height="22" rx="5.5" fill="#cfd8f6"/>
+  <rect x="70" y="41" width="11" height="22" rx="5.5" fill="#cfd8f6"/>
+  <rect x="25" y="27" width="50" height="46" rx="19" fill="url(#helmet)"/>
+  <rect x="31" y="37" width="38" height="27" rx="12" fill="#121735"/>
+  <path d="M38.5 53 Q43 46.5 47.5 53" stroke="#3fe6ff" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+  <path d="M52.5 53 Q57 46.5 61.5 53" stroke="#3fe6ff" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+</svg>

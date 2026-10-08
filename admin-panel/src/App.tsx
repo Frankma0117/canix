@@ -3,7 +3,18 @@ import { AuthProvider, useAuth } from './lib/auth.tsx';
 import { LoginScreen, AuthLayout } from './components/LoginScreen.tsx';
 import { PasswordForm } from './components/PasswordForm.tsx';
 import { Sidebar } from './components/Sidebar.tsx';
+import { Topbar } from './components/Topbar.tsx';
 import { visibleSections } from './lib/sections.tsx';
+import { BrandMark } from './components/brand/Logo.tsx';
+
+function Splash() {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-gray-light dark:bg-[#0b0e24]">
+      <BrandMark size={64} className="animate-float" />
+      <p className="text-sm font-semibold text-gray-dark">Cargando tu espacio…</p>
+    </div>
+  );
+}
 
 export default function App() {
   return (
@@ -15,7 +26,7 @@ export default function App() {
 
 function Gate() {
   const { token, user, loading, logout } = useAuth();
-  if (loading) return <div className="flex min-h-screen items-center justify-center text-sm text-gray-dark">Cargando…</div>;
+  if (loading) return <Splash />;
   if (!token || !user) return <LoginScreen />;
   if (user.mustChangePassword) {
     return (
@@ -51,7 +62,7 @@ function Shell() {
   const current = sections.find((s) => s.id === hash) ?? sections[0];
 
   return (
-    <div className="flex min-h-screen bg-gray-light dark:bg-[#0f1020]">
+    <div className="flex min-h-screen bg-gray-light dark:bg-[#0b0e24]">
       <Sidebar
         sections={sections}
         active={current?.id ?? ''}
@@ -63,13 +74,10 @@ function Shell() {
         onClose={() => setMenuOpen(false)}
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-gray-medium/70 bg-white/90 px-4 py-3 backdrop-blur lg:hidden dark:border-white/10 dark:bg-[#15162c]/90">
-          <button onClick={() => setMenuOpen(true)} className="rounded-lg px-2 py-1 text-xl text-ink dark:text-white" aria-label="Abrir menú">
-            ☰
-          </button>
-          <p className="font-display font-semibold text-ink dark:text-white">{current?.label ?? 'Cania'}</p>
-        </header>
-        <main className="flex-1 overflow-y-auto">{current ? current.render() : <p className="p-8 text-gray-dark">No tienes módulos habilitados todavía. Pídeselos al administrador.</p>}</main>
+        <Topbar current={current} onMenu={() => setMenuOpen(true)} />
+        <main key={current?.id} className="flex-1 overflow-y-auto">
+          {current ? current.render() : <p className="p-8 text-gray-dark">No tienes módulos habilitados todavía. Pídeselos al administrador.</p>}
+        </main>
       </div>
     </div>
   );

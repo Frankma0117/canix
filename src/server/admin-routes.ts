@@ -1,14 +1,14 @@
 import type { Express } from 'express';
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { permissionsRepo, AccessError } from '../db/repositories/permissions.repo.js';
-import { PERMISSIONS } from '../permissions/catalog.js';
+import { PERMISSIONS, isPermissionKey } from '../permissions/catalog.js';
 import { effectivePermissions } from '../permissions/engine.js';
 import { issueTemporaryPassword, revokeAllSessions } from '../auth/web-auth.js';
-import { phoneToJid } from '../util/jid.js';
+import { phoneToJid, jidToPhone } from '../util/jid.js';
 import { ensureWeeklyReportReminder } from '../agent/weekly-report.js';
 import { ensureDailyResetReminder } from '../agent/daily-reset.js';
 import { ensureDailyDedupReminder } from '../agent/dedup.js';
-import { portalAccessMessage } from '../agent/tools/set-web-password.tool.js';
+import { portalAccessMessage, healPhone } from '../agent/tools/set-web-password.tool.js';
 import { schedRepo } from '../scheduling/repo.js';
 import { db } from '../db/pool.js';
 import { aiUsageRepo } from '../db/repositories/ai-usage.repo.js';
@@ -22,7 +22,13 @@ function userView(u: User) {
   return {
     id: u.id,
     name: u.name,
-    phone: u.jid.split('@')[0],
+    // Real number when known; for someone WhatsApp still only knows by their @lid, null - the panel
+    // then shows `whatsapp_id` as their access code and offers to look the number up / set it.
+    phone: jidToPhone(u.jid),
+    whatsapp_id: u.jid.split('@')[0],
+    lid: u.lid ?? (u.jid.endsWith('@lid') ? u.jid : null),
+    gender: u.gender,
+    voice_gender: u.voice_gender,
     role: u.role,
     created_at: u.created_at,
     paused_until: u.paused_until,
@@ -94,6 +100,18 @@ export function registerAdminRoutes(app: Express, bot: BotManager): void {
       if (!u) throw new AccessError('Ese usuario no existe.');
       const name = str(req.body?.name, 80);
       if (name) db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, u.id);
+      // Real WhatsApp number - mainly to fix someone registered under their @lid ("ese no es mi
+      // número"): the old lid stays stored, so the bot still recognizes them either way.
+      const phone = str(req.body?.phone, 30);
+      if (phone) {
+        const digits = phone.replace(/\D/g, '');
+        if (digits.length < 10) throw new AccessError('Escribe el número completo con indicativo (ej. 573001234567).');
+        const jid = phoneToJid(digits);
+        if (jid !== u.jid) {
+          if (!usersRepo.setPhoneJid(u.id, jid)) throw new AccessError('Ese número ya pertenece a otra persona registrada.');
+          permissionsRepo.recordAudit(userId(req), u.id, 'user.phone_set', { phone: digits });
+        }
+      }
       res.json(userView(usersRepo.getById(u.id)!));
     }),
   );
@@ -119,17 +137,43 @@ export function registerAdminRoutes(app: Express, bot: BotManager): void {
     h(async (req, res) => {
       const u = usersRepo.getById(Number(req.params.id));
       if (!u) throw new AccessError('Ese usuario no existe.');
-      const pwd = await issueTemporaryPassword(u.id, userId(req));
+      const target = await healPhone(u, (lid) => bot.session.resolveLidToPhoneJid(lid));
+      const pwd = await issueTemporaryPassword(target.id, userId(req));
       let sent = false;
       if (req.body?.sendWhatsApp) {
         try {
-          await bot.session.sendText(u.jid, portalAccessMessage(u.jid.split('@')[0], pwd));
+          await bot.session.sendText(target.jid, portalAccessMessage(target.jid, pwd));
           sent = true;
         } catch (err) {
-          console.error('[ADMIN] No se pudo enviar la contraseña a %s:', u.jid, (err as Error).message);
+          console.error('[ADMIN] No se pudo enviar la contraseña a %s:', target.jid, (err as Error).message);
         }
       }
-      res.json({ password: pwd, sent });
+      res.json({ password: pwd, sent, loginId: jidToPhone(target.jid) ?? target.jid.split('@')[0], phoneKnown: !!jidToPhone(target.jid) });
+    }),
+  );
+
+  /** Asks WhatsApp for the real number of someone still stored under their @lid. */
+  app.post(
+    '/api/admin/users/:id/resolve-phone',
+    h(async (req, res) => {
+      const u = usersRepo.getById(Number(req.params.id));
+      if (!u) throw new AccessError('Ese usuario no existe.');
+      const healed = await healPhone(u, (lid) => bot.session.resolveLidToPhoneJid(lid));
+      res.json({ found: healed.jid !== u.jid, user: userView(healed) });
+    }),
+  );
+
+  /** One permission for one person (the access matrix's click): 'allow' | 'deny' | null (= según paquete). */
+  app.put(
+    '/api/admin/users/:id/permissions/:key',
+    h((req, res) => {
+      const u = loadNonAdmin(Number(req.params.id));
+      const key = String(req.params.key);
+      if (!isPermissionKey(key)) throw new AccessError('Permiso desconocido.');
+      const effect = req.body?.effect === 'allow' || req.body?.effect === 'deny' ? req.body.effect : null;
+      permissionsRepo.setOverride(userId(req), u.id, key, effect);
+      if (!effectivePermissions(u).has('portal.access')) revokeAllSessions(u.id);
+      res.json(userView(usersRepo.getById(u.id)!));
     }),
   );
 
@@ -161,7 +205,7 @@ export function registerAdminRoutes(app: Express, bot: BotManager): void {
     h((req, res) => {
       const u = loadNonAdmin(Number(req.params.id));
       if (String(req.query.confirm ?? '') !== String(u.id)) throw new AccessError('Falta la confirmación.');
-      permissionsRepo.recordAudit(userId(req), null, 'user.removed', { id: u.id, name: u.name, phone: u.jid.split('@')[0] });
+      permissionsRepo.recordAudit(userId(req), null, 'user.removed', { id: u.id, name: u.name, phone: u.jid.split('@')[0], lid: u.lid });
       usersRepo.remove(u.id);
       res.json({ ok: true });
     }),

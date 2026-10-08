@@ -71,7 +71,7 @@ export const grantAccessTool: Tool = {
       );
       if (can(user, 'portal.access')) {
         const pwd = await issueTemporaryPassword(user.id, ctx.userId);
-        await ctx.wa.sendText(jid, portalAccessMessage(jid.split('@')[0], pwd));
+        await ctx.wa.sendText(jid, portalAccessMessage(jid, pwd));
       }
     } catch (err) {
       console.error('[TOOL] grant_access: no se pudo avisar a %s:', jid, (err as Error).message);

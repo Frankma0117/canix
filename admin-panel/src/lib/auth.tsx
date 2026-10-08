@@ -8,6 +8,8 @@ export interface PanelUser {
   id: number;
   name: string | null;
   phone: string;
+  /** false = WhatsApp hasn't shared the real number yet; `phone` is then their access code. */
+  phoneKnown?: boolean;
   role: 'admin' | 'user';
   permissions: string[];
   modules: string[];

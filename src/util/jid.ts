@@ -31,6 +31,17 @@ export function jidToPhone(jid: string): string | null {
   return jid.endsWith('@s.whatsapp.net') ? jid.slice(0, -'@s.whatsapp.net'.length) : null;
 }
 
+/**
+ * How to show/identify a person: their real number when known, otherwise their WhatsApp @lid
+ * digits as an "access code" (WhatsApp hides some people's number behind a lid until it shares
+ * the mapping - see bot-manager.ts, which swaps in the real number as soon as it arrives).
+ */
+export function describeIdentity(jid: string): { phone: string | null; code: string; label: string } {
+  const phone = jidToPhone(jid);
+  const code = jid.split('@')[0];
+  return { phone, code, label: phone ? `+${phone}` : `código ${code} (número aún no registrado)` };
+}
+
 /** True if the string already looks like a JID (has an "@" domain part). */
 export function isJid(value: string): boolean {
   return value.includes('@');

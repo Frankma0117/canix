@@ -17,7 +17,7 @@ import { registerCallAudioRoute } from '../calls/call-audio.js';
 import { registerTwilioWebhook } from './twilio-webhook.js';
 import { createRoutineWithReminders, updateRoutineWithReminders } from '../agent/routine-setup.js';
 import { todayLocal, nowLocal } from '../util/datetime.js';
-import { phoneToJid } from '../util/jid.js';
+import { phoneToJid, jidToPhone } from '../util/jid.js';
 import { resolvePanelUser, requirePanelAdmin, requirePermission, extractToken } from './auth.js';
 import { login, logout, changePassword, setPassword, createSession, AuthError } from '../auth/web-auth.js';
 import { effectivePermissions } from '../permissions/engine.js';
@@ -560,7 +560,8 @@ function sessionView(user: User) {
   return {
     id: user.id,
     name: user.name,
-    phone: user.jid.split('@')[0],
+    phone: jidToPhone(user.jid) ?? user.jid.split('@')[0],
+    phoneKnown: !!jidToPhone(user.jid),
     role: user.role,
     permissions: [...perms],
     modules: [...new Set(PERMISSIONS.filter((p) => perms.has(p.key)).map((p) => p.module))],

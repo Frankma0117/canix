@@ -48,7 +48,12 @@ export interface LoginResult {
 export async function login(phone: string, password: string, meta: { ip?: string; userAgent?: string }): Promise<LoginResult> {
   const digits = String(phone ?? '').replace(/\D/g, '');
   if (digits.length < 7 || !password) throw new AuthError('Número o contraseña incorrectos.');
-  const user = usersRepo.getByJidOrLid(phoneToJid(digits));
+  // Real number (with or without country code), or - for someone WhatsApp still only knows by
+  // their @lid - that lid's digits, which is what their access message calls "código de acceso".
+  const user =
+    usersRepo.getByJidOrLid(phoneToJid(digits)) ??
+    usersRepo.getByJidOrLid(`${digits}@s.whatsapp.net`) ??
+    usersRepo.getByJidOrLid(`${digits}@lid`);
 
   if (!user || !user.password_hash) {
     await verifyPassword(password, await getDummyHash());

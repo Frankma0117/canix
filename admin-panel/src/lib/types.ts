@@ -138,7 +138,13 @@ export interface PermissionPackage {
 export interface AdminUser {
   id: number;
   name: string | null;
-  phone: string;
+  /** Real number, or null when WhatsApp only gave us the person's @lid (see whatsapp_id). */
+  phone: string | null;
+  /** The digits before "@" of the stored WhatsApp id - their login "access code" when phone is null. */
+  whatsapp_id: string;
+  lid: string | null;
+  gender: 'male' | 'female' | null;
+  voice_gender: 'male' | 'female' | null;
   role: 'admin' | 'user';
   created_at: string;
   paused_until: string | null;
@@ -281,4 +287,15 @@ export interface GarmentCard {
   color: string | null;
   short_description: string | null;
   favorite: boolean;
+}
+
+// ---------------- Usage (paid resources) ----------------
+export interface UsageRow {
+  user_id: number;
+  name: string | null;
+  jid: string;
+  operation: string;
+  uses: number;
+  input_units: number;
+  output_units: number;
 }

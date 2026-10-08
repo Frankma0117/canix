@@ -2,6 +2,7 @@ import type { Tool } from '../tool-registry.js';
 import { permissionsRepo } from '../../db/repositories/permissions.repo.js';
 import { effectivePermissions, describePermissions } from '../../permissions/engine.js';
 import { resolveUserByQuery } from './resolve-user.js';
+import { describeIdentity } from '../../util/jid.js';
 
 export const getUserPermissionsTool: Tool = {
   name: 'get_user_permissions',
@@ -24,7 +25,7 @@ export const getUserPermissionsTool: Tool = {
     const deny = overrides.filter((o) => o.effect === 'deny').map((o) => o.permission_key);
     const effective = effectivePermissions(u);
     return [
-      `${u.name ?? '(sin nombre)'} (#${u.id}, ${u.jid.split('@')[0]}):`,
+      `${u.name ?? '(sin nombre)'} (#${u.id}, ${describeIdentity(u.jid).label}):`,
       `- Paquetes: ${pkgs.map((p) => `"${p.name}"`).join(', ') || '(ninguno)'}`,
       `- Permitidos sueltos: ${allow.join(', ') || '(ninguno)'}`,
       `- Denegados: ${deny.join(', ') || '(ninguno)'}`,

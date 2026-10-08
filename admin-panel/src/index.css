@@ -1,57 +1,102 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
 @import 'tailwindcss';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
-  --font-display: 'Space Grotesk', ui-sans-serif, sans-serif;
+  /* Nunito = the same rounded, heavy lettering as the sticker pack ("¡HECHO!", "QUEDÓ AGENDADO"). */
+  --font-display: 'Nunito', ui-rounded, ui-sans-serif, sans-serif;
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
 
-  /* Canix brand: cyan-blue -> violet gradient (see the logo), navy-black wordmark. --color-primary
-     is a mid-tone pick from that gradient for flat UI (buttons/links/focus rings, where an actual
-     gradient wouldn't render well) - the real two-tone gradient lives in --gradient-brand below,
-     reserved for brand marks (logo swatches, headers) so it reads as an accent, not noise. */
-  --color-primary: #4f7de0;
-  --color-primary-dark: #6a3fd6;
-  --color-secondary: #eef2ff;
+  /* Palette sampled from the mascot stickers: navy lettering, royal-blue -> violet gradient
+     (chest hexagon, words), cyan LED eyes. --color-primary is the flat mid-tone for buttons/links. */
+  --color-primary: #4b5cf6;
+  --color-primary-dark: #3a3ccf;
+  --color-secondary: #eef1ff;
   --color-accent: #8b5cf6;
-  --color-ink: #14151f;
+  --color-cyan: #22d3ee;
+  --color-navy: #1b2160;
+  --color-ink: #141a45;
 
-  --color-gray-light: #f8f9fc;
-  --color-gray-medium: #e5e7eb;
-  --color-gray-dark: #6b7280;
+  --color-gray-light: #f4f6fc;
+  --color-gray-medium: #e2e7f3;
+  --color-gray-dark: #69718f;
 
   --color-success: #10b981;
   --color-warning: #f59e0b;
   --color-error: #ef4444;
   --color-info: #3b82f6;
+
+  --shadow-soft: 0 1px 2px rgb(20 26 69 / 0.04), 0 8px 24px -12px rgb(20 26 69 / 0.12);
+  --shadow-lift: 0 2px 4px rgb(20 26 69 / 0.05), 0 18px 40px -16px rgb(75 92 246 / 0.35);
+
+  --animate-fade-in: fade-in 0.25s ease-out both;
+  --animate-pop-in: pop-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  --animate-slide-in-right: slide-in-right 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-float: float 4s ease-in-out infinite;
+
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: scale(0.94) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  @keyframes slide-in-right {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
 }
 
-/* The actual brand gradient (see the logo's hexagon outline) - a design token, not a Tailwind
-   color, since it's meant for specific brand marks (logo badges, header accents), not as a
-   fill for arbitrary UI surfaces. */
 :root {
-  --gradient-brand: linear-gradient(135deg, #29abe2 0%, #7b3fe4 100%);
+  color-scheme: light;
+  --gradient-brand: linear-gradient(135deg, #2f8bff 0%, #5b4cf5 55%, #8b3fe4 100%);
+  --gradient-soft: linear-gradient(135deg, #eaf3ff 0%, #f1edff 100%);
+  --surface: #ffffff;
+}
+
+html.dark {
+  color-scheme: dark;
+  --gradient-soft: linear-gradient(135deg, #18204a 0%, #22184a 100%);
+  --surface: #151a3a;
 }
 
 .brand-gradient {
   background: var(--gradient-brand);
 }
-
-:root {
-  color-scheme: light;
+.soft-gradient {
+  background: var(--gradient-soft);
+}
+.text-gradient {
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
-html.dark {
-  color-scheme: dark;
+/* Dotted "blueprint" texture used behind hero areas - subtle, theme aware. */
+.dot-grid {
+  background-image: radial-gradient(rgb(75 92 246 / 0.14) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+html.dark .dot-grid {
+  background-image: radial-gradient(rgb(139 92 246 / 0.18) 1px, transparent 1px);
 }
 
 body {
   font-family: var(--font-sans);
   background-color: var(--color-gray-light);
   color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
 }
 
 html.dark body {
-  background-color: #0f1020;
+  background-color: #0b0e24;
   color: #eef0ff;
 }
 
@@ -60,6 +105,11 @@ h2,
 h3,
 .font-display {
   font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: rgb(75 92 246 / 0.22);
 }
 
 ::-webkit-scrollbar {
@@ -71,5 +121,15 @@ h3,
   border-radius: 999px;
 }
 html.dark ::-webkit-scrollbar-thumb {
-  background-color: #2a2c45;
+  background-color: #2a2f5a;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

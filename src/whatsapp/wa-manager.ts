@@ -25,6 +25,9 @@ const MAX_RECONNECT_ATTEMPTS = 6;
 
 export type IncomingHandler = (msg: {
   jid: string;
+  /** The sender's phone jid when `jid` is an @lid (Baileys' key.remoteJidAlt) - WhatsApp's own
+   *  mapping, available even when the local lid->phone store doesn't know this person yet. */
+  altJid?: string;
   name?: string;
   text: string;
   /** True when `text` came from transcribing a voice note rather than being typed. */
@@ -295,7 +298,8 @@ export class WaManager {
         });
 
         try {
-          await this.handler?.({ jid, name, text: text.trim(), fromAudio, imageMessage, documentMessage, stickerMessage, contactMessage });
+          const altJid = m.key.remoteJidAlt ?? undefined;
+          await this.handler?.({ jid, altJid, name, text: text.trim(), fromAudio, imageMessage, documentMessage, stickerMessage, contactMessage });
         } catch (err) {
           console.error('[WA] Error procesando mensaje:', (err as Error).message);
         }

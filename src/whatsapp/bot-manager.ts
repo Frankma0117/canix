@@ -149,14 +149,18 @@ export class BotManager {
    * suffix Baileys' own resolution can attach (e.g. "...:0@s.whatsapp.net") - phoneToJid() never
    * produces one, so a stored jid that has it would silently fail to match a plain-number lookup.
    */
-  private async resolveIncomingIdentity(rawJid: string): Promise<{ phoneJid: string; lid: string | null }> {
+  private async resolveIncomingIdentity(rawJid: string, altJid?: string): Promise<{ phoneJid: string; lid: string | null }> {
     if (!rawJid.endsWith('@lid')) return { phoneJid: jidNormalizedUser(rawJid), lid: null };
+    // The message itself usually carries the phone jid (key.remoteJidAlt) - more reliable than the
+    // local lid store, which was empty for the admin and left their LID stored as "their number".
+    if (altJid?.endsWith('@s.whatsapp.net')) return { phoneJid: jidNormalizedUser(altJid), lid: rawJid };
     const resolved = await this.wa.resolveLidToPhoneJid(rawJid);
     return { phoneJid: jidNormalizedUser(resolved ?? rawJid), lid: rawJid };
   }
 
   private async handleIncoming({
     jid,
+    altJid,
     name,
     text,
     fromAudio,
@@ -166,6 +170,7 @@ export class BotManager {
     contactMessage,
   }: {
     jid: string;
+    altJid?: string;
     name?: string;
     text: string;
     fromAudio?: boolean;
@@ -178,7 +183,7 @@ export class BotManager {
     // (AI provider hiccup, a bug, WhatsApp acting up) - wrapping the whole thing means there is
     // always either a real reply or this error notice, never just silence while they wait.
     try {
-      const { phoneJid, lid } = await this.resolveIncomingIdentity(jid);
+      const { phoneJid, lid } = await this.resolveIncomingIdentity(jid, altJid);
       console.log(
         '[BOT] Mensaje entrante de %s%s%s: "%s"',
         phoneJid,
@@ -227,6 +232,14 @@ export class BotManager {
 
       let user = usersRepo.getByJidOrLid(phoneJid) ?? usersRepo.getByJidOrLid(jid);
       if (user && lid && !user.lid) usersRepo.setLid(user.jid, lid); // fill in a lid we hadn't captured yet
+      // Someone registered under their @lid (number unknown back then) whose real number we now
+      // know: store the real number, so the portal login and every "tu número" message use it.
+      if (user && user.jid.endsWith('@lid') && phoneJid.endsWith('@s.whatsapp.net')) {
+        if (usersRepo.setPhoneJid(user.id, phoneJid)) {
+          console.log('[BOT] Usuario #%d: número real %s guardado (antes solo tenía su LID %s).', user.id, phoneJid, user.jid);
+          user = usersRepo.getById(user.id)!;
+        }
+      }
 
       if (!user) {
         console.log('[BOT] %s no tiene acceso, respondo con el mensaje genérico.', phoneJid);

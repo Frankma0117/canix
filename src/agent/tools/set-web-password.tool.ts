@@ -4,14 +4,32 @@ import { can } from '../../permissions/engine.js';
 import { usersRepo } from '../../db/repositories/users.repo.js';
 import { env } from '../../config/env.js';
 import { resolveUserByQuery } from './resolve-user.js';
+import { describeIdentity } from '../../util/jid.js';
+import type { User } from '../../types/index.js';
 
-/** "Entra a https://... con tu número 3001234567 y esta contraseña temporal: ..." */
-export function portalAccessMessage(phoneDigits: string, password: string): string {
+/** "Entra a https://... con tu número 573001234567 y esta contraseña temporal: ..." - or, for
+ *  someone whose real number WhatsApp hasn't shared yet, with their access code instead. */
+export function portalAccessMessage(jid: string, password: string): string {
   const where = env.panelUrl ? `Entra a ${env.panelUrl}` : 'Entra al portal web';
-  return (
-    `🔐 ${where} con tu número *${phoneDigits}* y esta contraseña temporal: *${password}*\n\n` +
-    'Al entrar te voy a pedir que la cambies por una tuya.'
-  );
+  const { phone, code } = describeIdentity(jid);
+  const who = phone
+    ? `con tu número *${phone}*`
+    : `con este código de acceso en el campo del número: *${code}* (WhatsApp todavía no me ha compartido tu número; ` +
+      'en cuanto me escribas de nuevo lo registro y podrás entrar con tu número normal)';
+  return `🔐 ${where} ${who} y esta contraseña temporal: *${password}*\n\nAl entrar te voy a pedir que la cambies por una tuya.`;
+}
+
+/** If this person is still stored under their @lid, asks WhatsApp for the real number and keeps it. */
+export async function healPhone(user: User, resolve: (lid: string) => Promise<string | null>): Promise<User> {
+  if (!user.jid.endsWith('@lid')) return user;
+  const resolved = await resolve(user.jid).catch(() => null);
+  if (!resolved?.endsWith('@s.whatsapp.net')) return user;
+  const phoneJid = resolved.replace(/:\d+@/, '@'); // drop any ":<device>" suffix
+  if (usersRepo.setPhoneJid(user.id, phoneJid)) {
+    console.log('[AUTH] Usuario #%d: número real %s registrado.', user.id, phoneJid);
+    return usersRepo.getById(user.id) ?? user;
+  }
+  return user;
 }
 
 export const setWebPasswordTool: Tool = {
@@ -34,14 +52,14 @@ export const setWebPasswordTool: Tool = {
       if ('error' in r) return r.error;
       target = r.user;
     }
+    target = await healPhone(target, (lid) => ctx.wa.resolveLidToPhoneJid(lid));
     const pwd = await issueTemporaryPassword(target.id, ctx.userId);
-    const phone = target.jid.split('@')[0];
     const note = can(target, 'portal.access') ? '' : ' OJO: todavía no tiene el permiso portal.access, así que no podrá entrar hasta que se lo des.';
 
     // Sent straight over WhatsApp, never returned to the model - a password must not travel to
     // the AI provider or sit in the chat history.
     try {
-      await ctx.wa.sendText(target.jid, portalAccessMessage(phone, pwd));
+      await ctx.wa.sendText(target.jid, portalAccessMessage(target.jid, pwd));
       const who = target.id === ctx.userId ? 'Te envié tu' : `Le envié a "${target.name}" su`;
       return `Listo. ${who} contraseña temporal en un mensaje aparte (no la repitas en tu respuesta).${note}`;
     } catch (err) {
