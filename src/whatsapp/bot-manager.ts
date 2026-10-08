@@ -1,3 +1,4 @@
+import { effectivePermissions, can } from '../permissions/engine.js';
 import { jidNormalizedUser, downloadMediaMessage, type WAMessage } from 'baileys';
 import { WaManager } from './wa-manager.js';
 import { handleFashionMessage } from '../fashion/router.js';
@@ -46,6 +47,11 @@ const GENDER_REPLY_RE = /^(?:soy\s+)?(?:un\s+|una\s+)?(hombre|mujer|male|female|
  *  for its name, not as the name itself (see the pending-sticker block in handle()). */
 const STICKER_LABEL_MAX_CHARS = 40;
 
+/** Upper bound for a single message's handling before that chat's queue moves on (see
+ *  BotManager.enqueueIncoming) - well above a slow-but-healthy AI turn (2 x 45s model timeout +
+ *  tools + typing delay), so it only ever kicks in for something genuinely stuck. */
+const CHAT_TURN_MAX_MS = 150_000;
+
 const RESET_ALL_WARNING =
   '⚠️ Esto borra TODO tu contenido: recordatorios, rutinas, contactos, links, notas, categorías, ' +
   'premios/castigos e historial de chat - no se puede deshacer (tu acceso al bot no se toca). ' +
@@ -82,9 +88,48 @@ const HELP_TEXT =
 export class BotManager {
   private wa: WaManager;
 
+  /**
+   * One promise chain per chat: messages from the SAME person are handled strictly one after the
+   * other, never in parallel. Baileys fires each incoming batch as its own async event without
+   * waiting on the previous one, so two quick messages ("prográmame X" + "¿qué pasó?") used to run
+   * two AI turns at once - the second never saw the first one's reply/question and answered on
+   * its own (real case: it scheduled "mañana 10pm" while the first turn was still asking whether
+   * to). Different chats still run concurrently.
+   */
+  private chatQueues = new Map<string, Promise<void>>();
+
   constructor() {
     this.wa = new WaManager(env.wa.session);
-    this.wa.onMessage(this.handleIncoming.bind(this));
+    this.wa.onMessage((msg) => this.enqueueIncoming(msg));
+  }
+
+  private enqueueIncoming(msg: Parameters<BotManager['handleIncoming']>[0]): Promise<void> {
+    const key = msg.jid;
+    const run = async () => {
+      // A turn that somehow never settles must not freeze this chat forever - after the cap the
+      // queue moves on (the stuck turn keeps running in the background and can still reply).
+      let timer: NodeJS.Timeout | undefined;
+      await Promise.race([
+        this.handleIncoming(msg),
+        new Promise<void>((resolve) => {
+          timer = setTimeout(() => {
+            console.error('[BOT] Turno de %s superó %ds, libero la cola del chat.', key, CHAT_TURN_MAX_MS / 1000);
+            // Never leave the person waiting in silence (ai-agent.ts's own turn budget should end
+            // well before this - this only fires for something stuck outside the AI loop).
+            void this.wa
+              .sendText(msg.jid, '⚠️ Me estoy demorando más de la cuenta con eso. Dame un momento y pregúntame cómo quedó antes de repetirlo.')
+              .catch(() => {});
+            resolve();
+          }, CHAT_TURN_MAX_MS);
+        }),
+      ]).finally(() => clearTimeout(timer));
+    };
+    const chain = (this.chatQueues.get(key) ?? Promise.resolve()).then(run, run);
+    this.chatQueues.set(key, chain);
+    void chain.finally(() => {
+      if (this.chatQueues.get(key) === chain) this.chatQueues.delete(key);
+    });
+    return chain;
   }
 
   get session(): WaManager {
@@ -411,12 +456,12 @@ export class BotManager {
       // token, same raw-command pattern as /reset/ayuda above. See agent/menu.ts for the single
       // source of truth also used by the show_menu AI tool, so both entry points stay in sync.
       if (command === '/menu') {
-        const access = { fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: user.role === 'admin' };
+        const access = { fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: user.role === 'admin', permissions: effectivePermissions(user) };
         await this.wa.sendText(jid, renderMainMenu(access));
         return;
       }
       if (command.startsWith('/menu ')) {
-        const access = { fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: user.role === 'admin' };
+        const access = { fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: user.role === 'admin', permissions: effectivePermissions(user) };
         const category = resolveMenuCategory(command.slice('/menu '.length), access);
         await this.wa.sendText(jid, category ? renderCategoryDetail(category) : renderUnknownCategory(access));
         return;
@@ -427,7 +472,7 @@ export class BotManager {
       // zero behavior change here. Runs BEFORE the AI loop (pure state-machine, no tokens spent)
       // for exactly the same reason the /reset-style commands above do - a structured wizard step
       // (a numbered menu choice, a photo) doesn't need a model in the loop.
-      if (env.fashion.enabled) {
+      if (env.fashion.enabled && can(user, 'fashion.use')) {
         const result = await handleFashionMessage({ userId: user.id, jid, text, imageMessage, documentMessage, wa: this.wa });
         if (result.consumed) {
           if (result.reply) await this.wa.sendText(jid, result.reply);
@@ -471,10 +516,14 @@ export class BotManager {
 
       if (fromAudio) {
         // Asked by voice -> answer with voice only, no text (see audio/tts.ts), using this
-        // person's preferred voice (set_voice_gender). Piper is local/best-effort though: if it
-        // isn't configured or synthesis fails, fall back to the text reply so the answer isn't
-        // lost - never send both when the voice note actually went out.
-        const voice = await synthesizeVoiceNote(reply, user.voice_gender).catch(() => null);
+        // person's preferred voice (set_voice_gender) - the natural Fish Audio voice when they hold
+        // the paid 'voice.premium' permission, local Piper otherwise. Best-effort: if synthesis
+        // fails (or the reply is too long for a note), fall back to the text reply so the answer
+        // isn't lost - never send both when the voice note actually went out.
+        const voice = await synthesizeVoiceNote(reply, user.voice_gender, {
+          premium: can(user, 'voice.premium'),
+          userId: user.id,
+        }).catch(() => null);
         if (voice) {
           try {
             await this.wa.sendAudio(jid, voice);

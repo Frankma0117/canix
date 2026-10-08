@@ -3,6 +3,7 @@ import { usersRepo } from '../db/repositories/users.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { messagesRepo } from '../db/repositories/messages.repo.js';
 import { processDueCallReminders } from '../calls/call-reminders.service.js';
+import { processSchedulingTick } from '../scheduling/service.js';
 import { nowLocal, addMinutes, addMonths, addDays, addSeconds, dateOnly, randomTimeOnDate } from '../util/datetime.js';
 import { buildWeeklyReportMessage } from '../agent/weekly-report.js';
 import { dedupeUser, summaryTotal, summaryLine } from '../agent/dedup.js';
@@ -10,6 +11,7 @@ import { plainReminderPrefix } from '../util/motivational.js';
 import { checkBudget, recordSend } from '../whatsapp/send-guard.js';
 import { env } from '../config/env.js';
 import { synthesizeVoiceNote } from '../audio/tts.js';
+import { can } from '../permissions/engine.js';
 import { sleep } from '../util/human-delay.js';
 import type { WaManager } from '../whatsapp/wa-manager.js';
 import type { Reminder, DueReminder } from '../types/index.js';
@@ -224,6 +226,14 @@ export class TaskScheduler {
 
       if (!this.wa.isConnected()) return; // WhatsApp reminders retried on the next tick once connected
 
+      // Appointment reminders / expiring unconfirmed requests (see scheduling/service.ts) - its own
+      // try so a failure there never blocks the regular reminders below.
+      try {
+        await processSchedulingTick();
+      } catch (err) {
+        console.error('[SCHEDULER] Error procesando la agenda de citas:', (err as Error).message);
+      }
+
       let due: DueReminder[];
       try {
         due = remindersRepo.listDue(nowLocal());
@@ -400,8 +410,11 @@ export class TaskScheduler {
       console.log('[SCHEDULER] Recordatorio por intervalo #%d enviado a %s (%s).', reminder.id, target, counter);
 
       if (reminder.with_audio) {
-        const voiceGender = usersRepo.getById(reminder.user_id)?.voice_gender;
-        const voice = await synthesizeVoiceNote(text, voiceGender).catch(() => null);
+        const owner = usersRepo.getById(reminder.user_id);
+        const voice = await synthesizeVoiceNote(text, owner?.voice_gender, {
+          premium: can(owner, 'voice.premium'),
+          userId: reminder.user_id,
+        }).catch(() => null);
         if (voice) await this.wa.sendAudio(target, voice).catch(() => {});
       }
     } catch (err) {

@@ -1,3 +1,4 @@
+import { effectivePermissions } from '../../permissions/engine.js';
 import type { Tool } from '../tool-registry.js';
 import { usersRepo } from '../../db/repositories/users.repo.js';
 import { env } from '../../config/env.js';
@@ -38,6 +39,7 @@ export const announceUpdateTool: Tool = {
         fashionEnabled: env.fashion.enabled,
         callsEnabled: isTwilioConfigured(),
         isAdmin: u.role === 'admin',
+        permissions: effectivePermissions(u),
       };
       try {
         await ctx.wa.sendText(u.jid, renderUpdateAnnouncementIntro());

@@ -22,4 +22,17 @@ export const aiUsageRepo = {
       .get(userId, `-${days} days`) as { calls: number; inputTokens: number; outputTokens: number };
     return row;
   },
+
+  /** Per user and operation over the trailing N days - see GET /api/admin/usage. */
+  summaryByUser(days: number): { user_id: number; name: string | null; jid: string; operation: string; uses: number; input_units: number; output_units: number }[] {
+    return db
+      .prepare(
+        `SELECT a.user_id, u.name, u.jid, a.operation, COUNT(*) AS uses,
+                COALESCE(SUM(a.input_tokens), 0) AS input_units, COALESCE(SUM(a.output_tokens), 0) AS output_units
+         FROM ai_usage a JOIN users u ON u.id = a.user_id
+         WHERE a.created_at >= datetime('now', ?)
+         GROUP BY a.user_id, a.operation ORDER BY u.name, a.operation`,
+      )
+      .all(`-${days} days`) as { user_id: number; name: string | null; jid: string; operation: string; uses: number; input_units: number; output_units: number }[];
+  },
 };

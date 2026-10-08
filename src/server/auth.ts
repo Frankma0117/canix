@@ -4,78 +4,99 @@ import { join } from 'node:path';
 import type { NextFunction, Request, Response } from 'express';
 import { env } from '../config/env.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
+import { userForSession } from '../auth/web-auth.js';
+import { effectivePermissions } from '../permissions/engine.js';
 import type { User } from '../types/index.js';
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
-      /** The user whose panel token authenticated this request - set by resolvePanelUser(). */
+      /** The authenticated portal user - set by resolvePanelUser(). */
       panelUser?: User;
+      /** Their effective permissions, computed once per request. */
+      panelPermissions?: Set<string>;
+      /** The bearer token used (session token, or the admin's legacy token). */
+      sessionToken?: string;
     }
   }
 }
 
 const legacyTokenPath = join(process.cwd(), 'auth_info', 'admin-token.txt');
-
 let cachedLegacyAdminToken: string | null = null;
 
 /**
- * The admin's panel token used to be a single file/env-based secret shared by the whole panel
- * (back when the panel was admin-only). Kept only so an existing deployment's bookmarked token
- * keeps working: on first boot after this multi-client upgrade, the admin's `users.panel_token` is
- * seeded from this value once (see ensureAdminPanelToken() in index.ts) - after that, this legacy
- * source is never consulted again, everything goes through users.panel_token like every other client.
+ * The admin's old single panel token (file/env based). Kept ONLY as the admin's way in until they
+ * set a portal password - see resolvePanelUser. Seeded into users.panel_token at boot (index.ts).
  */
 export function legacyAdminToken(): string {
   if (cachedLegacyAdminToken) return cachedLegacyAdminToken;
-
-  if (env.adminToken) {
-    cachedLegacyAdminToken = env.adminToken;
-    return cachedLegacyAdminToken;
-  }
-  if (existsSync(legacyTokenPath)) {
-    cachedLegacyAdminToken = readFileSync(legacyTokenPath, 'utf8').trim();
-    return cachedLegacyAdminToken;
-  }
-
+  if (env.adminToken) return (cachedLegacyAdminToken = env.adminToken);
+  if (existsSync(legacyTokenPath)) return (cachedLegacyAdminToken = readFileSync(legacyTokenPath, 'utf8').trim());
   const generated = randomBytes(24).toString('hex');
   mkdirSync(join(process.cwd(), 'auth_info'), { recursive: true });
   writeFileSync(legacyTokenPath, generated, 'utf8');
-  cachedLegacyAdminToken = generated;
-  return cachedLegacyAdminToken;
+  return (cachedLegacyAdminToken = generated);
 }
 
-function extractToken(req: Request): string | null {
+export function extractToken(req: Request): string | null {
   const header = req.header('authorization');
-  if (header?.startsWith('Bearer ')) return header.slice('Bearer '.length).trim();
+  if (header?.startsWith('Bearer ')) return header.slice('Bearer '.length).trim() || null;
   return null;
 }
 
-/** Finds which user (if any) a panel token belongs to - every client (admin included) has their own. */
-export function findUserByToken(token: string): User | undefined {
-  if (!token) return undefined;
-  return usersRepo.getByPanelToken(token);
+/**
+ * Legacy token login is accepted only for the administrator and only while they have no portal
+ * password yet (bootstrap path). Once a password exists, sessions are the only way in, for
+ * everyone - non-admin legacy tokens stopped working with the move to passwords.
+ */
+function userForLegacyToken(token: string): User | undefined {
+  const user = usersRepo.getByPanelToken(token);
+  return user && user.role === 'admin' && !user.password_hash ? user : undefined;
 }
 
-/** Middleware: resolves the Bearer token to its owning user (req.panelUser) on every /api route
- *  except /api/auth/login - each client's panel only ever sees their own data (see http-server.ts). */
+/** Paths a user with a temporary password may still call (to change it, or leave). */
+const MUST_CHANGE_ALLOWED = new Set(['/auth/me', '/auth/change-password', '/auth/logout']);
+
+/** Middleware for every /api route except login: resolves the session to req.panelUser. */
 export function resolvePanelUser(req: Request, res: Response, next: NextFunction): void {
   const token = extractToken(req);
-  const user = token ? findUserByToken(token) : undefined;
-  if (!user) {
-    res.status(401).json({ error: 'Token invalido o ausente' });
+  const user = token ? (userForSession(token) ?? userForLegacyToken(token)) : undefined;
+  if (!user || !token) {
+    res.status(401).json({ error: 'Sesión inválida o expirada. Inicia sesión de nuevo.' });
+    return;
+  }
+  const perms = effectivePermissions(user);
+  if (user.role !== 'admin' && !perms.has('portal.access')) {
+    res.status(403).json({ error: 'Tu cuenta ya no tiene acceso al portal web.', code: 'NO_PORTAL' });
+    return;
+  }
+  if (user.must_change_password && !MUST_CHANGE_ALLOWED.has(req.path)) {
+    res.status(403).json({ error: 'Debes cambiar tu contraseña temporal antes de continuar.', code: 'MUST_CHANGE_PASSWORD' });
     return;
   }
   req.panelUser = user;
+  req.panelPermissions = perms;
+  req.sessionToken = token;
   next();
 }
 
-/** Extra gate for admin-only panel routes (WhatsApp connection management) - chain after resolvePanelUser. */
 export function requirePanelAdmin(req: Request, res: Response, next: NextFunction): void {
   if (req.panelUser?.role !== 'admin') {
-    res.status(403).json({ error: 'Solo el administrador puede hacer esto' });
+    res.status(403).json({ error: 'Solo el administrador puede hacer esto.' });
     return;
   }
   next();
+}
+
+/** Allows the request if the user has ANY of the given permissions (admins always pass). */
+export function requirePermission(...keys: string[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const perms = req.panelPermissions;
+    if (req.panelUser?.role === 'admin' || (perms && keys.some((k) => perms.has(k)))) {
+      next();
+      return;
+    }
+    res.status(403).json({ error: 'No tienes habilitado este módulo. Pídeselo al administrador.' });
+  };
 }

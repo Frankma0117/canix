@@ -1,6 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { db } from './pool.js';
+import { initAccessSchema } from './schema-access.js';
+import { initSchedulingSchema } from './schema-scheduling.js';
 
 /**
  * Creates every table if it doesn't exist yet, and runs the small set of idempotent migrations
@@ -538,6 +540,10 @@ export function initSchema(): void {
   // before this change, on every boot, so existing users stop getting it without needing to touch
   // each row by hand. No-op once there are none left (WHERE only matches 'pending' rows).
   db.prepare(`UPDATE reminders SET status = 'cancelled' WHERE kind = 'daily_agenda' AND status = 'pending'`).run();
+
+  // Permissions/packages/portal credentials, then the scheduling module (see each file).
+  initAccessSchema(db);
+  initSchedulingSchema(db);
 }
 
 /** Adds a column to `table` if it doesn't already exist (table/column names here are always our own constants, never user input). */

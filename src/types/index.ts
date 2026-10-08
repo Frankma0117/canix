@@ -13,8 +13,8 @@ export interface User {
   lid: string | null;
   name: string | null;
   role: UserRole;
-  // JSON-encoded array of tool names this user is limited to (see set-user-permissions.tool.ts).
-  // NULL = unrestricted (full access) - always the case for the admin.
+  // LEGACY (pre-packages): JSON array of tool names. Only read once, by the one-time migration to
+  // packages/permissions (see permissions/engine.ts's migrateLegacyAccess) - never for access checks.
   allowed_tools: string | null;
   // Random per-user token for the web panel (see server/auth.ts) - each granted user gets their
   // own, scoped to only their own data, instead of everyone sharing one admin-only token.
@@ -37,6 +37,14 @@ export interface User {
   // voice-note replies back to this person. See set-voice-gender.tool.ts / audio/tts.ts. Separate
   // from `gender` above (that's grammatical, this is audio).
   voice_gender: 'male' | 'female' | null;
+  // Web portal credentials (see auth/web-auth.ts). Login = WhatsApp number; NULL hash = no
+  // password set yet (can't log in). must_change_password = temporary password handed out by the
+  // admin/bot, the portal forces a change before anything else.
+  password_hash: string | null;
+  must_change_password: number;
+  password_updated_at: string | null;
+  failed_logins: number;
+  locked_until: string | null;
   created_at: string;
 }
 

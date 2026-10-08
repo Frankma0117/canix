@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { env } from '../config/env.js';
 import { wavToOggOpus } from './ffmpeg.js';
+import { fishTts } from './fish-audio.js';
+import { aiUsageRepo } from '../db/repositories/ai-usage.repo.js';
 
 let unavailableLogged = false;
 let femaleUnavailableLogged = false;
@@ -29,7 +31,7 @@ const UNSPEAKABLE_RE = new RegExp(
  *  UNSPEAKABLE_RE - and collapses the line breaks a WhatsApp message uses for visual structure
  *  (list items, paragraph breaks) into spoken pauses instead of Piper reading them as silence/one
  *  run-on sentence. */
-function sanitizeForSpeech(text: string): string {
+export function sanitizeForSpeech(text: string): string {
   return text
     .replace(UNSPEAKABLE_RE, '')
     .replace(/\n+/g, '. ')
@@ -91,23 +93,53 @@ function runPiper(text: string, voicePath: string, outFile: string): Promise<voi
   });
 }
 
+export interface VoiceNoteOptions {
+  /** The user has the paid 'voice.premium' permission -> try Fish Audio's natural voice first. */
+  premium?: boolean;
+  /** Whose usage this is (logged to ai_usage for future billing). */
+  userId?: number;
+}
+
 /**
- * Synthesizes text into a WhatsApp-ready voice note (ogg/opus) using a local Piper voice - no
- * AI/tokens involved. `voiceGender` picks which voice model to speak with (see
- * resolveVoicePath()) - pass a user's stored `voice_gender` (users.repo.ts); omit/null for the
- * default voice. Returns null when Piper isn't installed/configured; callers that only ever show
- * a voice note as an extra on top of a text reply should treat this as best-effort and never block
- * on it - but see bot-manager.ts, where a voice-in question replies with voice-ONLY and only falls
- * back to text when this returns null.
+ * Synthesizes text into a WhatsApp-ready voice note (ogg/opus). With `premium`, uses Fish Audio's
+ * natural voice (see audio/fish-audio.ts) - paid per character, so only for users holding the
+ * 'voice.premium' permission, and only for replies up to FISH_AUDIO_MAX_CHARS (a longer one returns
+ * null so the caller sends text instead of a long, costly note). Otherwise, or if Fish fails, the
+ * local Piper voice (free, no tokens). `voiceGender` picks the voice (users.voice_gender). Returns
+ * null when nothing could be synthesized - callers then fall back to the text reply.
  */
 export async function synthesizeVoiceNote(
   text: string,
   voiceGender?: 'male' | 'female' | null,
+  opts: VoiceNoteOptions = {},
 ): Promise<Buffer | null> {
-  const voicePath = resolveVoicePath(voiceGender);
-  if (!piperReady(voicePath)) return null;
   const trimmed = sanitizeForSpeech(text);
   if (!trimmed) return null;
+
+  if (opts.premium) {
+    if (trimmed.length > env.audio.fish.maxChars) {
+      console.log('[TTS] Respuesta de %d caracteres > FISH_AUDIO_MAX_CHARS (%d) - va como texto.', trimmed.length, env.audio.fish.maxChars);
+      return null;
+    }
+    const mp3 = await fishTts(trimmed, voiceGender);
+    if (mp3) {
+      if (opts.userId) {
+        try {
+          aiUsageRepo.log(opts.userId, 'voice.fish', env.audio.fish.model, trimmed.length, 0);
+        } catch (err) {
+          console.error('[TTS] No pude registrar el uso de voz:', (err as Error).message);
+        }
+      }
+      try {
+        return await wavToOggOpus(mp3); // ffmpeg autodetects the input container - mp3 works too
+      } catch (err) {
+        console.error('[TTS] Error convirtiendo el audio de Fish a ogg:', (err as Error).message);
+      }
+    }
+  }
+
+  const voicePath = resolveVoicePath(voiceGender);
+  if (!piperReady(voicePath)) return null;
 
   const outFile = join(tmpdir(), `canix-tts-${randomUUID()}.wav`);
   try {

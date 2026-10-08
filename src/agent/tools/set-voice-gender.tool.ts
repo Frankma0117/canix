@@ -3,6 +3,8 @@ import type { Tool } from '../tool-registry.js';
 import { usersRepo } from '../../db/repositories/users.repo.js';
 import { env } from '../../config/env.js';
 import { resolveActingUser } from './act-on-behalf.js';
+import { can } from '../../permissions/engine.js';
+import { isFishConfigured } from '../../audio/fish-audio.js';
 
 export const setVoiceGenderTool: Tool = {
   name: 'set_voice_gender',
@@ -34,7 +36,10 @@ export const setVoiceGenderTool: Tool = {
 
     usersRepo.setVoiceGender(userId, voiceGender);
 
-    if (voiceGender === 'female') {
+    // With the natural voice (Fish Audio) both genders always exist - Piper's optional female model
+    // only matters for people on the free local voice.
+    const naturalVoice = isFishConfigured() && can(usersRepo.getById(userId), 'voice.premium');
+    if (voiceGender === 'female' && !naturalVoice) {
       const { voicePathFemale } = env.audio.piper;
       if (!voicePathFemale || !existsSync(voicePathFemale)) {
         return (

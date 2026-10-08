@@ -1,7 +1,7 @@
 import type { Tool } from '../tool-registry.js';
 import { callRemindersRepo } from '../../db/repositories/call-reminders.repo.js';
 import { updateCallReminder } from '../../calls/call-reminders.service.js';
-import { normalizeDate, parseWall, nowLocal } from '../../util/datetime.js';
+import { validateFutureDateTime } from '../../util/datetime.js';
 import { resolveActingUser } from './act-on-behalf.js';
 import type { CallReminderType, RecurrenceFreq } from '../../types/index.js';
 
@@ -47,8 +47,9 @@ export const editCallReminderTool: Tool = {
       const date = String(args.date ?? reminder.scheduled_at.slice(0, 10));
       const timeRaw = String(args.time ?? reminder.scheduled_at.slice(11, 16));
       if (!TIME_RE.test(timeRaw)) return "La hora tiene que ir en formato 'HH:mm'.";
-      scheduledAt = normalizeDate(`${date} ${timeRaw}`);
-      if (parseWall(scheduledAt) <= parseWall(nowLocal())) return 'Esa fecha/hora ya pasó - dame una en el futuro.';
+      const when = validateFutureDateTime(`${date} ${timeRaw}`);
+      if (!when.ok) return when.error;
+      scheduledAt = when.value;
     }
 
     const recurrenceFreq = FREQS.includes(args.recurrence_freq as RecurrenceFreq) ? (args.recurrence_freq as RecurrenceFreq) : undefined;

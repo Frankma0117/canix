@@ -1,3 +1,4 @@
+import { effectivePermissions } from '../../permissions/engine.js';
 import type { Tool } from '../tool-registry.js';
 import { env } from '../../config/env.js';
 import { renderMainMenu } from '../menu.js';
@@ -21,6 +22,6 @@ export const showMenuTool: Tool = {
   parameters: { type: 'object', properties: {}, additionalProperties: false },
 
   async execute(_args, ctx) {
-    return renderMainMenu({ fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: ctx.isAdmin });
+    return renderMainMenu({ fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: ctx.isAdmin, permissions: effectivePermissions({ id: ctx.userId, role: ctx.isAdmin ? 'admin' : 'user' }) });
   },
 };

@@ -5,6 +5,12 @@ import { toE164, isCallableDestination, maskPhone } from './phone.js';
 import { getTwilioClient, isTwilioConfigured } from './twilio-client.js';
 import { nowLocal, addMinutes, addMonths } from '../util/datetime.js';
 import type { CallReminder, CallReminderType, RecurrenceFreq } from '../types/index.js';
+import { usersRepo } from '../db/repositories/users.repo.js';
+import { aiUsageRepo } from '../db/repositories/ai-usage.repo.js';
+import { can } from '../permissions/engine.js';
+import { fishTts } from '../audio/fish-audio.js';
+import { sanitizeForSpeech } from '../audio/tts.js';
+import { canServeCallAudio, publishCallAudio } from './call-audio.js';
 
 const MAX_MESSAGE_LENGTH = 300; // short-call cost design (~10s) - see the user's own requirement
 
@@ -83,11 +89,33 @@ function validatePhone(raw: string): ServiceResult<string> {
  * Uses the Twilio SDK's builder (not string concatenation) so the message text is always properly
  * XML-escaped - a message containing "</Say><Redirect>..." can never break out of the tag.
  */
-export function buildTwiml(message: string, callType: CallReminderType): string {
+export function buildTwiml(message: string, callType: CallReminderType, playUrl?: string | null): string {
   const response = new twilioLib.twiml.VoiceResponse();
-  if (callType === 'reminder') response.say({ language: SAY_LANGUAGE }, message);
-  else response.hangup();
+  if (callType === 'reminder') {
+    if (playUrl) response.play(playUrl);
+    else response.say({ language: SAY_LANGUAGE }, message);
+  } else response.hangup();
   return response.toString();
+}
+
+/**
+ * Natural-voice audio for a 'reminder' call (Fish Audio, see audio/fish-audio.ts) - only when the
+ * owner holds the paid 'voice.premium' permission AND PANEL_URL is a public https URL Twilio can
+ * fetch the MP3 from. null -> the call uses Twilio's built-in <Say> voice, exactly as before.
+ */
+async function naturalVoiceUrl(reminder: CallReminder): Promise<string | null> {
+  if (reminder.call_type !== 'reminder' || !canServeCallAudio()) return null;
+  const owner = usersRepo.getById(reminder.user_id);
+  if (!owner || !can(owner, 'voice.premium')) return null;
+  const text = sanitizeForSpeech(reminder.message);
+  const mp3 = await fishTts(text, owner.voice_gender ?? owner.gender);
+  if (!mp3) return null;
+  try {
+    aiUsageRepo.log(owner.id, 'voice.fish.call', env.audio.fish.model, text.length, 0);
+  } catch {
+    /* usage log is informative only */
+  }
+  return publishCallAudio(mp3);
 }
 
 /** Validates input and creates a pending call reminder - does NOT place the call (see
@@ -200,16 +228,22 @@ async function placeCall(reminder: CallReminder): Promise<ServiceResult<string>>
   if (!isTwilioConfigured()) return { ok: false, error: 'Twilio no está configurado (faltan variables de entorno).' };
 
   try {
+    const playUrl = await naturalVoiceUrl(reminder).catch(() => null);
     const client = getTwilioClient();
     const call = await client.calls.create({
       to: reminder.phone_number,
       from: env.twilio.phoneNumber,
-      twiml: buildTwiml(reminder.message, reminder.call_type),
+      twiml: buildTwiml(reminder.message, reminder.call_type, playUrl),
       statusCallback: statusCallbackUrl(reminder.id),
       statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
       statusCallbackMethod: 'POST',
       timeout: RING_TIMEOUT_SECONDS[reminder.call_type],
     });
+    try {
+      aiUsageRepo.log(reminder.user_id, 'call.twilio', reminder.call_type, 1, 0);
+    } catch {
+      /* usage log is informative only */
+    }
     return { ok: true, value: call.sid };
   } catch (err) {
     return { ok: false, error: (err as Error).message };
@@ -257,6 +291,14 @@ export async function processDueCallReminders(): Promise<void> {
   for (const reminder of due) {
     if (!callRemindersRepo.claim(reminder.id)) continue; // another caller already took it
     const claimed = callRemindersRepo.getByIdUnscoped(reminder.id)!;
+
+    // Calls are a paid extra: re-checked right before dialing, so revoking the permission also
+    // stops calls that were already scheduled (instead of them keeping on costing money).
+    if (!can(usersRepo.getById(claimed.user_id), 'reminders.calls')) {
+      callRemindersRepo.markFailed(claimed.id, 'La persona ya no tiene habilitadas las llamadas.');
+      logOutcome(claimed, { callSid: '(none)', status: 'skipped-no-permission' });
+      continue;
+    }
 
     const result = await placeCall(claimed);
     if (result.ok) {

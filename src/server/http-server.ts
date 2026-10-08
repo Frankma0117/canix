@@ -1,5 +1,4 @@
-import express, { type Express, type Request, type Response } from 'express';
-import cors from 'cors';
+import express, { type Express, type NextFunction, type Request, type Response } from 'express';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import qrcode from 'qrcode';
@@ -14,11 +13,21 @@ import { rewardsRepo } from '../db/repositories/rewards.repo.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { callRemindersRepo } from '../db/repositories/call-reminders.repo.js';
 import { createCallReminder, updateCallReminder, testCallNow } from '../calls/call-reminders.service.js';
+import { registerCallAudioRoute } from '../calls/call-audio.js';
 import { registerTwilioWebhook } from './twilio-webhook.js';
 import { createRoutineWithReminders, updateRoutineWithReminders } from '../agent/routine-setup.js';
 import { todayLocal, nowLocal } from '../util/datetime.js';
 import { phoneToJid } from '../util/jid.js';
-import { resolvePanelUser, requirePanelAdmin, findUserByToken } from './auth.js';
+import { resolvePanelUser, requirePanelAdmin, requirePermission, extractToken } from './auth.js';
+import { login, logout, changePassword, setPassword, createSession, AuthError } from '../auth/web-auth.js';
+import { effectivePermissions } from '../permissions/engine.js';
+import { PERMISSIONS } from '../permissions/catalog.js';
+import { securityHeaders, rateLimit, requestTimeout, errorHandler } from './security.js';
+import { h, userId } from './http-helpers.js';
+import { registerAdminRoutes } from './admin-routes.js';
+import { registerSchedulingRoutes } from './scheduling-routes.js';
+import { registerModuleRoutes } from './module-routes.js';
+import type { User } from '../types/index.js';
 import type {
   RecurrenceFreq,
   TodoScope,
@@ -31,69 +40,88 @@ import type {
 const here = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(here, '..', '..', 'public');
 
-/**
- * Every client (admin or granted user) gets their own random panel token and only ever sees their
- * own data - resolvePanelUser() middleware (see auth.js) already resolved and attached the owning
- * user before any route below runs, this just reads it back.
- */
-function userId(req: Request): number {
-  return req.panelUser!.id;
-}
-
-/** Wraps a handler (sync or async) and forwards thrown/rejected errors to Express as a 500. */
-function h(fn: (req: Request, res: Response) => unknown) {
-  return (req: Request, res: Response) => {
-    Promise.resolve()
-      .then(() => fn(req, res))
-      .catch((err) => {
-        console.error('[API] Error:', (err as Error).message);
-        res.status(500).json({ error: (err as Error).message });
-      });
-  };
-}
-
 export function createServer(bot: BotManager): Express {
   const app = express();
   // Needed so req.protocol correctly reflects "https" (via X-Forwarded-Proto) when this app runs
   // behind a reverse proxy/TLS terminator - Twilio's webhook signature validation (see
   // server/twilio-webhook.ts) reconstructs the exact public URL it called, and gets it wrong
   // without this if the proxy doesn't terminate TLS at this same process.
-  app.set('trust proxy', true);
-  app.use(cors());
+  // Only the first hop (the reverse proxy in front of this app) is trusted for X-Forwarded-For -
+  // trusting the whole chain would let anyone spoof their IP and dodge the per-IP rate limits.
+  app.set('trust proxy', 1);
+  app.disable('x-powered-by');
+  app.use(securityHeaders);
+  // No CORS: the portal is served from this same origin, so cross-origin browser calls to the API
+  // are simply not allowed (they used to be, for any site).
 
   // Twilio's status-callback webhook - registered BEFORE express.json() below and outside /api on
   // purpose: it's unauthenticated by our own Bearer scheme (Twilio can't send it) and needs its
   // own express.urlencoded() body parser instead of JSON (see twilio-webhook.ts).
   registerTwilioWebhook(app);
+  // Natural-voice MP3s for calls (see calls/call-audio.ts) - public on purpose, Twilio fetches them.
+  registerCallAudioRoute(app);
 
-  app.use(express.json());
-  app.use(express.static(publicDir));
+  app.use('/api', requestTimeout(30_000));
+  app.use('/api', rateLimit({ capacity: 240, windowMs: 60_000 }));
+  app.use(express.json({ limit: '200kb' }));
+  app.use(express.static(publicDir, { maxAge: '1h', index: 'index.html' }));
 
-  // ---------- Panel authentication ----------
+  // ---------- Portal authentication (number + password, see auth/web-auth.ts) ----------
+  // Two limits on login: per IP (stops one source hammering many accounts) and per IP+number
+  // (stops guessing one account's password) - on top of the per-account lockout in web-auth.ts.
   app.post(
     '/api/auth/login',
-    h((req, res) => {
-      const { token } = req.body ?? {};
-      const user = findUserByToken(String(token ?? ''));
-      if (!user) {
-        res.status(401).json({ error: 'Token invalido' });
-        return;
-      }
-      res.json({ ok: true, user: { id: user.id, name: user.name, role: user.role } });
+    rateLimit({ capacity: 20, windowMs: 15 * 60_000, message: 'Demasiados intentos de ingreso. Espera unos minutos.' }),
+    rateLimit({ capacity: 6, windowMs: 15 * 60_000, keyFn: (req) => `${req.ip}:${String(req.body?.phone ?? '').replace(/\D/g, '')}`, message: 'Demasiados intentos para ese número. Espera unos minutos.' }),
+    h(async (req, res) => {
+      const result = await login(String(req.body?.phone ?? ''), String(req.body?.password ?? ''), {
+        ip: req.ip,
+        userAgent: req.header('user-agent'),
+      });
+      res.json({ token: result.token, user: sessionView(result.user), mustChangePassword: result.mustChangePassword });
     }),
   );
 
   app.use('/api', resolvePanelUser);
 
-  // Lets the panel re-learn who it's logged in as after a page reload (it only persists the raw
-  // token, not the user info from login) without re-prompting for the token.
-  app.get(
-    '/api/auth/me',
+  app.get('/api/auth/me', h((req, res) => res.json(sessionView(req.panelUser!))));
+
+  app.post(
+    '/api/auth/logout',
     h((req, res) => {
-      const user = req.panelUser!;
-      res.json({ id: user.id, name: user.name, role: user.role });
+      const token = extractToken(req);
+      if (token) logout(token);
+      res.json({ ok: true });
     }),
   );
+
+  app.post(
+    '/api/auth/change-password',
+    rateLimit({ capacity: 10, windowMs: 15 * 60_000, keyFn: (req) => `pwd:${req.panelUser?.id}` }),
+    h(async (req, res) => {
+      const user = req.panelUser!;
+      const current = String(req.body?.current ?? '');
+      const next = String(req.body?.next ?? '');
+      if (user.password_hash) {
+        await changePassword(user, current, next, req.sessionToken);
+        return void res.json({ ok: true });
+      }
+      // The admin's FIRST password (still on the legacy token, no password yet) needs no "current".
+      // Setting it retires the legacy token, so a real session is handed back to stay logged in.
+      if (user.role !== 'admin') throw new AuthError('No tienes contraseña configurada.', 400);
+      await setPassword(user.id, next, { mustChange: false, actorId: user.id });
+      res.json({ ok: true, token: createSession(user.id, { ip: req.ip, userAgent: req.header('user-agent') }) });
+    }),
+  );
+
+  // ---------- Permission gates for the per-module routes below ----------
+  app.use('/api/categories', requirePermission('links.manage', 'reminders.manage', 'notes.manage'));
+  app.use('/api/links', requirePermission('links.manage'));
+  app.use('/api/contacts', requirePermission('contacts.manage'));
+  app.use('/api/reminders', requirePermission('reminders.manage'));
+  app.use('/api/call-reminders', requirePermission('reminders.calls'));
+  app.use('/api/rewards', requirePermission('rewards.manage'));
+  app.use('/api/todos', todoPermissionGate);
 
   // ---------- WhatsApp connection (admin only - it's a single shared WhatsApp session) ----------
   app.use('/api/connection', requirePanelAdmin);
@@ -515,5 +543,44 @@ export function createServer(bot: BotManager): Express {
     }),
   );
 
+  registerModuleRoutes(app);
+  registerSchedulingRoutes(app);
+  registerAdminRoutes(app, bot);
+
+  // Unknown API path -> JSON 404 (never the SPA's index.html).
+  app.use('/api', (_req, res) => void res.status(404).json({ error: 'Ruta no encontrada.' }));
+  app.use(errorHandler);
+
   return app;
+}
+
+/** What the portal needs to know about the logged-in person to build its navigation. */
+function sessionView(user: User) {
+  const perms = effectivePermissions(user);
+  return {
+    id: user.id,
+    name: user.name,
+    phone: user.jid.split('@')[0],
+    role: user.role,
+    permissions: [...perms],
+    modules: [...new Set(PERMISSIONS.filter((p) => perms.has(p.key)).map((p) => p.module))],
+    mustChangePassword: !!user.must_change_password,
+    hasPassword: !!user.password_hash,
+  };
+}
+
+/**
+ * /api/todos serves both one-off tasks (todos.manage) and routines (routines.manage) - the scope
+ * comes from the query/body, or from the existing row for /:id routes.
+ */
+function todoPermissionGate(req: Request, res: Response, next: NextFunction): void {
+  const perms = req.panelPermissions!;
+  if (req.panelUser?.role === 'admin') return next();
+  let scope = String(req.query.scope ?? req.body?.scope ?? '');
+  const idMatch = /^\/(\d+)/.exec(req.path);
+  if (!scope && idMatch) scope = todosRepo.getById(req.panelUser!.id, Number(idMatch[1]))?.scope ?? '';
+  const needed = scope === 'routine' ? 'routines.manage' : scope ? 'todos.manage' : null;
+  const ok = needed ? perms.has(needed) : perms.has('todos.manage') || perms.has('routines.manage');
+  if (ok) return next();
+  res.status(403).json({ error: 'No tienes habilitado este módulo. Pídeselo al administrador.' });
 }

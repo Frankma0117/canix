@@ -16,7 +16,9 @@
  */
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { messagesRepo } from '../db/repositories/messages.repo.js';
-import { CORE_CATEGORIES, STICKERS_CATEGORY, MODE_KEYS, type MenuCategory } from './menu.js';
+import { CORE_CATEGORIES, STICKERS_CATEGORY, AGENDA_CATEGORY, MODE_KEYS, categoryAllowed, type MenuCategory } from './menu.js';
+import { PERMISSIONS } from '../permissions/catalog.js';
+import { effectivePermissions } from '../permissions/engine.js';
 
 export type ModeKey = (typeof MODE_KEYS)[number];
 
@@ -25,7 +27,7 @@ export type ModeKey = (typeof MODE_KEYS)[number];
  *  menu.ts's visibleCategories). Entry-matching itself doesn't check role: it's the sticker tools
  *  (list_stickers/delete_sticker) that reject a non-admin, same graceful pattern as every other
  *  admin-only tool in this codebase. */
-const MODE_CATEGORIES: MenuCategory[] = [...CORE_CATEGORIES, STICKERS_CATEGORY];
+const MODE_CATEGORIES: MenuCategory[] = [...CORE_CATEGORIES, STICKERS_CATEGORY, AGENDA_CATEGORY];
 
 /** Tool names each mode unlocks, on top of ALWAYS_ON_TOOLS. Grouped to match exactly what each
  *  category's /menu detail text (menu.ts) promises it can do. */
@@ -74,6 +76,9 @@ const MODE_TOOLS: Record<ModeKey, string[]> = {
   // send_sticker (the proactive USE of a sticker) stays in ALWAYS_ON_TOOLS below - only the
   // MANAGEMENT tools (admin-only, enforced inside each tool's execute) live behind this mode.
   stickers: ['list_stickers', 'delete_sticker'],
+  // Both sides of scheduling (professional + client) - the person's permissions narrow it down to
+  // the half they actually have (see ai-agent.ts's combineAllowed).
+  agenda: PERMISSIONS.filter((p) => p.key.startsWith('scheduling.')).flatMap((p) => p.tools),
 };
 
 /** Available no matter the active mode: recordatorios (the default mode itself), links/categories
@@ -107,12 +112,16 @@ export const ALWAYS_ON_TOOLS = [
   'edit_link',
   'delete_link',
   'show_menu',
-  'regenerate_panel_token',
+  'change_web_password',
   'grant_access',
   'revoke_access',
   'list_users',
   'set_user_permissions',
-  'list_available_tools',
+  'list_permissions',
+  'get_user_permissions',
+  'manage_permission_package',
+  'set_web_password',
+  'manage_scheduling_group',
   'send_sticker',
   'send_message',
   'announce_update',
@@ -219,6 +228,14 @@ export function handleModeMessage(userId: number, text: string): ModeRouterResul
 
   const category = resolveModeEntry(textLower);
   if (!category) return { consumed: false };
+
+  // Entering a mode the administrator hasn't enabled for this person: say so, don't switch.
+  if (user && !categoryAllowed(category.key, { isAdmin: user.role === 'admin', permissions: effectivePermissions(user) })) {
+    return {
+      consumed: true,
+      reply: `🔒 *${category.title}* no está habilitado para ti. Si lo necesitas, pídeselo al administrador. Escribe /menu para ver lo que sí tienes.`,
+    };
+  }
 
   if (category.key !== currentMode) {
     usersRepo.setActiveMode(userId, category.key as ModeKey);

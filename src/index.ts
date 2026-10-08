@@ -12,8 +12,13 @@ import { usersRepo } from './db/repositories/users.repo.js';
 import { ensureWeeklyReportReminder } from './agent/weekly-report.js';
 import { ensureDailyResetReminder } from './agent/daily-reset.js';
 import { ensureDailyDedupReminder, dedupeAllUsers } from './agent/dedup.js';
+import { permissionsRepo } from './db/repositories/permissions.repo.js';
+import { migrateLegacyAccess } from './permissions/engine.js';
+import { installProcessGuards } from './util/process-guards.js';
+import { setSchedulingNotifier } from './scheduling/service.js';
 
 quietLibsignalLogs();
+installProcessGuards();
 
 async function main() {
   console.log('=== Canix · asistente personal por WhatsApp ===');
@@ -26,6 +31,13 @@ async function main() {
   initSchema();
   assertDbConnection();
   console.log('[DB] Listo (%s).', env.db.path);
+
+  // 1b) Access control: mirror the permissions catalog into the DB (FK target), seed the default
+  // packages, and move anyone still on the old per-tool system onto packages - once, losslessly.
+  permissionsRepo.syncCatalog();
+  migrateLegacyAccess();
+  const movedBillable = permissionsRepo.moveBillableOutOfPackages();
+  if (movedBillable) console.log('[ACCESS] %d permiso(s) de pago pasados de paquete a permiso directo (revísalos en Usuarios).', movedBillable);
 
   // 2) Agent tools
   registerTools();
@@ -69,6 +81,8 @@ async function main() {
 
   // 3) WhatsApp: single dedicated session
   const bot = new BotManager();
+  // Appointment notifications (web portal actions included) go out through this same session.
+  setSchedulingNotifier(bot.session);
   await bot.start();
 
   // 4) Reminder scheduler
@@ -79,8 +93,11 @@ async function main() {
   const app = createServer(bot);
   app.listen(env.port, () => {
     console.log('[API] Panel en http://localhost:%d', env.port);
+    // Until the admin sets a portal password, the old admin token is the way in (see server/auth.ts).
     const admin = usersRepo.getAdmin();
-    if (admin?.panel_token) console.log('[AUTH] Token de acceso del administrador: %s', admin.panel_token);
+    if (admin && !admin.password_hash && admin.panel_token) {
+      console.log('[AUTH] El administrador aún no tiene contraseña del portal. Entra con este token: %s', admin.panel_token);
+    }
   });
 }
 

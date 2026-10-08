@@ -6,13 +6,33 @@ import { config as loadDotenv } from 'dotenv';
 // (chicken-and-egg - that file is what this call is busy loading).
 loadDotenv({ quiet: true });
 
+const DEFAULT_TIMEZONE = 'America/Bogota';
+
+/**
+ * A typo'd TIMEZONE (e.g. "America/Bogotá", "Bogota") made Intl.DateTimeFormat throw a RangeError
+ * on EVERY nowLocal() call - every reminder, every prompt, every scheduler tick failing. Validated
+ * once at boot instead: an invalid value logs a loud warning and falls back to the default, so the
+ * bot keeps the correct (Colombian) time rather than going down. Independent of the server's own OS
+ * timezone on purpose - all wall-clock math goes through this value, never the system clock's zone.
+ */
+function resolveTimezone(raw: string | undefined): string {
+  const tz = (raw ?? '').trim() || DEFAULT_TIMEZONE;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz }).format(new Date());
+    return tz;
+  } catch {
+    console.error('[CONFIG] TIMEZONE="%s" no es una zona horaria válida - uso %s.', tz, DEFAULT_TIMEZONE);
+    return DEFAULT_TIMEZONE;
+  }
+}
+
 /**
  * Central configuration read from environment variables (.env).
  */
 export const env = {
   port: parseInt(process.env.PORT ?? '3000', 10),
 
-  timezone: process.env.TIMEZONE ?? 'America/Bogota',
+  timezone: resolveTimezone(process.env.TIMEZONE),
 
   // Ya no dispara ningún aviso propio (el push automático de la agenda diaria se quitó - ver el
   // comentario de 'daily_agenda' en types/index.ts) - se conserva solo como el punto de referencia
@@ -94,6 +114,27 @@ export const env = {
       voicePath: process.env.PIPER_VOICE_PATH ?? '',
       voicePathFemale: process.env.PIPER_VOICE_PATH_FEMALE ?? '',
     },
+
+    // Natural (human-sounding) voice via Fish Audio's TTS API - pay-per-use, so it only ever runs
+    // for users with the 'voice.premium' permission (see permissions/catalog.ts); everyone else, or
+    // any Fish failure/timeout, falls back to local Piper above. Voices are Fish "reference_id"s
+    // (fish.audio voice library) - one per gender, picked from users.voice_gender.
+    fish: {
+      apiKey: process.env.FISH_AUDIO_API_KEY ?? '',
+      model: process.env.FISH_AUDIO_MODEL ?? 's2.1-pro-free',
+      voiceMale: process.env.FISH_AUDIO_VOICE_MALE ?? '17ed67335f0145c9a850fddecd3c40e0',
+      voiceFemale: process.env.FISH_AUDIO_VOICE_FEMALE ?? 'e296306da5d449999f6e35c2b9f60aea',
+      // Fish bills per character - a reply longer than this goes out as text instead of an
+      // expensive (and tedious to listen to) long voice note.
+      maxChars: parseInt(process.env.FISH_AUDIO_MAX_CHARS ?? '700', 10),
+      timeoutMs: parseInt(process.env.FISH_AUDIO_TIMEOUT_MS ?? '20000', 10),
+    },
+  },
+
+  // fal.ai (image generation) - deliberately NOT used by the bot (the user only wants their own
+  // sticker pack); kept configured only for generating web-portal assets by hand when needed.
+  fal: {
+    apiKey: process.env.FAL_KEY ?? '',
   },
 
   // Admin panel access token. If not set here, the server generates

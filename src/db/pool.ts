@@ -18,6 +18,12 @@ if (!existsSync(dbDir)) mkdirSync(dbDir, { recursive: true });
 export const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+// Wait (up to 5s) instead of failing instantly with SQLITE_BUSY if another connection - an admin
+// running scripts/audit-stickers.ts --fix, a backup - holds the write lock for a moment.
+db.pragma('busy_timeout = 5000');
+// Durable in WAL mode (a committed transaction survives a process crash; only an OS crash/power
+// loss can lose the last few) and much faster than FULL under the web portal's request load.
+db.pragma('synchronous = NORMAL');
 
 /** Sanity check used at boot. better-sqlite3 is synchronous; this just confirms the file opened. */
 export function assertDbConnection(): void {

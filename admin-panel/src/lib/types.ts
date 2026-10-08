@@ -115,3 +115,170 @@ export interface RewardPunishment {
   date: string;
   created_at: string;
 }
+
+// ---------------- Access control (admin) ----------------
+export interface PermissionDef {
+  key: string;
+  module: string;
+  label: string;
+  description: string;
+  /** Paid extra (calls, natural voice...): granted per person, never through a package. */
+  billable?: boolean;
+}
+
+export interface PermissionPackage {
+  id: number;
+  key: string;
+  name: string;
+  description: string;
+  is_system: number;
+  permissions: string[];
+}
+
+export interface AdminUser {
+  id: number;
+  name: string | null;
+  phone: string;
+  role: 'admin' | 'user';
+  created_at: string;
+  paused_until: string | null;
+  has_password: boolean;
+  must_change_password: boolean;
+  locked_until: string | null;
+  packages: { id: number; key: string; name: string }[];
+  allow: string[];
+  deny: string[];
+  effective: string[];
+  is_professional: boolean;
+}
+
+export interface AuditEntry {
+  id: number;
+  actor_name: string | null;
+  target_name: string | null;
+  action: string;
+  detail: string | null;
+  created_at: string;
+}
+
+// ---------------- Scheduling ----------------
+export type AppointmentStatus = 'pending' | 'confirmed' | 'rejected' | 'cancelled' | 'completed' | 'no_show' | 'expired';
+
+export interface Appointment {
+  id: number;
+  professional_id: number;
+  client_user_id: number;
+  start_at: string;
+  end_at: string;
+  status: AppointmentStatus;
+  status_label: string;
+  reason: string | null;
+  notes?: string | null;
+  cancel_reason: string | null;
+  professional_name: string;
+  client_name: string | null;
+  client_phone: string;
+  created_at: string;
+}
+
+export interface ProfessionalProfile {
+  user_id: number;
+  display_name: string;
+  specialty: string | null;
+  slot_minutes: number;
+  buffer_minutes: number;
+  min_notice_minutes: number;
+  max_days_ahead: number;
+  reminder_morning_time: string | null;
+  reminder_hours_before: number | null;
+  auto_confirm: number;
+  active: number;
+}
+
+export interface AvailabilityRule {
+  id?: number;
+  weekday: number;
+  start_time: string;
+  end_time: string;
+}
+
+export interface TimeOff {
+  id: number;
+  start_at: string;
+  end_at: string;
+  reason: string | null;
+}
+
+export interface Slot {
+  start_at: string;
+  end_at: string;
+}
+
+export interface SchedClient {
+  id: number;
+  name: string | null;
+  phone: string;
+  via_group: string | null;
+  since: string;
+}
+
+export interface AttachedFile {
+  id: number;
+  name: string;
+  mime: string;
+  size: number;
+  owner: number;
+  created_at: string;
+}
+
+export interface SchedGroup {
+  id: number;
+  name: string;
+  description: string;
+  members: number[];
+  clients: { id: number; name: string | null; phone: string }[];
+}
+
+// ---------------- Other modules ----------------
+export interface Note {
+  id: number;
+  title: string | null;
+  content: string;
+  category_id: number | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+export type MealSlot = 'desayuno' | 'almuerzo' | 'cena' | 'onces';
+
+export interface MealPlan {
+  id: number;
+  plan_date: string;
+  meal_slot: MealSlot;
+  title: string;
+  notes: string | null;
+}
+
+export interface Recipe {
+  id: number;
+  title: string;
+  ingredients: string;
+  instructions: string;
+  created_at: string;
+}
+
+export interface Checklist {
+  id: number;
+  name: string;
+  items: { id: number; title: string; checked: number }[];
+}
+
+export interface GarmentCard {
+  id: number;
+  image_url: string;
+  type: string;
+  category: string;
+  color: string | null;
+  short_description: string | null;
+  favorite: boolean;
+}

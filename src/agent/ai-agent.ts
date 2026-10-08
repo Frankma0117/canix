@@ -7,14 +7,30 @@ import { categoriesRepo } from '../db/repositories/categories.repo.js';
 import { todosRepo } from '../db/repositories/todos.repo.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { stickersRepo } from '../db/repositories/stickers.repo.js';
-import { currentTimeContext, todayLocal } from '../util/datetime.js';
+import { aiUsageRepo } from '../db/repositories/ai-usage.repo.js';
+import { isTwilioConfigured } from '../calls/twilio-client.js';
+import { currentTimeContext, todayLocal, upcomingDaysContext } from '../util/datetime.js';
 import { buildAgendaMessage } from './agenda.js';
 import { isModeKey, toolsForMode, getModeCategory, type ModeKey } from './modes.js';
 import { sleep } from '../util/human-delay.js';
+import { allowedToolsFor, isSchedulingClientOnly, effectivePermissions, describePermissions } from '../permissions/engine.js';
+import { buildClientSystemPrompt, schedulingPromptSection } from '../scheduling/prompts.js';
 import { env } from '../config/env.js';
 import type { WaManager } from '../whatsapp/wa-manager.js';
 
 const MAX_ITERATIONS = 6;
+
+/**
+ * Wall-clock budget for one whole turn (every model call + tool in it). Before this, each model
+ * call had its own 45s cap but a turn could chain up to ~13 of them (6 iterations x 2 attempts +
+ * a forced retry) - a slow provider meant the person saw "sigo en eso..." and then minutes of
+ * silence ("se queda pensando y no responde"). Now the turn always ends with a reply in ~100s.
+ */
+const TURN_BUDGET_MS = 100_000;
+/** A single model call never waits longer than this, nor past the turn's remaining budget. */
+const MODEL_CALL_MAX_MS = 45_000;
+/** A tool hanging (e.g. WhatsApp socket mid-reconnect) must not eat the whole turn. */
+const TOOL_TIMEOUT_MS = 30_000;
 
 /**
  * The AI provider (network hiccup, rate limit, timeout, etc.) is the single most likely point of
@@ -27,30 +43,59 @@ const MAX_ITERATIONS = 6;
 async function callModelWithRetry(
   client: OpenAI,
   params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
+  deadline: number,
+  userId: number,
 ): Promise<OpenAI.Chat.Completions.ChatCompletion | null> {
-  try {
-    const res = await client.chat.completions.create(params);
-    logUsage(res);
-    return res;
-  } catch (err) {
-    console.error('[LLM] Error llamando al modelo (intento 1/2):', (err as Error).message);
-    await sleep(1500);
-    try {
-      const res = await client.chat.completions.create(params);
-      logUsage(res);
-      return res;
-    } catch (err2) {
-      console.error('[LLM] Error llamando al modelo (intento 2/2, me rindo):', (err2 as Error).message);
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const remaining = deadline - Date.now();
+    if (remaining < 5_000) {
+      console.error('[LLM] Sin tiempo para llamar al modelo (quedan %dms del turno).', Math.max(remaining, 0));
       return null;
     }
+    try {
+      const res = await client.chat.completions.create(params, { timeout: Math.min(MODEL_CALL_MAX_MS, remaining) });
+      logUsage(res, userId);
+      return res;
+    } catch (err) {
+      console.error('[LLM] Error llamando al modelo (intento %d/2):', attempt, (err as Error).message);
+      if (attempt === 1) await sleep(1500);
+    }
+  }
+  return null;
+}
+
+/** Visibility into token spend per call - logged to the console AND per user in ai_usage, the
+ *  basis for charging AI use per person later on (operation 'chat'). */
+function logUsage(res: OpenAI.Chat.Completions.ChatCompletion, userId: number): void {
+  const u = res.usage;
+  if (!u) return;
+  console.log('[LLM] Tokens: prompt=%d completion=%d total=%d', u.prompt_tokens, u.completion_tokens, u.total_tokens);
+  try {
+    aiUsageRepo.log(userId, 'chat', res.model ?? env.ai.model, u.prompt_tokens, u.completion_tokens);
+  } catch (err) {
+    console.error('[LLM] No pude registrar el uso:', (err as Error).message);
   }
 }
 
-/** Visibility into token spend per call - the cheapest way to actually see where cost goes
- *  instead of guessing (see AI_HISTORY_TURNS / tool-permission filtering for the actual levers). */
-function logUsage(res: OpenAI.Chat.Completions.ChatCompletion): void {
-  const u = res.usage;
-  if (u) console.log('[LLM] Tokens: prompt=%d completion=%d total=%d', u.prompt_tokens, u.completion_tokens, u.total_tokens);
+/** Runs a tool with a hard time cap - see TOOL_TIMEOUT_MS. */
+async function executeWithTimeout(run: () => Promise<string>, name: string): Promise<string> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      run(),
+      new Promise<string>((resolve) => {
+        timer = setTimeout(() => {
+          console.error(`[TOOL] ${name}: superó ${TOOL_TIMEOUT_MS / 1000}s, sigo sin esperar su resultado.`);
+          resolve(
+            `La herramienta ${name} tardó demasiado y NO sé si alcanzó a completarse. No digas que quedó hecho ni la ` +
+              'repitas: dile que hubo una demora y que revise en un momento (o revísalo tú con la tool de listar).',
+          );
+        }, TOOL_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 type ChatMsg = OpenAI.Chat.Completions.ChatCompletionMessageParam;
@@ -59,6 +104,23 @@ type ChatMsg = OpenAI.Chat.Completions.ChatCompletionMessageParam;
  *  reply is the answer" turns, so we can make sure the follow-through tool call actually happens. */
 function looksLikeQuestion(text: string): boolean {
   return /[?¿]\s*$/.test(text.trim());
+}
+
+/**
+ * True when the incoming message actually reads like an ANSWER to the question the bot just
+ * asked ("sí", "dale", "mañana a las 8", "la 2", "10pm") - the only case where forcing a tool call
+ * is safe. A follow-up question or complaint ("¿qué pasó?", "ey", "no entendí") is NOT an answer:
+ * forcing a tool on it made the model pick an option on the user's behalf - the real case was
+ * "¿Te lo programo para mañana a las 10pm?" + "Ey que paso?" -> forced schedule for tomorrow.
+ */
+function looksLikeAnswer(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t || /[?¿]/.test(t)) return false;
+  if (/^(no|nada|nop|todav[ií]a no|espera|ey|hey|oye|qu[eé]|c[oó]mo)\b/.test(t)) return false;
+  return (
+    /^(s[ií]|sip|sii+|dale|ok|okay|okey|listo|de una|claro|perfecto|hazlo|h[aá]gale|va|vale|bueno|correcto|exacto|eso|esa|ese|confirmo|por favor|porfa|ma[ñn]ana|hoy|pasado|el |la |los |las |a las|al |en )/.test(t) ||
+    /\d/.test(t) // a time, a date, an option number, an id
+  );
 }
 
 /** Merges two independent tool restrictions (per-user permissions + active mode) into the single
@@ -109,6 +171,15 @@ Reglas de oro (rómpelas y me arruinas la confianza en ti):
   Nunca preguntes por zona horaria, nunca asumas otra, nunca hagas conversiones - ese dato ya es la
   hora local correcta, úsalo tal cual para calcular cualquier fecha/hora relativa ("en 5 minutos",
   "mañana", "el viernes").
+- HORAS QUE YA PASARON: compara SIEMPRE la hora pedida con la hora actual antes de agendar. Si
+  me piden una hora de hoy que ya pasó (ej. "a las 10" cuando ya son las 10:43 p. m.), dímelo en
+  una frase con la hora actual y pregúntame qué prefiero (mañana a esa hora, otra hora hoy, o "en
+  X minutos" si quizás me refería a eso) - y NO agendes nada hasta que yo responda eligiendo una
+  opción. Nunca elijas tú por mí. Si te escribo otra cosa que no es una respuesta (ej. "¿qué
+  pasó?"), vuelve a hacerme la misma pregunta corta, no tomes eso como un sí.
+- "a las 10" sin a. m./p. m.: si solo UNA de las dos todavía no ha pasado hoy, es esa; si ambas
+  son posibles y el contexto no lo deja claro (ej. "ver una película" suena a noche, "ir al banco"
+  suena a mañana), usa el sentido común del contexto; si de verdad es ambiguo, pregunta.
 - Antes de decir que algo "no se puede" (editar, cambiar de hora, mover), revisa la lista de
   herramientas de abajo - probablemente sí hay una tool para eso. No me digas "bórralo y créalo de
   nuevo" cuando existe edit_todo/edit_routine/edit_reminder.
@@ -286,9 +357,9 @@ Reglas de las herramientas:
   directamente en tu respuesta (con tu propio conocimiento, sin necesidad de ninguna tool) - solo
   usa save_recipe si te pido explícitamente guardarla, y get_recipe/list_recipes/delete_recipe para
   consultar o borrar recetas ya guardadas.
-- Cada persona con acceso tiene su propio panel web con su propio token (separado del de cualquier
-  otro) - si preguntan cómo entrar o si se les perdió el token, usa regenerate_panel_token (sin
-  argumentos les regenera el suyo propio).
+- Portal web: se entra con el número de WhatsApp y una contraseña, y cada quien ve solo sus propios
+  datos y los módulos que tiene habilitados. Si preguntan cómo entrar o si olvidaron la contraseña,
+  usa change_web_password (le envío una temporal que el portal le pide cambiar al entrar).
 - Si abajo en tu contexto ves "Stickers disponibles", úsalos por tu cuenta con send_sticker cuando
   el momento de la conversación calce con alguna etiqueta (saludo, celebración, motivación,
   despedida, etc.) - NUNCA preguntes si quiero uno, simplemente mándalo cuando aplique. También
@@ -343,11 +414,22 @@ const ADMIN_PROMPT_ADDENDUM = `
 
 Eres el administrador de este bot. Además de todo lo anterior, puedes darle acceso a otras
 personas con grant_access (cada una queda con su propia configuración, sin compartir nada con la
-tuya), quitárselo con revoke_access, y ver quién tiene acceso con list_users. También puedes
-limitar a alguien (que no seas tú) a solo un subconjunto de funciones con set_user_permissions
-(ej. "que Ana solo pueda guardar y ver recordatorios") - usa list_available_tools primero si no
-tienes claros los nombres exactos, y nunca inventes un nombre de función. También puedes
-regenerar el token del panel de otra persona con regenerate_panel_token pasando su nombre/número.
+tuya), quitárselo con revoke_access, y ver quién tiene acceso con list_users.
+
+PERMISOS: cada funcionalidad es un permiso, y los permisos se agrupan en paquetes. Solo tú decides
+qué puede usar cada persona:
+- list_permissions muestra el catálogo de permisos (con su clave exacta) y los paquetes existentes
+  - úsala SIEMPRE antes de asignar si no tienes las claves exactas; nunca inventes una clave.
+- get_user_permissions muestra qué tiene alguien y por qué (paquetes + permitidos/denegados sueltos).
+- set_user_permissions cambia el acceso de alguien: agregar/quitar paquetes, permitir o denegar
+  permisos sueltos (lo denegado siempre gana), o reemplazar todo. Ej. "que Juan solo pueda crear
+  recordatorios y rutinas, no enviar mensajes" -> replace con allow=[reminders.manage,
+  routines.manage] (sin paquetes) y deny=[messages.send].
+- manage_permission_package crea, edita o borra paquetes.
+- set_web_password le crea a alguien una contraseña temporal del portal web (se la envío por
+  WhatsApp y el portal le pide cambiarla al entrar). Para entrar al portal necesita el permiso
+  portal.access.
+Si te piden algo de permisos y no está claro a quién o qué, pregunta antes de cambiar nada.
 
 Además, como administrador puedes ver y actuar sobre los datos de cualquier otra persona con
 acceso (sus tareas, rutinas, recordatorios, pausas) pasando su nombre o número en el parámetro
@@ -392,10 +474,30 @@ function buildSystemPrompt(
       `no tienes.`
     : '';
 
+  // What THIS person is allowed to use (see permissions/engine.ts). BASE_PROMPT describes every
+  // feature the bot has; this keeps the model from offering one the administrator didn't enable.
+  const perms = effectivePermissions({ id: userId, role: isAdmin ? 'admin' : 'user' });
+  const permsAddendum = isAdmin
+    ? ''
+    : `\n\nFUNCIONES HABILITADAS PARA MÍ (las asigna el administrador): ${describePermissions(perms)}. ` +
+      'Si te pido algo fuera de esa lista, dime con naturalidad que esa función no la tengo habilitada y que ' +
+      'se la pida al administrador - nunca finjas hacerlo ni sugieras un atajo.';
+  const schedulingAddendum = schedulingPromptSection(userId, perms);
+  // Phone calls are a paid extra: whoever doesn't have them must never be offered one - neither when
+  // they ask nor on the bot's own initiative (the "¿quieres que además te llame?" rule above).
+  const callsAddendum =
+    perms.has('reminders.calls') && isTwilioConfigured()
+      ? ''
+      : '\n\nLLAMADAS TELEFÓNICAS: NO las tengo habilitadas (son un extra de pago que activa el administrador). ' +
+        'Ignora la regla de ofrecer llamadas: nunca ofrezcas, prometas ni programes una llamada; si te pido que me ' +
+        'llames, dime con naturalidad que las llamadas son un extra que debe habilitar el administrador y ofréceme ' +
+        'el recordatorio por WhatsApp.';
+
   return [
-    BASE_PROMPT + (isAdmin ? ADMIN_PROMPT_ADDENDUM : '') + modeAddendum,
+    BASE_PROMPT + (isAdmin ? ADMIN_PROMPT_ADDENDUM : '') + permsAddendum + callsAddendum + schedulingAddendum + modeAddendum,
     '',
     currentTimeContext(),
+    upcomingDaysContext(),
     `Hoy es ${todayLocal()}.`,
     `Mi nombre: ${userName ?? '(no lo sé todavía - no lo inventes, pregúntalo solo si hace falta para algo puntual)'}`,
     `Mi género: ${
@@ -429,10 +531,12 @@ export async function processMessage(
 ): Promise<string> {
   const { client, model } = getAiClient();
 
-  // The admin always has full access; anyone else may be limited to a subset by the admin (see
-  // set-user-permissions.tool.ts) - null means unrestricted, same as before this feature existed.
+  // Everything a non-admin can do comes from the permissions the administrator assigned them
+  // (packages + allow/deny - see permissions/engine.ts). null = admin, unrestricted. A user record
+  // that vanished mid-turn gets nothing (empty list), never "everything".
   const fullUser = usersRepo.getById(user.id);
-  const permissionAllowedTools = !user.isAdmin && fullUser ? usersRepo.getAllowedTools(fullUser) : null;
+  const permissionAllowedTools = user.isAdmin ? null : fullUser ? allowedToolsFor(fullUser) : [];
+  const clientOnly = !!fullUser && isSchedulingClientOnly(fullUser);
 
   // Special modes (see agent/modes.ts) layer a second, independent restriction on top of the one
   // above - whichever one is tighter wins (intersection), so an admin-restricted user who's also
@@ -445,7 +549,8 @@ export async function processMessage(
   // If my last turn was a bare clarifying question, this incoming message is almost certainly the
   // answer to it - flags the "answer arrived, now actually call the tool" corrective retry below.
   const lastAssistantMsg = [...history].reverse().find((m) => m.role === 'assistant');
-  const previousTurnWasQuestion = !!lastAssistantMsg && looksLikeQuestion(lastAssistantMsg.content);
+  const previousTurnWasQuestion =
+    !!lastAssistantMsg && looksLikeQuestion(lastAssistantMsg.content) && looksLikeAnswer(userText);
 
   messagesRepo.add(user.id, 'user', userText);
   // Any inbound message at all is proof this chat is genuinely two-way - clears the
@@ -456,7 +561,9 @@ export async function processMessage(
   const messages: ChatMsg[] = [
     {
       role: 'system',
-      content: buildSystemPrompt(user.id, user.isAdmin, activeMode, fullUser?.name ?? null, fullUser?.gender ?? null),
+      content: clientOnly
+        ? buildClientSystemPrompt(user.id, fullUser?.name ?? null)
+        : buildSystemPrompt(user.id, user.isAdmin, activeMode, fullUser?.name ?? null, fullUser?.gender ?? null),
     },
     ...history.map((m) => ({ role: m.role, content: m.content }) as ChatMsg),
     { role: 'user', content: userText },
@@ -488,14 +595,20 @@ export async function processMessage(
   );
 
   let forcedRetryUsed = false;
+  const deadline = Date.now() + TURN_BUDGET_MS;
+  /** Tools that actually ran this turn - if the turn then dies, the reply must say so, otherwise
+   *  "intenta de nuevo" makes the person repeat it and the reminder/appointment ends up duplicated. */
+  const executed: string[] = [];
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
-    const res = await callModelWithRetry(client, callParams());
+    const res = await callModelWithRetry(client, callParams(), deadline, user.id);
 
     if (!res) {
-      const text =
-        '⚠️ Tuve un problema técnico conectándome ahora mismo, ya quedó registrado. Intenta de nuevo ' +
-        'en un momento - si te sigue pasando seguido, avísale al administrador.';
+      const text = executed.length
+        ? `⚠️ Se me cortó la conexión antes de terminar de responderte, pero alcancé a hacer: ${[...new Set(executed)].join(', ')}. ` +
+          'Antes de repetirlo, pregúntame cómo quedó (ej. "qué tengo programado") para no duplicar nada.'
+        : '⚠️ Tuve un problema técnico conectándome ahora mismo, ya quedó registrado. Intenta de nuevo ' +
+          'en un momento - si te sigue pasando seguido, avísale al administrador.';
       messagesRepo.add(user.id, 'assistant', text);
       return text;
     }
@@ -536,7 +649,7 @@ export async function processMessage(
       );
       messages.push(choice as ChatMsg);
       messages.push({ role: 'system', content: FORCE_TOOL_REMINDER });
-      const res2 = await callModelWithRetry(client, callParams('required'));
+      const res2 = await callModelWithRetry(client, callParams('required'), deadline, user.id);
       const choice2 = res2?.choices[0]?.message;
       if (choice2) {
         choice = choice2;
@@ -575,7 +688,8 @@ export async function processMessage(
         try {
           const args = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
           console.log(`[TOOL] ${tc.function.name}(%s)`, JSON.stringify(args));
-          result = await tool.execute(args, ctx);
+          result = await executeWithTimeout(() => tool.execute(args, ctx), tc.function.name);
+          executed.push(tc.function.name);
           console.log(`[TOOL] ${tc.function.name} -> "%s"`, result.length > 300 ? `${result.slice(0, 300)}…` : result);
         } catch (err) {
           result = `Error al ejecutar ${tc.function.name}: ${(err as Error).message}`;

@@ -33,7 +33,36 @@ const NAV_FOOTER = '\n\n↩️ /menu - volver al menú principal';
  *  in the menu below without an import cycle - modes.ts imports THIS constant, not the reverse.
  *  'stickers' lives outside CORE_CATEGORIES (see STICKERS_CATEGORY below, admin-gated like fashion/
  *  admin) but is still a real mode key - modes.ts merges the two when resolving mode entry. */
-export const MODE_KEYS = ['rutinas', 'tareas', 'notas', 'contactos', 'comidas', 'recetas', 'premios', 'resumenes', 'stickers'] as const;
+export const MODE_KEYS = ['rutinas', 'tareas', 'notas', 'contactos', 'comidas', 'recetas', 'premios', 'resumenes', 'stickers', 'agenda'] as const;
+
+/**
+ * Which permission(s) make each category visible/enterable (see permissions/catalog.ts) - any one
+ * of the listed keys is enough. 'stickers'/'admin' are admin-only (checked separately).
+ */
+export const CATEGORY_PERMISSIONS: Record<string, string[]> = {
+  recordatorios: ['reminders.manage'],
+  rutinas: ['routines.manage'],
+  tareas: ['todos.manage'],
+  notas: ['notes.manage'],
+  links: ['links.manage'],
+  contactos: ['contacts.manage', 'messages.send'],
+  comidas: ['meals.manage'],
+  recetas: ['recipes.manage'],
+  premios: ['rewards.manage'],
+  resumenes: ['summaries.view'],
+  panel: ['portal.access'],
+  llamadas: ['reminders.calls'],
+  fashion: ['fashion.use'],
+  agenda: ['scheduling.professional', 'scheduling.client'],
+};
+
+/** True when this person may see/enter the category (admins: always). */
+export function categoryAllowed(key: string, access: Pick<MenuAccess, 'isAdmin' | 'permissions'>): boolean {
+  if (access.isAdmin) return true;
+  if (key === 'stickers' || key === 'admin') return false;
+  const needed = CATEGORY_PERMISSIONS[key];
+  return !needed || needed.some((p) => access.permissions.has(p));
+}
 
 /** Also the source of truth for which categories can become a special mode (see agent/modes.ts) -
  *  reuses these same keys/aliases/detail text so the /menu screen and the mode-entry command never
@@ -184,15 +213,32 @@ export const CORE_CATEGORIES: MenuCategory[] = [
     key: 'panel',
     number: 11,
     emoji: '🌐',
-    title: 'Panel web',
-    short: 'Tu propio panel con token personal - pedime que te lo reenvíe si lo perdés.',
-    aliases: ['panel', 'web'],
+    title: 'Portal web',
+    short: 'Entrá con tu número y contraseña - ves solo tus módulos habilitados.',
+    aliases: ['panel', 'web', 'portal'],
     detail:
-      `🌐 *Panel web*\n\n` +
-      `- Tu propio panel con tu token personal\n` +
-      `- Si perdiste el token, pedime que te lo reenvíe`,
+      `🌐 *Portal web*\n\n` +
+      `- Entrás con tu número de WhatsApp y tu contraseña\n` +
+      `- Ves y gestionás solo tus datos y los módulos que tenés habilitados\n` +
+      `- ¿Primera vez u olvidaste la contraseña? Pedime "cambia mi contraseña del portal" y te mando una temporal`,
   },
 ];
+
+export const AGENDA_CATEGORY: MenuCategory = {
+  key: 'agenda',
+  emoji: '📅',
+  title: 'Agenda y citas',
+  short: 'Agendá citas con profesionales, o manejá tu propia agenda si sos profesional.',
+  aliases: ['agenda', 'agendamiento', 'cita', 'citas', 'agendar'],
+  detail:
+    `📅 *Agenda y citas*\n\n` +
+    `- Ver los espacios disponibles de tu profesional y pedir una cita: "qué horarios hay el jueves"\n` +
+    `- Ver y cancelar tus citas: "cuáles son mis citas"\n` +
+    `- Profesional: definir tu horario de atención, ver tu agenda, confirmar/rechazar/cancelar/programar citas\n` +
+    `- Profesional: compartir acceso a un cliente para que agende: "dale acceso a agendar a 3001234567 Ana"\n` +
+    `- Recordatorio automático el día de la cita (en la mañana, o como lo configure el profesional)\n` +
+    `- Calendario completo en el portal web`,
+};
 
 const CALLS_CATEGORY: MenuCategory = {
   key: 'llamadas',
@@ -266,23 +312,32 @@ const ADMIN_CATEGORY: MenuCategory = {
     `🛠️ *Solo administrador*\n\n` +
     `- Dar o quitar acceso a otras personas\n` +
     `- Ver quién tiene acceso\n` +
-    `- Limitar a alguien a solo ciertas funciones\n` +
+    `- Asignar permisos y paquetes: "que Juan solo pueda usar recordatorios y rutinas"\n` +
     `- Ver y actuar sobre los datos de cualquier otra persona con acceso (pasando su nombre/número)\n` +
-    `- Regenerar el token del panel de cualquiera`,
+    `- Crear contraseñas temporales del portal web, y gestionar todo desde el portal (Administración)`,
 };
 
 export interface MenuAccess {
   fashionEnabled: boolean;
   callsEnabled: boolean;
   isAdmin: boolean;
+  /** Effective permissions of the person viewing the menu (see permissions/engine.ts). */
+  permissions: Set<string>;
+}
+
+/** Core categories this person may use, numbered 1..N in order - per-person numbering so a
+ *  restricted user never sees gaps ("/menu 2" always means the 2nd line THEY see). */
+function visibleCore(access: MenuAccess): MenuCategory[] {
+  return CORE_CATEGORIES.filter((c) => categoryAllowed(c.key, access)).map((c, i) => ({ ...c, number: i + 1 }));
 }
 
 function visibleCategories(access: MenuAccess): MenuCategory[] {
   const extra: MenuCategory[] = [];
-  if (access.callsEnabled) extra.push(CALLS_CATEGORY);
-  if (access.fashionEnabled) extra.push(FASHION_CATEGORY);
+  if (categoryAllowed('agenda', access)) extra.push(AGENDA_CATEGORY);
+  if (access.callsEnabled && categoryAllowed('llamadas', access)) extra.push(CALLS_CATEGORY);
+  if (access.fashionEnabled && categoryAllowed('fashion', access)) extra.push(FASHION_CATEGORY);
   if (access.isAdmin) extra.push(STICKERS_CATEGORY, ADMIN_CATEGORY);
-  return [...CORE_CATEGORIES, ...extra];
+  return [...visibleCore(access), ...extra];
 }
 
 function isModeCategory(key: string): boolean {
@@ -292,17 +347,21 @@ function isModeCategory(key: string): boolean {
 export function renderMainMenu(access: MenuAccess): string {
   const lines: string[] = ['📋 *Menú Canix*', '', 'Todo lo que puedo hacer por vos:', ''];
 
-  for (const cat of CORE_CATEGORIES) {
+  for (const cat of visibleCore(access)) {
     const modeHint = isModeCategory(cat.key) ? ` - escribe "${cat.aliases[0]}" para entrar` : '';
     const number = cat.number ?? 1;
     lines.push(`${NUMBER_EMOJI[number - 1] ?? `${number}.`} ${cat.emoji} *${cat.title}*${modeHint}`);
     lines.push(`     ${cat.short}`);
   }
-  if (access.callsEnabled) {
+  if (categoryAllowed('agenda', access)) {
+    lines.push(`${AGENDA_CATEGORY.emoji} *${AGENDA_CATEGORY.title}* - escribe "agenda" para entrar`);
+    lines.push(`     ${AGENDA_CATEGORY.short}`);
+  }
+  if (access.callsEnabled && categoryAllowed('llamadas', access)) {
     lines.push(`${CALLS_CATEGORY.emoji} *${CALLS_CATEGORY.title}* → /menu llamadas`);
     lines.push(`     ${CALLS_CATEGORY.short}`);
   }
-  if (access.fashionEnabled) {
+  if (access.fashionEnabled && categoryAllowed('fashion', access)) {
     lines.push(`${FASHION_CATEGORY.emoji} *${FASHION_CATEGORY.title}* → /menu fashion`);
     lines.push(`     ${FASHION_CATEGORY.short}`);
   }
@@ -358,7 +417,7 @@ export function resolveMenuCategory(input: string, access: MenuAccess): MenuCate
 
   const asNumber = Number(text);
   if (Number.isInteger(asNumber)) {
-    const byNumber = CORE_CATEGORIES.find((c) => c.number === asNumber);
+    const byNumber = visibleCore(access).find((c) => c.number === asNumber);
     if (byNumber) return byNumber;
   }
 

@@ -2,7 +2,7 @@ import type { Tool } from '../tool-registry.js';
 import { remindersRepo } from '../../db/repositories/reminders.repo.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
 import { contactsRepo } from '../../db/repositories/contacts.repo.js';
-import { normalizeDate, parseWall, nowLocal, addDays, addMonths } from '../../util/datetime.js';
+import { parseStrictDateTime, parseWall, nowLocal, addDays, addMonths } from '../../util/datetime.js';
 import { phoneToJid, isJid } from '../../util/jid.js';
 import { importantDateMessage, importantDateNoticeMessage } from '../../util/motivational.js';
 import { resolveActingUser } from './act-on-behalf.js';
@@ -52,7 +52,9 @@ export const scheduleImportantDateTool: Tool = {
     if (!title) return 'Me falta el título de la fecha importante.';
 
     const time = /^\d{1,2}:\d{2}$/.test(String(args.time ?? '')) ? String(args.time) : '09:00';
-    let runAt = normalizeDate(`${String(args.date ?? '')} ${time}`);
+    const parsed = parseStrictDateTime(`${String(args.date ?? '')} ${time}`);
+    if (!parsed) return `"${String(args.date ?? '')}" no es una fecha válida (formato 'YYYY-MM-DD') - recalcúlala o pregúntale.`;
+    let runAt = parsed;
 
     const recurrence: RecurrenceFreq = args.recurrence === 'once' ? 'none' : 'yearly';
 

@@ -37,7 +37,12 @@ import { grantAccessTool } from './grant-access.tool.js';
 import { revokeAccessTool } from './revoke-access.tool.js';
 import { listUsersTool } from './list-users.tool.js';
 import { setUserPermissionsTool } from './set-user-permissions.tool.js';
-import { listAvailableToolsTool } from './list-available-tools.tool.js';
+import { listPermissionsTool } from './list-permissions.tool.js';
+import { getUserPermissionsTool } from './get-user-permissions.tool.js';
+import { managePermissionPackageTool } from './manage-permission-package.tool.js';
+import { setWebPasswordTool } from './set-web-password.tool.js';
+import { changeWebPasswordTool } from './change-web-password.tool.js';
+import { registerSchedulingTools } from '../../scheduling/tools/index.js';
 import { addExerciseTool } from './add-exercise.tool.js';
 import { listExercisesTool } from './list-exercises.tool.js';
 import { editExerciseTool } from './edit-exercise.tool.js';
@@ -49,7 +54,6 @@ import { saveRecipeTool } from './save-recipe.tool.js';
 import { listRecipesTool } from './list-recipes.tool.js';
 import { getRecipeTool } from './get-recipe.tool.js';
 import { deleteRecipeTool } from './delete-recipe.tool.js';
-import { regeneratePanelTokenTool } from './regenerate-panel-token.tool.js';
 import { pauseNotificationsTool } from './pause-notifications.tool.js';
 import { resumeNotificationsTool } from './resume-notifications.tool.js';
 import { pauseReminderTool } from './pause-reminder.tool.js';
@@ -126,7 +130,11 @@ export function registerTools(): void {
   registry.register(revokeAccessTool);
   registry.register(listUsersTool);
   registry.register(setUserPermissionsTool);
-  registry.register(listAvailableToolsTool);
+  registry.register(listPermissionsTool);
+  registry.register(getUserPermissionsTool);
+  registry.register(managePermissionPackageTool);
+  registry.register(setWebPasswordTool);
+  registry.register(changeWebPasswordTool);
   registry.register(addExerciseTool);
   registry.register(listExercisesTool);
   registry.register(editExerciseTool);
@@ -138,7 +146,6 @@ export function registerTools(): void {
   registry.register(listRecipesTool);
   registry.register(getRecipeTool);
   registry.register(deleteRecipeTool);
-  registry.register(regeneratePanelTokenTool);
   registry.register(pauseNotificationsTool);
   registry.register(resumeNotificationsTool);
   registry.register(pauseReminderTool);
@@ -174,4 +181,5 @@ export function registerTools(): void {
   registry.register(checkListItemTool);
   registry.register(deleteListItemTool);
   registry.register(deleteListTool);
+  registerSchedulingTools(registry);
 }

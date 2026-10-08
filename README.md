@@ -179,14 +179,55 @@ ve lo del otro, ni siquiera el administrador.
   (`grant_access`, solo funciona si lo pide el admin).
 - **Quitar acceso**: *"quítale el acceso a Juan"* (`revoke_access`) — borra toda su información,
   no se puede deshacer.
-- **Ver quién tiene acceso**: *"¿quién tiene acceso al bot?"* (`list_users`) - también muestra si
-  alguien tiene funciones restringidas (ver `set_user_permissions` más abajo).
-- **Restringir funciones**: *"que Juan solo pueda guardar y ver recordatorios"*
-  (`set_user_permissions`) — limita a alguien (nunca al admin) a un subconjunto de herramientas;
-  *"dale acceso completo a Juan de nuevo"* para quitar la restricción.
-- El panel web (`admin-panel/`) muestra y edita **los datos de quien inició sesión con su token** -
-  cada persona con acceso (admin o no) tiene el suyo propio y solo ve lo suyo. La gestión de la
-  conexión de WhatsApp en sí (página "Conexión") sigue siendo solo del administrador.
+- **Ver quién tiene acceso**: *"¿quién tiene acceso al bot?"* (`list_users`) - con sus paquetes.
+
+### Permisos y paquetes
+
+Cada funcionalidad es un **permiso** (`src/permissions/catalog.ts`: `reminders.manage`,
+`routines.manage`, `messages.send`, `scheduling.professional`, `portal.access`, …). Los permisos se
+agrupan en **paquetes** ("Asistente completo", "Solo recordatorios", "Profesional de agenda",
+"Cliente de agenda", … y los que crees). A cada persona se le asignan paquetes y, encima, permisos
+sueltos **permitidos** o **denegados** — lo denegado siempre gana. Solo el administrador decide.
+
+- Por chat: *"que Juan solo pueda crear recordatorios y rutinas, no enviar mensajes"*
+  (`set_user_permissions`), `get_user_permissions`, `list_permissions`, `manage_permission_package`.
+- Por web: **Administración → Usuarios y permisos / Paquetes / Auditoría**.
+- Todo cambio es transaccional (SQLite con claves foráneas, `CHECK`, cascadas) y queda en
+  `access_audit`. Los usuarios del sistema anterior (`allowed_tools`) se migran solos al arrancar,
+  sin perder acceso.
+
+### Portal web (un solo portal, un login por persona)
+
+Se entra con el **número de WhatsApp + contraseña** (cifrada con scrypt). Cada persona ve solo sus
+datos y los módulos que tiene permitidos; el administrador ve además la sección Administración.
+- Contraseña temporal: el admin la genera (portal o *"ponle contraseña del portal a Juan"*,
+  `set_web_password`) o la persona la pide (*"cambia mi contraseña del portal"*); el portal obliga a
+  cambiarla al entrar. Nunca pasa por la IA: se envía directo por WhatsApp.
+- Seguridad: sesiones con token (solo se guarda su hash), 24 h de inactividad / 7 días máximo,
+  bloqueo tras 5 intentos fallidos, límites por IP, CSP y cabeceras de seguridad, sin CORS.
+- Estabilidad: límite de peticiones por minuto, timeout por petición, JSON máx. 200 KB, errores
+  aislados (nunca tumban el bot) y manejadores globales de promesas rechazadas.
+- Archivos (adjuntos de citas): JPG/PNG/WEBP/PDF validados por su contenido real, máx. 10 MB c/u,
+  5 por envío, 200 MB por usuario, máx. 2 procesándose a la vez; guardados en `data/uploads/`.
+- Mientras el admin no tenga contraseña, puede entrar con su token antiguo ("Soy el administrador y
+  aún no tengo contraseña") y crearla desde *Mi cuenta*.
+
+### Agendamiento (modo "agenda")
+
+- **Profesional** (paquete "Profesional de agenda"): define su horario semanal y bloqueos, ve su
+  calendario (semana/mes), confirma/rechaza/cancela/agenda citas, configura duración, descanso,
+  anticipación y recordatorios, y **comparte acceso** a clientes por número. El bot le escribe al
+  cliente (respetando el límite anti-baneo de mensajes en frío; si no se puede, le da al profesional
+  un texto para reenviar).
+- **Cliente**: solo ve los espacios libres de sus profesionales, pide citas (quedan **pendientes**
+  hasta que el profesional confirma), ve y cancela las suyas. Tiene un asistente neutro de citas,
+  no el asistente personal del dueño.
+- **Recordatorios** para ambos: por defecto la mañana del día de la cita (07:00; si la cita es antes,
+  la noche anterior a las 19:00), más opcional N horas antes. Las solicitudes no confirmadas a
+  tiempo vencen y se avisa al cliente.
+- **Agendas generales** (admin): grupos de profesionales con calendario combinado; un cliente con
+  acceso a un grupo puede agendar con cualquiera de sus miembros.
+- La doble reserva es imposible: verificación dentro de una transacción + índice único en la base.
 
 **LID de WhatsApp**: además del número de teléfono, el bot guarda el `@lid` (el identificador
 "privado" que WhatsApp usa cada vez más en vez del número) de usuarios y contactos apenas lo
@@ -268,6 +309,35 @@ audio (en ese caso reinicia el bot vos mismo al final, el script te lo recuerda)
    descomprimida) y `PIPER_VOICE_PATH` (ruta al `.onnx`) en tu `.env`. Opcionalmente descarga una
    segunda voz (otra `.onnx` en español) y apunta `PIPER_VOICE_PATH_FEMALE` ahí para ofrecer voz
    femenina además de la de por defecto — ver "Voz masculina/femenina" arriba.
+
+### Voz natural (Fish Audio) - extra de pago
+
+Quien tenga el permiso **"Voz natural (IA)"** (`voice.premium`) recibe las notas de voz (y el
+mensaje de las llamadas) con voz humana de [Fish Audio](https://fish.audio): voz de hombre o de
+mujer según su preferencia (`voice_gender`, que se fija al responder "hombre"/"mujer"). El resto
+sigue con Piper local (gratis). Si Fish falla o tarda, se usa Piper; si la respuesta pasa de
+`FISH_AUDIO_MAX_CHARS` caracteres, va como texto (Fish cobra por caracter).
+
+Variables: `FISH_AUDIO_API_KEY`, `FISH_AUDIO_MODEL` (por defecto `s2.1-pro-free`),
+`FISH_AUDIO_VOICE_MALE` / `FISH_AUDIO_VOICE_FEMALE` (el `reference_id` de una voz de la biblioteca
+de fish.audio - para cambiar de voz basta cambiar el id y reiniciar). En llamadas la voz natural
+solo se usa si `PANEL_URL` es una URL pública `https` (Twilio descarga el audio de ahí); si no,
+la llamada usa la voz de Twilio como antes.
+
+## Extras de pago
+
+Todo lo que le cuesta dinero al dueño por uso queda en el módulo **"Extras de pago"** del panel:
+**Llamadas telefónicas** (`reminders.calls`) y **Voz natural** (`voice.premium`). Reglas:
+
+- Nunca van dentro de un paquete: se habilitan persona por persona (Usuarios → permisos →
+  "Permitir"). El servidor rechaza un paquete que los incluya.
+- Al arrancar, si algún paquete viejo los traía, se sacan del paquete y a cada persona que los
+  recibía por ese paquete se le deja como permiso directo (nadie pierde acceso sin que lo veas; el
+  log dice cuántos se movieron).
+- Sin el permiso de llamadas el bot no ofrece ni programa llamadas (ni cuando la persona las pide
+  ni por iniciativa propia), y una llamada ya programada no se marca si el permiso se quitó.
+- Todo el uso queda registrado por persona en `ai_usage` (tokens del chat, caracteres de voz,
+  llamadas) - consultable en `GET /api/admin/usage?days=30` como base para cobrar más adelante.
 
 ## Fashion Mode (armario y outfits)
 

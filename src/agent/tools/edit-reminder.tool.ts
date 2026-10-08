@@ -2,7 +2,7 @@ import type { Tool } from '../tool-registry.js';
 import { remindersRepo } from '../../db/repositories/reminders.repo.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
 import { contactsRepo } from '../../db/repositories/contacts.repo.js';
-import { normalizeDate, parseWall, nowLocal, dateOnly, addDays, randomTimeOnDate } from '../../util/datetime.js';
+import { validateFutureDateTime, parseWall, nowLocal, dateOnly, addDays, randomTimeOnDate } from '../../util/datetime.js';
 import { phoneToJid, isJid } from '../../util/jid.js';
 import { resolveActingUser } from './act-on-behalf.js';
 import { MIN_INTERVAL_SECONDS, MAX_REPEAT_COUNT } from './reminder-limits.js';
@@ -137,8 +137,9 @@ export const editReminderTool: Tool = {
 
     let runAt: string | undefined;
     if (args.run_at !== undefined) {
-      runAt = normalizeDate(String(args.run_at));
-      if (parseWall(runAt) <= parseWall(nowLocal())) return 'Esa hora ya pasó - dame una en el futuro.';
+      const when = validateFutureDateTime(String(args.run_at));
+      if (!when.ok) return when.error;
+      runAt = when.value;
     }
 
     let categoryId: number | undefined;

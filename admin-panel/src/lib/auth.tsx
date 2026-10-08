@@ -1,18 +1,33 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-const STORAGE_KEY = 'mi_agente_admin_token';
+// Session token lives in sessionStorage: closing the browser tab/window ends the session on this
+// device (the server also expires it - 24h idle, 7 days max).
+const STORAGE_KEY = 'canix_session';
 
 export interface PanelUser {
   id: number;
   name: string | null;
+  phone: string;
   role: 'admin' | 'user';
+  permissions: string[];
+  modules: string[];
+  mustChangePassword: boolean;
+  hasPassword: boolean;
 }
 
 interface AuthContextValue {
   token: string | null;
   user: PanelUser | null;
-  login: (token: string) => Promise<boolean>;
+  loading: boolean;
+  /** Number + password. Returns an error message, or null on success. */
+  login: (phone: string, password: string) => Promise<string | null>;
+  /** Admin bootstrap only: the old admin token, while no password exists yet. */
+  loginWithToken: (token: string) => Promise<string | null>;
   logout: () => void;
+  /** Re-reads /api/auth/me (after a password change, permission change...). */
+  refresh: () => Promise<void>;
+  replaceToken: (token: string) => void;
+  can: (permission: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -26,43 +41,94 @@ async function fetchMe(token: string): Promise<PanelUser | null> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => sessionStorage.getItem(STORAGE_KEY));
   const [user, setUser] = useState<PanelUser | null>(null);
+  const [loading, setLoading] = useState<boolean>(() => !!sessionStorage.getItem(STORAGE_KEY));
 
-  const login = useCallback(async (candidate: string) => {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: candidate }),
-    });
-    if (!res.ok) return false;
-    const data = (await res.json()) as { user: PanelUser };
-    sessionStorage.setItem(STORAGE_KEY, candidate);
-    setToken(candidate);
-    setUser(data.user);
-    return true;
+  const store = useCallback((t: string | null) => {
+    if (t) sessionStorage.setItem(STORAGE_KEY, t);
+    else sessionStorage.removeItem(STORAGE_KEY);
+    setToken(t);
   }, []);
 
   const logout = useCallback(() => {
-    sessionStorage.removeItem(STORAGE_KEY);
-    setToken(null);
+    const t = sessionStorage.getItem(STORAGE_KEY);
+    if (t) fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${t}` } }).catch(() => {});
+    store(null);
     setUser(null);
-  }, []);
+  }, [store]);
 
-  // A page reload keeps the token (sessionStorage) but not the in-memory `user` - re-learn who's
-  // logged in via /api/auth/me instead of re-prompting for the token every time.
+  const login = useCallback(
+    async (phone: string, password: string) => {
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, password }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return (data as { error?: string }).error ?? 'No se pudo iniciar sesión.';
+        store((data as { token: string }).token);
+        setUser((data as { user: PanelUser }).user);
+        return null;
+      } catch {
+        return 'No se pudo conectar con el servidor.';
+      }
+    },
+    [store],
+  );
+
+  const loginWithToken = useCallback(
+    async (candidate: string) => {
+      const me = await fetchMe(candidate).catch(() => null);
+      if (!me) return 'Token inválido, o el administrador ya tiene contraseña (entra con número y contraseña).';
+      store(candidate);
+      setUser(me);
+      return null;
+    },
+    [store],
+  );
+
+  const refresh = useCallback(async () => {
+    const t = sessionStorage.getItem(STORAGE_KEY);
+    if (!t) return;
+    const me = await fetchMe(t).catch(() => null);
+    if (me) setUser(me);
+    else logout();
+  }, [logout]);
+
+  // After a reload only the token survives - re-learn who's logged in.
   useEffect(() => {
-    if (!token || user) return;
+    if (!token || user) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
-    fetchMe(token).then((resolved) => {
-      if (cancelled) return;
-      if (resolved) setUser(resolved);
-      else logout();
-    });
+    fetchMe(token)
+      .then((me) => {
+        if (cancelled) return;
+        if (me) setUser(me);
+        else logout();
+      })
+      .catch(() => !cancelled && logout())
+      .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
   }, [token, user, logout]);
 
-  const value = useMemo(() => ({ token, user, login, logout }), [token, user, login, logout]);
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      token,
+      user,
+      loading,
+      login,
+      loginWithToken,
+      logout,
+      refresh,
+      replaceToken: store,
+      can: (p: string) => !!user && (user.role === 'admin' || user.permissions.includes(p)),
+    }),
+    [token, user, loading, login, loginWithToken, logout, refresh, store],
+  );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

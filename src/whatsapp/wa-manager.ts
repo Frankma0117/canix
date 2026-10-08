@@ -447,6 +447,12 @@ export class WaManager {
     await this.sock.sendMessage(jid, { image: { url }, caption });
   }
 
+  /** This bot's own phone number (digits only), once connected - e.g. for "write to +57..." texts. */
+  ownPhone(): string | null {
+    const id = this.sock?.user?.id;
+    return id ? id.split('@')[0].split(':')[0] : null;
+  }
+
   /** Briefly shows "typing..." (feedback to the user). */
   async sendTyping(jid: string): Promise<void> {
     try {

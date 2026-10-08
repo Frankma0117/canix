@@ -1,6 +1,6 @@
 import type { Tool } from '../tool-registry.js';
 import { createCallReminder } from '../../calls/call-reminders.service.js';
-import { normalizeDate, parseWall, nowLocal } from '../../util/datetime.js';
+import { validateFutureDateTime } from '../../util/datetime.js';
 import { jidToPhone } from '../../util/jid.js';
 import { resolveActingUser } from './act-on-behalf.js';
 import type { CallReminderType, RecurrenceFreq } from '../../types/index.js';
@@ -78,10 +78,9 @@ export const scheduleCallReminderTool: Tool = {
     const timeRaw = String(args.time ?? '');
     if (!date || !/^\d{1,2}:\d{2}$/.test(timeRaw)) return 'Me falta la fecha o la hora de la llamada.';
 
-    const scheduledAt = normalizeDate(`${date} ${timeRaw}`);
-    if (parseWall(scheduledAt) <= parseWall(nowLocal())) {
-      return 'Esa fecha/hora ya pasó - dame una en el futuro.';
-    }
+    const when = validateFutureDateTime(`${date} ${timeRaw}`);
+    if (!when.ok) return when.error;
+    const scheduledAt = when.value;
 
     let phoneNumber = args.phone_number ? String(args.phone_number).trim() : jidToPhone(targetJid);
     if (!phoneNumber) return 'No tengo un número de teléfono para esta persona - dame uno con indicativo de país (ej. +573001234567).';

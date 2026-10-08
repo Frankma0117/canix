@@ -3,7 +3,7 @@ import { remindersRepo } from '../../db/repositories/reminders.repo.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
 import { contactsRepo } from '../../db/repositories/contacts.repo.js';
 import { linksRepo } from '../../db/repositories/links.repo.js';
-import { normalizeDate, parseWall, nowLocal } from '../../util/datetime.js';
+import { validateFutureDateTime } from '../../util/datetime.js';
 import { phoneToJid, isJid } from '../../util/jid.js';
 import { resolveActingUser } from './act-on-behalf.js';
 import { reminderDedupeKey } from '../dedup.js';
@@ -23,7 +23,8 @@ export const scheduleReminderTool: Tool = {
     properties: {
       run_at: {
         type: 'string',
-        description: "Momento exacto de la próxima ejecución, 'YYYY-MM-DD HH:mm' (hora local).",
+        description:
+          "Momento exacto de la próxima ejecución, 'YYYY-MM-DD HH:mm' (hora local, 24h). Para \"en X minutos/horas\" pasa '+X min' o '+X h' y el sistema calcula la hora.",
       },
       message: {
         type: 'string',
@@ -59,10 +60,9 @@ export const scheduleReminderTool: Tool = {
     if ('error' in acting) return acting.error;
     const { userId, targetJid: actingJid } = acting;
 
-    const runAt = normalizeDate(String(args.run_at ?? ''));
-    if (parseWall(runAt) <= parseWall(nowLocal())) {
-      return 'Esa hora ya pasó - dame una en el futuro.';
-    }
+    const when = validateFutureDateTime(String(args.run_at ?? ''));
+    if (!when.ok) return when.error;
+    const runAt = when.value;
 
     let targetJid: string | null = null;
     if (args.target) {
