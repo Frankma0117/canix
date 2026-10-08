@@ -45,6 +45,7 @@ is_runtime_junk() { grep -qE '^(data/canix\.lock|.*__pycache__/.*|.*\.pyc)$'; }
 
 WITH_AUDIO=true
 WITH_VISION=true
+VISION_FAILED=false
 for arg in "$@"; do
   case "$arg" in
     --with-audio|--with-vision|--with-all|--all) : ;; # ya son el default, se aceptan sin efecto
@@ -167,8 +168,14 @@ fi
 # --- 7. Microservicio de visión de Fashion Mode (opcional) ------------------------
 if [ "$WITH_VISION" = true ]; then
   step "Microservicio de visión (Fashion Mode)"
-  ./deploy/ubuntu-05-setup-vision.sh
-  sudo ./deploy/ubuntu-06-setup-vision-service.sh
+  # Es un servicio aparte y opcional: si su instalación falla, se avisa al final pero el bot se
+  # despliega y reinicia igual (antes un error de pip aquí dejaba el bot sin actualizar).
+  if ./deploy/ubuntu-05-setup-vision.sh && sudo ./deploy/ubuntu-06-setup-vision-service.sh; then
+    VISION_FAILED=false
+  else
+    VISION_FAILED=true
+    echo "⚠️  Falló la instalación del microservicio de visión - sigo con el deploy del bot."
+  fi
 fi
 
 # --- 7.5 Permisos para el usuario de servicio (solo systemd) ----------------------
@@ -265,6 +272,11 @@ if [ "$WITH_VISION" = true ] && ! grep -q '^FASHION_MODE_ENABLED=true' .env 2>/d
   echo "El microservicio de visión ya está corriendo, pero Fashion Mode sigue apagado - una vez"
   echo "que tengas las credenciales de DigitalOcean Spaces (DO_SPACES_*) en .env, pon"
   echo "FASHION_MODE_ENABLED=true y corre ./deploy.sh de nuevo para reiniciar con el flag activo."
+fi
+if [ "$VISION_FAILED" = true ]; then
+  echo "⚠️  El microservicio de visión (Fashion Mode) NO se instaló bien - revisa el error arriba. Fashion"
+  echo "   Mode sigue funcionando pidiendo clasificar las prendas a mano. Vuelve a correr ./deploy.sh"
+  echo "   cuando lo corrijas."
 fi
 if [ "$WITH_VISION" = false ]; then
   echo "Corriste con --no-vision: la clasificación automática de fotos de Fashion Mode quedó sin"

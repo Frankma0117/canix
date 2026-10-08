@@ -30,11 +30,14 @@ cd "$VISION_DIR"
 # adentro, y el resto del script fallaria mas abajo con un error confuso ("No such file or
 # directory") en vez de decir claramente que el venv esta roto. Se detecta por la presencia real
 # de .venv/bin/pip, no solo por la carpeta.
-if [ -x .venv/bin/pip ]; then
+# Tambien se exige pyvenv.cfg: sin ese archivo Python no reconoce la carpeta como venv, y
+# .venv/bin/pip termina actuando como el pip del sistema - en Ubuntu 24.04 eso falla con
+# "externally-managed-environment" (paso real en el servidor, 2026-10).
+if [ -x .venv/bin/pip ] && [ -f .venv/pyvenv.cfg ]; then
   echo "== Ya existe .venv (con pip), omito creacion =="
 else
   if [ -d .venv ]; then
-    echo "== .venv existe pero esta incompleto (sin pip, de un intento anterior) - lo borro y recreo =="
+    echo "== .venv existe pero esta incompleto o roto (sin pip o sin pyvenv.cfg) - lo borro y recreo =="
     rm -rf .venv
   fi
   echo "== Creando entorno virtual =="
