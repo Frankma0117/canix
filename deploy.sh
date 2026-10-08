@@ -148,11 +148,16 @@ mkdir -p data
 step "Aplicando migraciones de base de datos"
 npm run db:init
 
+has_pm2_cania() { command -v pm2 >/dev/null 2>&1 && pm2 jlist 2>/dev/null | grep -q '"name":"cania"'; }
+has_systemd_canix() { systemctl list-unit-files 2>/dev/null | grep -q '^canix\.service'; }
 detect_supervisor() {
-  if command -v pm2 >/dev/null 2>&1 && pm2 jlist 2>/dev/null | grep -q '"name":"cania"'; then
-    echo "pm2"
-  elif systemctl list-unit-files 2>/dev/null | grep -q '^canix\.service'; then
+  # systemd gana si existe: corre como el usuario 'canix' (no root) y es el que arranca solo con el
+  # servidor. Tener ADEMÁS un 'cania' en pm2 es justo lo que dejó dos bots sobre la misma sesión de
+  # WhatsApp en producción (2026-10) - ver el paso 7.9, que lo elimina de pm2.
+  if has_systemd_canix; then
     echo "systemd"
+  elif has_pm2_cania; then
+    echo "pm2"
   else
     echo "none"
   fi
@@ -200,7 +205,14 @@ fi
 step "Deteniendo instancias del bot (incluidas las manuales/duplicadas)"
 case "$SUPERVISOR" in
   pm2) pm2 stop cania >/dev/null 2>&1 || true ;;
-  systemd) sudo systemctl stop canix || true ;;
+  systemd)
+    sudo systemctl stop canix || true
+    if has_pm2_cania; then
+      echo "Había un 'cania' en pm2 además del servicio systemd - lo elimino de pm2 (queda solo systemd)."
+      pm2 delete cania >/dev/null 2>&1 || true
+      pm2 save >/dev/null 2>&1 || true
+    fi
+    ;;
 esac
 bot_pids() {
   for pid in $(pgrep -f 'src/index\.ts' || true); do
