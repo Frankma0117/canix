@@ -24,12 +24,24 @@
 # --with-all se siguen aceptando (ya son el default, así que no hacen nada, pero no rompen scripts
 # o alias viejos que ya los usen).
 #
-# IMPORTANTE: esto hace `git pull`, así que solo despliega lo que ya esté pusheado a GitHub - si
-# acabas de terminar cambios en tu máquina, súbelos primero (`git push`) o este script no los verá.
+# IMPORTANTE: esto trae lo que esté en GitHub (origin/main), así que solo despliega lo que ya esté
+# pusheado - si acabas de terminar cambios en tu máquina, súbelos primero (`git push`).
+#
+# Se corre como `sudo ./deploy.sh` (o sin sudo: si el repo no es escribible por tu usuario, se
+# relanza solo con sudo) - el repo es del usuario de servicio 'canix' y el reinicio necesita root.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+
+if [ "$(id -u)" -ne 0 ] && [ ! -w "$SCRIPT_DIR/.git" ]; then
+  echo "El repo ($SCRIPT_DIR) no es escribible por $(id -un) - me relanzo con sudo."
+  exec sudo "$0" "$@"
+fi
+
+# Archivos que el bot escribe en tiempo de ejecución y que NUNCA deben versionarse (un commit
+# hecho a mano en el servidor llegó a meter data/canix.lock y los __pycache__ de vision-service).
+is_runtime_junk() { grep -qE '^(data/canix\.lock|.*__pycache__/.*|.*\.pyc)$'; }
 
 WITH_AUDIO=true
 WITH_VISION=true
@@ -77,13 +89,39 @@ if [ -d .git ]; then
   if ! git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$SCRIPT_DIR"; then
     git config --global --add safe.directory "$SCRIPT_DIR"
   fi
-  if [ -n "$(git status --porcelain)" ]; then
-    echo "Hay cambios locales sin commitear en $SCRIPT_DIR - NO hago 'git pull' para no arriesgarme"
+  # Cambios "sucios" que son solo archivos de runtime (el lock del bot, caches de Python): se
+  # descartan, no son trabajo de nadie. Cualquier otro cambio sin commitear sí detiene el deploy.
+  JUNK_DIRTY="$(git status --porcelain | awk '{print $2}' | while read -r f; do echo "$f" | is_runtime_junk && echo "$f"; done || true)"
+  if [ -n "$JUNK_DIRTY" ]; then
+    echo "Descarto cambios de archivos de runtime: $(echo $JUNK_DIRTY)"
+    echo "$JUNK_DIRTY" | xargs -r git checkout -- 2>/dev/null || true
+  fi
+  if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+    echo "Hay cambios locales sin commitear en $SCRIPT_DIR - NO actualizo el código para no arriesgarme"
     echo "a perderlos. Revisa 'git status' ahí, guarda o descarta esos cambios, y vuelve a correr:"
     echo "  ./deploy.sh $*"
     exit 1
   fi
-  git pull
+
+  git fetch origin
+  BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+  if [ -n "$(git rev-list "origin/$BRANCH..HEAD")" ]; then
+    # Commits que solo existen en el servidor. Si únicamente tocan basura de runtime (el caso real:
+    # "Cambios remotos" con data/canix.lock y .pyc), el servidor se alinea con GitHub; si traen
+    # cambios de verdad, se hace merge como antes para no perderlos.
+    LOCAL_ONLY_FILES="$(git diff --name-only "origin/$BRANCH...HEAD")"
+    if [ -z "$(echo "$LOCAL_ONLY_FILES" | grep -v '^$' | while read -r f; do echo "$f" | is_runtime_junk || echo "$f"; done)" ]; then
+      echo "El servidor tenía commits propios solo con archivos de runtime - lo alineo con origin/$BRANCH."
+      git reset -q --hard "origin/$BRANCH"
+    else
+      echo "El servidor tiene commits propios con cambios reales - hago merge con origin/$BRANCH:"
+      echo "$LOCAL_ONLY_FILES" | sed 's/^/   /'
+      git merge --no-edit "origin/$BRANCH"
+    fi
+  else
+    git merge --ff-only "origin/$BRANCH"
+  fi
+  echo "Código en: $(git log --oneline -1)"
 else
   echo "Esto no es un repo git ($SCRIPT_DIR) - salto git pull (¿subiste los archivos por scp/rsync?)."
 fi
@@ -147,6 +185,34 @@ if [ "$SUPERVISOR" = "systemd" ] && id canix &>/dev/null && [ "$(id -un)" != "ca
   sudo chown -R canix:canix "$SCRIPT_DIR"
 fi
 
+# --- 7.9 Una sola instancia -------------------------------------------------------
+# Dos bots sobre la misma sesión de WhatsApp se pisan (mensajes duplicados, respuestas que no
+# llegan). En 2026-10 había un `npm run start` manual de root corriendo desde hacía semanas junto al
+# servicio systemd. Antes de reiniciar: se detiene el supervisor y se mata cualquier otro proceso
+# del bot cuyo directorio de trabajo sea este repo, sea de quien sea.
+step "Deteniendo instancias del bot (incluidas las manuales/duplicadas)"
+case "$SUPERVISOR" in
+  pm2) pm2 stop cania >/dev/null 2>&1 || true ;;
+  systemd) sudo systemctl stop canix || true ;;
+esac
+bot_pids() {
+  for pid in $(pgrep -f 'src/index\.ts' || true); do
+    [ "$pid" = "$$" ] && continue
+    [ "$(sudo readlink "/proc/$pid/cwd" 2>/dev/null)" = "$SCRIPT_DIR" ] && echo "$pid"
+  done
+}
+STRAY="$(bot_pids | tr '\n' ' ')"
+if [ -n "${STRAY// /}" ]; then
+  echo "Detengo procesos sueltos del bot: $STRAY"
+  sudo kill $STRAY 2>/dev/null || true
+  for _ in 1 2 3 4 5 6 7 8 9 10; do [ -z "$(bot_pids)" ] && break; sleep 1; done
+  STILL="$(bot_pids | tr '\n' ' ')"
+  [ -n "${STILL// /}" ] && { echo "No respondieron a SIGTERM, fuerzo: $STILL"; sudo kill -9 $STILL 2>/dev/null || true; }
+else
+  echo "No había instancias sueltas."
+fi
+sudo rm -f "$SCRIPT_DIR/data/canix.lock"
+
 # --- 8. (Re)iniciar el bot - respeta el supervisor que ya esté en uso -------------
 step "Reiniciando el bot"
 case "$SUPERVISOR" in
@@ -208,6 +274,33 @@ if ! grep -q '^TWILIO_ACCOUNT_SID=.\+' .env 2>/dev/null || ! grep -q '^TWILIO_AU
   echo "⚠️  Recordatorios por llamada (Twilio) sin configurar - completa en .env TWILIO_ACCOUNT_SID,"
   echo "   TWILIO_AUTH_TOKEN y TWILIO_PHONE_NUMBER (console.twilio.com). Sin esto, schedule_call_reminder"
   echo "   y /api/call-reminders devuelven error en vez de llamar a nadie - el resto del bot sigue igual."
+fi
+env_val() { grep -E "^$1=" .env 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '\r' | sed -e 's/^"//' -e 's/"$//'; }
+if [ -z "$(env_val FISH_AUDIO_API_KEY)" ]; then
+  echo "⚠️  FISH_AUDIO_API_KEY vacía - la voz natural (permiso 'Voz natural (IA)') queda desactivada y todas"
+  echo "   las notas de voz usan Piper local. Agrega en .env FISH_AUDIO_API_KEY (y opcional FISH_AUDIO_VOICE_MALE/"
+  echo "   FISH_AUDIO_VOICE_FEMALE, ver .env.example) y vuelve a correr ./deploy.sh."
+fi
+PANEL_URL_VAL="$(env_val PANEL_URL)"
+if [[ "$PANEL_URL_VAL" =~ ^https:// ]]; then
+  # El audio de voz natural de las llamadas y los avisos de estado de Twilio llegan por esta URL:
+  # se comprueba que desde internet responda ESTE bot (404 propio de una ruta de audio inexistente),
+  # no un 502 de nginx ni otro servicio.
+  PROBE="${PANEL_URL_VAL%/}/media/call-audio/000000000000000000000000000000000000000000000000.mp3"
+  CODE=""
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+    CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$PROBE" || true)"
+    [ "$CODE" = "404" ] && break
+    sleep 5
+  done
+  if [ "$CODE" = "404" ]; then
+    echo "OK: PANEL_URL ($PANEL_URL_VAL) llega a este bot - Twilio puede descargar el audio de voz natural."
+  else
+    echo "⚠️  PANEL_URL ($PANEL_URL_VAL) no respondió como este bot (HTTP $CODE). Revisa nginx/DNS/SSL:"
+    echo "   las llamadas usarán la voz de Twilio y su estado puede quedarse en \"processing\"."
+  fi
+elif [ -n "$PANEL_URL_VAL" ]; then
+  echo "⚠️  PANEL_URL ($PANEL_URL_VAL) no es https - Twilio necesita https para la voz natural en llamadas."
 fi
 if ! grep -q '^PANEL_URL=https\?://.\+' .env 2>/dev/null; then
   echo "⚠️  PANEL_URL no apunta a una URL pública - los recordatorios por llamada igual funcionan,"

@@ -6,6 +6,8 @@ data/*.db
 data/*.db-journal
 data/*.db-shm
 data/*.db-wal
+# Lock de instancia única (lo escribe el bot al arrancar - ver util/single-instance.ts)
+data/canix.lock
 *.log
 npm-debug.log*
 *.tsbuildinfo

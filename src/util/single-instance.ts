@@ -9,8 +9,11 @@ function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (err) {
+    // EPERM = the process EXISTS but belongs to another user (e.g. a manual root instance seen from
+    // the systemd 'canix' user). Treating that as "dead" is how two bots ended up running on the
+    // same WhatsApp session in production (2026-10).
+    return (err as NodeJS.ErrnoException).code === 'EPERM';
   }
 }
 
