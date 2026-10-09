@@ -9,13 +9,11 @@ import { Input, Label, Select, Textarea } from '../components/ui/Input.tsx';
 import { Modal } from '../components/ui/Modal.tsx';
 import { EmptyState } from '../components/ui/EmptyState.tsx';
 import { Skeleton } from '../components/ui/Skeleton.tsx';
-import { useCreated } from '../components/ui/Created.tsx';
 
 type Filter = 'all' | RewardPunishmentType;
 
 export function RewardsPage() {
   const api = useApi();
-  const created = useCreated();
   const [routines, setRoutines] = useState<Todo[]>([]);
   const [items, setItems] = useState<RewardPunishment[] | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
@@ -54,7 +52,6 @@ export function RewardsPage() {
         note: note.trim() || null,
         todo_id: routineId ? Number(routineId) : null,
       });
-      created({ kind: type === 'reward' ? 'Premio' : 'Castigo', title: description.trim(), section: 'rewards', sticker: 'premio' });
       setDescription('');
       setNote('');
       setRoutineId('');

@@ -8,11 +8,9 @@ import { Input, Label, Textarea } from '../components/ui/Input.tsx';
 import { Modal } from '../components/ui/Modal.tsx';
 import { EmptyState } from '../components/ui/EmptyState.tsx';
 import { Skeleton } from '../components/ui/Skeleton.tsx';
-import { useCreated } from '../components/ui/Created.tsx';
 
 export function CategoriesPage() {
   const api = useApi();
-  const created = useCreated();
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
@@ -33,7 +31,6 @@ export function CategoriesPage() {
     setSaving(true);
     try {
       await api.post('/api/categories', { name: name.trim(), description: description.trim() || undefined });
-      created({ kind: 'Categoría', title: name.trim(), section: 'categories', details: description.trim() ? [description.trim()] : undefined, sticker: 'revisando' });
       setName('');
       setDescription('');
       setShowForm(false);

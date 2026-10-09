@@ -4,16 +4,13 @@ import './index.css';
 import App from './App.tsx';
 import { initTheme } from './lib/theme.ts';
 import { ToastProvider } from './components/ui/Toast.tsx';
-import { CreatedProvider } from './components/ui/Created.tsx';
 
 initTheme();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ToastProvider>
-      <CreatedProvider>
-        <App />
-      </CreatedProvider>
+      <App />
     </ToastProvider>
   </StrictMode>,
 );

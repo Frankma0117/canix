@@ -11,7 +11,6 @@ import { EmptyState } from '../../components/ui/EmptyState.tsx';
 import { Calendar, Legend, calendarRange, type CalendarView } from '../../components/scheduling/Calendar.tsx';
 import { AppointmentDetail } from '../../components/scheduling/AppointmentDetail.tsx';
 import { addDaysISO, addMonthsISO, formatWhen, todayISO, WEEKDAY_NAMES, time12, formatDayLong } from '../../lib/dates.ts';
-import { useCreated } from '../../components/ui/Created.tsx';
 
 type Tab = 'calendar' | 'requests' | 'schedule' | 'clients' | 'settings';
 
@@ -168,7 +167,6 @@ function CalendarTab({ timeOff, onChanged }: { timeOff: TimeOff[]; onChanged: ()
 
 function NewAppointment({ date: initial, onClose, onCreated }: { date: string; onClose: () => void; onCreated: () => void }) {
   const api = useApi();
-  const created = useCreated();
   const [clients, setClients] = useState<SchedClient[]>([]);
   const [clientId, setClientId] = useState<number | ''>('');
   const [date, setDate] = useState(initial);
@@ -190,17 +188,6 @@ function NewAppointment({ date: initial, onClose, onCreated }: { date: string; o
     setError(null);
     try {
       await api.post('/api/scheduling/pro/appointments', { clientId, start: `${date} ${time}`, duration_minutes: duration ? Number(duration) : undefined, reason });
-      const client = clients.find((c) => c.id === clientId);
-      created({
-        kind: 'Cita agendada',
-        title: client?.name ?? 'Cita',
-        section: 'agenda',
-        details: [`${formatDayLong(date)} · ${time12(`${date} ${time}`)}`, ...(reason ? [reason] : [])],
-        sticker: 'evento',
-        shareText: `📅 Tu cita quedó agendada para el ${formatDayLong(date)} a las ${time12(`${date} ${time}`)}.${reason ? `\nMotivo: ${reason}` : ''}`,
-        sharePhone: client?.phone ?? null,
-        sharePhoneLabel: client?.name ? `Avisarle a ${client.name}` : 'Avisarle al cliente',
-      });
       onCreated();
     } catch (e) {
       setError(errMsg(e));

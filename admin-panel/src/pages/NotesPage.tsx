@@ -9,11 +9,9 @@ import { Input, Textarea, Label } from '../components/ui/Input.tsx';
 import { Modal } from '../components/ui/Modal.tsx';
 import { EmptyState } from '../components/ui/EmptyState.tsx';
 import { Skeleton } from '../components/ui/Skeleton.tsx';
-import { useCreated } from '../components/ui/Created.tsx';
 
 export function NotesPage() {
   const api = useApi();
-  const created = useCreated();
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState<Partial<Note> | null>(null);
@@ -37,7 +35,6 @@ export function NotesPage() {
     try {
       if (editing.id) await api.put(`/api/notes/${editing.id}`, { title: editing.title ?? null, content: editing.content });
       else await api.post('/api/notes', { title: editing.title ?? null, content: editing.content });
-      if (!editing.id) created({ kind: 'Nota', title: editing.title?.trim() || editing.content.trim().slice(0, 60), section: 'notes', sticker: 'nota', shareText: `${editing.title ? `${editing.title}\n` : ''}${editing.content}` });
       setEditing(null);
       await load();
     } catch (err) {

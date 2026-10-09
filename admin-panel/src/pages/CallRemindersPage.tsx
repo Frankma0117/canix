@@ -9,7 +9,6 @@ import { Input, Label, Select, Textarea } from '../components/ui/Input.tsx';
 import { Modal } from '../components/ui/Modal.tsx';
 import { EmptyState } from '../components/ui/EmptyState.tsx';
 import { Skeleton } from '../components/ui/Skeleton.tsx';
-import { useCreated } from '../components/ui/Created.tsx';
 
 const STATUS_TONE: Record<CallReminderStatus, 'success' | 'warning' | 'error' | 'neutral' | 'info'> = {
   pending: 'warning',
@@ -35,7 +34,6 @@ function recurrenceNote(freq: RecurrenceFreq, interval: number): string {
 
 export function CallRemindersPage() {
   const api = useApi();
-  const created = useCreated();
   const [reminders, setReminders] = useState<CallReminder[] | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -104,7 +102,6 @@ export function CallRemindersPage() {
     try {
       if (editingId) await api.put(`/api/call-reminders/${editingId}`, body);
       else await api.post('/api/call-reminders', body);
-      if (!editingId) created({ kind: callType === 'alarm' ? 'Alarma por llamada' : 'Llamada programada', title: message.trim() || 'Llamada', section: 'call-reminders', details: [`${date} a las ${time}`, `Al ${phone}`], sticker: 'llamada' });
       resetForm();
       setShowForm(false);
       await load();

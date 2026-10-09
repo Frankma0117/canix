@@ -8,11 +8,9 @@ import { Input, Label } from '../components/ui/Input.tsx';
 import { Modal } from '../components/ui/Modal.tsx';
 import { EmptyState } from '../components/ui/EmptyState.tsx';
 import { Skeleton } from '../components/ui/Skeleton.tsx';
-import { useCreated } from '../components/ui/Created.tsx';
 
 export function ContactsPage() {
   const api = useApi();
-  const created = useCreated();
   const [contacts, setContacts] = useState<Contact[] | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
@@ -34,7 +32,6 @@ export function ContactsPage() {
     setSaving(true);
     try {
       await api.post('/api/contacts', { name: name.trim(), phone: phone.trim(), notes: notes.trim() || undefined });
-      created({ kind: 'Contacto', title: name.trim(), section: 'contacts', details: [phone.trim()], sticker: 'mensaje', sharePhone: phone, sharePhoneLabel: `Escribirle a ${name.trim()}`, shareText: `¡Hola ${name.trim()}!` });
       setName('');
       setPhone('');
       setNotes('');

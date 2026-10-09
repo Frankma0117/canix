@@ -7,11 +7,9 @@ import { Card } from '../components/ui/Card.tsx';
 import { Button } from '../components/ui/Button.tsx';
 import { Input } from '../components/ui/Input.tsx';
 import { EmptyState } from '../components/ui/EmptyState.tsx';
-import { useCreated } from '../components/ui/Created.tsx';
 
 export function ListsPage() {
   const api = useApi();
-  const created = useCreated();
   const [lists, setLists] = useState<Checklist[] | null>(null);
   const [name, setName] = useState('');
   const [drafts, setDrafts] = useState<Record<number, string>>({});
@@ -29,7 +27,6 @@ export function ListsPage() {
     e.preventDefault();
     if (!name.trim()) return;
     await run(api.post('/api/lists', { name }));
-    created({ kind: 'Lista', title: name.trim(), section: 'lists', sticker: 'compras' });
     setName('');
   }
 
