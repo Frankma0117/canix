@@ -11,7 +11,8 @@ import { extractSharedContacts } from '../util/vcard.js';
 import { phoneToJid } from '../util/jid.js';
 import { resetAllUserData, resetFashionData } from '../db/reset-user.js';
 import { spacesStorageService } from '../fashion/storage/spaces-storage.service.js';
-import { processMessage } from '../agent/ai-agent.js';
+import { processMessage, takeLastTurnTools } from '../agent/ai-agent.js';
+import { sendTurnSticker } from '../util/stickers.js';
 import { ensureWeeklyReportReminder } from '../agent/weekly-report.js';
 import { ensureDailyResetReminder } from '../agent/daily-reset.js';
 import { ensureDailyDedupReminder } from '../agent/dedup.js';
@@ -572,6 +573,10 @@ export class BotManager {
       } else {
         await this.wa.sendText(jid, reply);
       }
+
+      // A sticker that fits what just happened (a successful action, or a greeting/thanks/goodbye)
+      // - after the reply, so it reads as the closing touch. Same cooldown as every sticker.
+      sendTurnSticker(this.wa, jid, { userText: text, tools: takeLastTurnTools(user.id) });
     } catch (err) {
       console.error('[BOT] Error inesperado manejando mensaje de %s:', jid, (err as Error).message);
       await this.wa.sendText(jid, ERROR_REPLY).catch((sendErr) => {

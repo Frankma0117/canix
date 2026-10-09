@@ -52,7 +52,7 @@ export const NIGHT_KEYWORDS = ['noche', 'goodnight', 'dulcessuenos', 'adormir', 
  * produce five stickers (or the AI's own send_sticker doubling the automatic celebration in the
  * same turn). In-memory on purpose: a restart resetting it is harmless.
  */
-const STICKER_COOLDOWN_MS = 5 * 60_000;
+const STICKER_COOLDOWN_MS = 2 * 60_000;
 const lastStickerAt = new Map<string, number>();
 
 export function stickerOnCooldown(jid: string): boolean {
@@ -95,4 +95,68 @@ export function sendAutoSticker(
   sendPackSticker(wa, jid, sticker).catch((err) => {
     console.error('[STICKER] No se pudo enviar "%s":', sticker!.label, (err as Error).message);
   });
+}
+
+/**
+ * Which pack stickers fit each successful action, by label stem (squashed: no accents/spaces/
+ * underscores - matches the admin's names like "quedo_agendado", "mensaje_enviado"). The bot
+ * used to rely almost only on the AI deciding to send one, which it rarely did ("casi nunca se
+ * muestran") - now the code itself confirms actions with a fitting sticker.
+ */
+const ACTION_STICKERS: Record<string, readonly string[]> = {
+  schedule_reminder: ['quedoagendado', 'planenmarcha', 'todobajocontrol'],
+  schedule_important_date: ['quedoagendado', 'eventoconfirmado', 'planenmarcha'],
+  schedule_flexible_reminder: ['quedoagendado', 'planenmarcha'],
+  schedule_interval_reminder: ['alarmaconfigurada', 'quedoagendado'],
+  schedule_call_reminder: ['llamadaprogramada', 'alarmaconfigurada'],
+  edit_reminder: ['actualizandoinformacion', 'progresoactualizado'],
+  edit_call_reminder: ['actualizandoinformacion', 'llamadaprogramada'],
+  edit_routine: ['actualizandoinformacion', 'progresoactualizado'],
+  edit_todo: ['actualizandoinformacion', 'progresoactualizado'],
+  send_message: ['mensajeenviado'],
+  add_note: ['tomanota', 'ideaapuntada'],
+  save_link: ['buenaidea', 'ideaapuntada'],
+  add_todo: ['listadetareas', 'ideaapuntada'],
+  create_list: ['listadecompraslista', 'listadetareas'],
+  add_list_item: ['listadecompraslista', 'ideaapuntada'],
+  create_routine: ['turutinaestasegura', 'laconstanciaesclave', 'metaenfocada', 'vamosportusmetas'],
+  add_exercise: ['vamosalla', 'tupuedes', 'pausaactiva'],
+  plan_meal: ['todolisto', 'buenaidea'],
+  save_recipe: ['buenaidea', 'todolisto'],
+  add_contact: ['todolisto', 'bienhecho'],
+  register_reward_punishment: ['sorpresaparati'],
+  pause_notifications: ['descansoprogramado'],
+  get_today_agenda: ['todobajocontrol', 'enfoqueactivado', 'vamosportusmetas'],
+  get_week_report: ['progresoactualizado', 'excelentetrabajo', 'vamosportusmetas'],
+  schedule_appointment: ['reunionagendada', 'eventoconfirmado'],
+  request_appointment: ['reunionagendada', 'quedoagendado'],
+  confirm_appointment: ['eventoconfirmado', 'reunionagendada'],
+};
+
+/** A tool result that reads like a refusal/error - no "done!" sticker for it. */
+const FAILED_RESULT_RE =
+  /^(error|no |me falta|esa hora|ese |esa |hay varias|varios |necesito|solo el administrador|ya se envi|¿)|no pude|no existe|no encontr|ya pas[oó]|no tienes permiso|tard[oó] demasiado/i;
+
+/** Conversation moments that deserve a sticker even without any action. */
+const MOMENT_STICKERS: { re: RegExp; keys: () => readonly string[] }[] = [
+  { re: /\b(buenas noches|a dormir|me voy a dormir)\b/i, keys: () => ['buenasnoches'] },
+  { re: /\b(chao|chau|adi[oó]s|hasta luego|hasta ma[ñn]ana|nos vemos|bye)\b/i, keys: () => ['hastaluego'] },
+  { re: /\b(gracias|te agradezco|mil gracias|eres (el|la) mejor)\b/i, keys: () => ['graciasporconfiarenmi', 'enquemaspuedoayudarte'] },
+  { re: /\b(estoy (cansad|estresad|agotad|desmotivad|triste)|no puedo m[aá]s|que pereza|qu[eé] mamera)/i, keys: () => ['respiraysigue', 'tupuedes', 'cadapiezacuenta'] },
+  {
+    re: /^(hola|holi|buenas|buenos d[ií]as|buen d[ií]a|hey|qu[eé] m[aá]s|quiubo)\b/i,
+    keys: () => (new Date().getHours() < 12 ? ['cafeyadarlotodo', 'vamosalla'] : ['vamosalla', 'enquemaspuedoayudarte']),
+  },
+];
+
+/**
+ * After a reply went out: one sticker that fits what just happened - the action that succeeded
+ * this turn, or else the conversational moment (greeting, thanks, goodbye, a rough day). Same
+ * cooldown as every other sticker, so it never floods the chat. Never throws.
+ */
+export function sendTurnSticker(wa: StickerSender, jid: string, turn: { userText: string; tools: { name: string; result: string }[] }): void {
+  if (stickerOnCooldown(jid)) return;
+  const done = turn.tools.filter((t) => ACTION_STICKERS[t.name] && !FAILED_RESULT_RE.test(t.result.trim()));
+  const keys = done.length ? ACTION_STICKERS[done[done.length - 1].name] : MOMENT_STICKERS.find((m) => m.re.test(turn.userText.trim()))?.keys();
+  if (keys) sendAutoSticker(wa, jid, keys);
 }

@@ -20,6 +20,15 @@ import type { WaManager } from '../whatsapp/wa-manager.js';
 
 const MAX_ITERATIONS = 6;
 
+/** Tools run in each user's latest turn (name + result) - read by bot-manager.ts right after the
+ *  reply goes out, to confirm a successful action with a fitting sticker (util/stickers.ts). */
+const lastTurnTools = new Map<number, { name: string; result: string }[]>();
+export function takeLastTurnTools(userId: number): { name: string; result: string }[] {
+  const t = lastTurnTools.get(userId) ?? [];
+  lastTurnTools.delete(userId);
+  return t;
+}
+
 /**
  * Wall-clock budget for one whole turn (every model call + tool in it). Before this, each model
  * call had its own 45s cap but a turn could chain up to ~13 of them (6 iterations x 2 attempts +
@@ -362,15 +371,15 @@ Reglas de las herramientas:
   usa change_web_password (le envío una temporal que el portal le pide cambiar al entrar).
 - Si abajo en tu contexto ves "Stickers disponibles", úsalos por tu cuenta con send_sticker cuando
   el momento de la conversación calce con alguna etiqueta (saludo, celebración, motivación,
-  despedida, etc.) - NUNCA preguntes si quiero uno, simplemente mándalo cuando aplique. También
-  sirven para confirmar lo que ACABAS de hacer con una tool en este mismo turno (ej. un sticker
-  "quedo_agendado" o "alarma_configurada" justo después de crear un recordatorio, "mensaje_enviado"
-  después de send_message) - pero solo si la acción de verdad salió bien. Las
+  despedida, etc.) - NUNCA preguntes si quiero uno, simplemente mándalo cuando aplique. Úsalos con
+  gusto en la conversación: para animarme, celebrar algo que te cuento, cuando estoy cansado o
+  estresado, o para darle chispa a una respuesta. Cuando una tool sale bien (programar, guardar,
+  enviar, crear...) el sistema YA manda solo un sticker que confirma esa acción, así que en ese turno
+  no mandes otro tú. Las
   etiquetas son los nombres que el administrador les puso: elige por lo que el nombre describe y
   pásala copiada tal cual de esa lista, nunca inventes una que no esté ahí. Si ninguna etiqueta
   calza con el momento, no mandes ninguno - no fuerces uno que no pega. Como mucho un sticker por
-  turno, y no en cada mensaje - solo cuando de verdad sume. Al marcar tareas o rutinas como hechas
-  el sistema ya manda solo un sticker de celebración, así que en ese turno no mandes otro.
+  turno. Al marcar tareas o rutinas como hechas el sistema ya manda solo un sticker de celebración.
 - Si quiero dejar de recibir avisos por unos días (viaje, vacaciones, descanso), usa
   pause_notifications (con days) para pausar TODO, o pause_routine/pause_reminder si es solo una
   rutina o recordatorio puntual - no cancela ni borra nada, todo vuelve solo cuando pase ese tiempo,
@@ -600,6 +609,8 @@ export async function processMessage(
   /** Tools that actually ran this turn - if the turn then dies, the reply must say so, otherwise
    *  "intenta de nuevo" makes the person repeat it and the reminder/appointment ends up duplicated. */
   const executed: string[] = [];
+  const turnTools: { name: string; result: string }[] = [];
+  lastTurnTools.set(user.id, turnTools);
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     const res = await callModelWithRetry(client, callParams(), deadline, user.id);
@@ -691,6 +702,7 @@ export async function processMessage(
           console.log(`[TOOL] ${tc.function.name}(%s)`, JSON.stringify(args));
           result = await executeWithTimeout(() => tool.execute(args, ctx), tc.function.name);
           executed.push(tc.function.name);
+          turnTools.push({ name: tc.function.name, result });
           console.log(`[TOOL] ${tc.function.name} -> "%s"`, result.length > 300 ? `${result.slice(0, 300)}…` : result);
         } catch (err) {
           result = `Error al ejecutar ${tc.function.name}: ${(err as Error).message}`;
