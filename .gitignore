@@ -33,3 +33,6 @@ vision-service/.venv/
 vision-service/.cache/
 vision-service/__pycache__/
 data/stickers-export/
+
+# Muestras de voz para elegir (generadas localmente)
+muestras-voz/

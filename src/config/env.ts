@@ -122,8 +122,8 @@ export const env = {
     fish: {
       apiKey: process.env.FISH_AUDIO_API_KEY ?? '',
       model: process.env.FISH_AUDIO_MODEL ?? 's2.1-pro-free',
-      voiceMale: process.env.FISH_AUDIO_VOICE_MALE ?? '17ed67335f0145c9a850fddecd3c40e0',
-      voiceFemale: process.env.FISH_AUDIO_VOICE_FEMALE ?? 'e296306da5d449999f6e35c2b9f60aea',
+      voiceMale: process.env.FISH_AUDIO_VOICE_MALE ?? 'da13e1b3f87c4f40b8090d0fd6454921',
+      voiceFemale: process.env.FISH_AUDIO_VOICE_FEMALE ?? '10509ddabaaf48089ad5cf2d1b1eaf1d',
       // Fish bills per character - a reply longer than this goes out as text instead of an
       // expensive (and tedious to listen to) long voice note.
       maxChars: parseInt(process.env.FISH_AUDIO_MAX_CHARS ?? '700', 10),
