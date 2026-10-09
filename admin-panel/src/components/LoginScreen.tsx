@@ -41,7 +41,7 @@ export function AuthLayout({ subtitle, children }: { subtitle: string; children:
             ))}
           </ul>
         </div>
-        <p className="relative text-xs text-white/60">Cania · el mismo asistente que te habla por WhatsApp</p>
+        <p className="relative text-xs text-white/60">Canix · el mismo asistente que te habla por WhatsApp</p>
       </div>
 
       {/* Form */}

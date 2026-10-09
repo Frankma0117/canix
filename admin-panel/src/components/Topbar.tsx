@@ -15,7 +15,7 @@ export function Topbar({ current, onMenu }: { current?: SectionDef; onMenu: () =
         <Menu size={20} />
       </button>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-semibold text-gray-dark">{current?.group ?? 'Cania'}</p>
+        <p className="truncate text-xs font-semibold text-gray-dark">{current?.group ?? 'Canix'}</p>
         <p className="truncate font-display text-base font-extrabold leading-tight text-ink dark:text-white">{current?.label ?? 'Inicio'}</p>
       </div>
       <span className="hidden items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-xs font-semibold text-emerald-700 md:inline-flex dark:text-emerald-300">

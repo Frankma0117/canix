@@ -8,7 +8,7 @@ import { useId } from 'react';
 export function BrandMark({ size = 40, className = '' }: { size?: number; className?: string }) {
   const id = useId().replace(/:/g, '');
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" className={className} role="img" aria-label="Cania">
+    <svg width={size} height={size} viewBox="0 0 100 100" className={className} role="img" aria-label="Canix">
       <defs>
         <linearGradient id={`hex-${id}`} x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#2f8bff" />
@@ -47,14 +47,14 @@ export function BrandMark({ size = 40, className = '' }: { size?: number; classN
   );
 }
 
-/** Mark + "Cania" wordmark in the sticker lettering style. */
+/** Mark + "Canix" wordmark in the sticker lettering style. */
 export function Logo({ size = 40, subtitle }: { size?: number; subtitle?: string }) {
   return (
     <div className="flex items-center gap-2.5">
       <BrandMark size={size} className="drop-shadow-[0_6px_14px_rgba(91,76,245,0.35)]" />
       <div className="min-w-0 leading-none">
         <p className="font-display text-xl font-black tracking-tight text-navy dark:text-white">
-          Can<span className="text-gradient">ia</span>
+          Can<span className="text-gradient">ix</span>
         </p>
         {subtitle && <p className="mt-1 truncate text-xs font-medium text-gray-dark">{subtitle}</p>}
       </div>
