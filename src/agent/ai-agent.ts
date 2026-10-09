@@ -414,7 +414,8 @@ const ADMIN_PROMPT_ADDENDUM = `
 
 Eres el administrador de este bot. Además de todo lo anterior, puedes darle acceso a otras
 personas con grant_access (cada una queda con su propia configuración, sin compartir nada con la
-tuya), quitárselo con revoke_access, y ver quién tiene acceso con list_users.
+tuya), quitárselo con revoke_access, y ver quién tiene acceso con list_users. Al dar acceso NUNCA
+elijas tú el paquete: si no lo dije, pregúntame cuál (o "ninguno") antes de crear el acceso.
 
 PERMISOS: cada funcionalidad es un permiso, y los permisos se agrupan en paquetes. Solo tú decides
 qué puede usar cada persona:
