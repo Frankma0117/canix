@@ -345,6 +345,10 @@ Todo lo que le cuesta dinero al dueño por uso queda en el módulo **"Extras de 
   frecuentes, con botones "Contáctanos" a `CONTACT_WHATSAPP`. Se sirve en `/conoce` desde cualquier
   dominio y en `/` del subdominio de `LANDING_URL` (configúralo con
   `sudo ./deploy/ubuntu-08-setup-landing.sh canix.tu-dominio.com` después de crear el registro DNS A).
+- **Un solo dominio:** con `LANDING_URL=https://canix.cania.app`, la página de venta está en `/` y el
+  portal + administración en `/app` (botón "Ingresar" en la página). Para pasar un dominio viejo a
+  este: `sudo ./deploy/ubuntu-09-unify-domain.sh virtual-assistant.cania.app canix.cania.app` (lo
+  deja redirigiendo; con `--remove` al final lo elimina). Solo toca ese sitio de nginx y hace respaldo.
 - **SEO:** título/descripción/keywords en español, Open Graph (`og-canix.png`), datos estructurados
   (SoftwareApplication, Organization, FAQPage), `sitemap.xml`, `robots.txt` (el portal privado no se
   indexa) y verificación de Google Search Console con `GOOGLE_SITE_VERIFICATION`.

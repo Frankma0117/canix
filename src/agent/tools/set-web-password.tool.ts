@@ -2,15 +2,16 @@ import type { Tool } from '../tool-registry.js';
 import { issueTemporaryPassword } from '../../auth/web-auth.js';
 import { can } from '../../permissions/engine.js';
 import { usersRepo } from '../../db/repositories/users.repo.js';
-import { env } from '../../config/env.js';
 import { resolveUserByQuery } from './resolve-user.js';
 import { describeIdentity } from '../../util/jid.js';
 import type { User } from '../../types/index.js';
+import { portalUrl } from '../../growth/urls.js';
 
 /** "Entra a https://... con tu número 573001234567 y esta contraseña temporal: ..." - or, for
  *  someone whose real number WhatsApp hasn't shared yet, with their access code instead. */
 export function portalAccessMessage(jid: string, password: string): string {
-  const where = env.panelUrl ? `Entra a ${env.panelUrl}` : 'Entra al portal web';
+  const url = portalUrl();
+  const where = url ? `Entra a ${url}` : 'Entra al portal web';
   const { phone, code } = describeIdentity(jid);
   const who = phone
     ? `con tu número *${phone}*`

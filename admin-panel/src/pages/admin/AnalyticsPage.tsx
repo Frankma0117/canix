@@ -44,7 +44,7 @@ function clickName(label: string): string {
     const where: Record<string, string> = { nav: 'menú', hero: 'portada', pro: 'profesionales', final: 'final', footer: 'pie de página', float: 'botón flotante', plan_personal: 'plan personal', plan_pro: 'plan profesional', plan_teams: 'plan equipos' };
     return `Contáctanos (${where[label.slice(8)] ?? label.slice(8)})`;
   }
-  return { demo_whatsapp: 'Abrir WhatsApp para activar demo', hero_demo: 'Probar gratis (portada)', nav_demo: 'Probar gratis (menú)', final_demo: 'Probar gratis (final)' }[label] ?? label;
+  return { demo_whatsapp: 'Abrir WhatsApp para activar demo', hero_demo: 'Probar gratis (portada)', nav_demo: 'Probar gratis (menú)', final_demo: 'Probar gratis (final)', nav_login: 'Ingresar (menú)', menu_login: 'Ingresar (menú móvil)' }[label] ?? label;
 }
 
 /** Local 'YYYY-MM-DD' for the last N days (oldest first), so empty days still show as 0. */

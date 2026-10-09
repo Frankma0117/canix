@@ -3,6 +3,9 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Express, Request, Response, NextFunction } from 'express';
 import { env } from '../config/env.js';
+import { LANDING_PATH, PORTAL_PATH, landingUrl } from './urls.js';
+
+export { landingUrl, portalUrl } from './urls.js';
 import { rateLimit } from '../server/security.js';
 import { h, userId, int } from '../server/http-helpers.js';
 import { requestDemo, DemoError, extendDemo, convertDemo } from './demo.js';
@@ -11,15 +14,9 @@ import type { BotManager } from '../whatsapp/bot-manager.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const LANDING_FILE = join(here, '..', '..', 'public', 'conoce', 'index.html');
-const LANDING_PATH = '/conoce';
+const PORTAL_FILE = join(here, '..', '..', 'public', 'index.html');
 
 let cache: { mtime: number; html: string } | null = null;
-
-/** The canonical public URL of the sales page (LANDING_URL, or <PANEL_URL>/conoce as fallback). */
-export function landingUrl(): string {
-  if (env.growth.landingUrl) return env.growth.landingUrl;
-  return env.panelUrl ? `${env.panelUrl.replace(/\/$/, '')}${LANDING_PATH}` : LANDING_PATH;
-}
 
 function landingHost(): string | null {
   try {
@@ -74,11 +71,21 @@ export function registerPublicRoutes(app: Express, bot: BotManager): void {
   app.get('/', (req: Request, res: Response, next: NextFunction) => (isLandingHost(req) ? sendLanding(res) : next()));
   app.get([LANDING_PATH, `${LANDING_PATH}/`], (_req, res) => sendLanding(res));
 
+  // Portal + administration on the same domain as the sales page. Its assets are relative
+  // ("./assets/...") so it must be /app without a trailing slash - /app/ redirects there.
+  // (One route: Express' non-strict routing matches "/app" and "/app/" alike, so two separate
+  // routes made /app redirect to itself forever.)
+  app.get(PORTAL_PATH, (req, res) => {
+    if (req.path.endsWith('/')) return res.redirect(301, PORTAL_PATH);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(PORTAL_FILE);
+  });
+
   app.get('/robots.txt', (req, res) => {
     const sitemap = `${landingUrl().startsWith('http') ? new URL(landingUrl()).origin : ''}/sitemap.xml`;
     res.type('text/plain').send(
       isLandingHost(req)
-        ? `User-agent: *\nAllow: /\nDisallow: /api/\nSitemap: ${sitemap}\n`
+        ? `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: ${PORTAL_PATH}\nSitemap: ${sitemap}\n`
         : // the portal host: only the public page is indexable, the private portal is not
           `User-agent: *\nAllow: ${LANDING_PATH}\nDisallow: /\nSitemap: ${sitemap}\n`,
     );
