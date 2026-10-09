@@ -31,8 +31,14 @@
 # relanza solo con sudo) - el repo es del usuario de servicio 'canix' y el reinicio necesita root.
 set -euo pipefail
 
+# Todo el script va dentro de main(): bash lo lee COMPLETO antes de ejecutar nada, así que aunque
+# git reemplace este archivo a mitad del deploy, la ejecución en curso no se corrompe.
+main() {
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+
+SELF_HASH="$(sha256sum "$SCRIPT_DIR/deploy.sh" | cut -d' ' -f1)"
 
 if [ "$(id -u)" -ne 0 ] && [ ! -w "$SCRIPT_DIR/.git" ]; then
   echo "El repo ($SCRIPT_DIR) no es escribible por $(id -un) - me relanzo con sudo."
@@ -87,7 +93,7 @@ if [ -d .git ]; then
   # root or a service user) while deploy.sh itself is normally run as a regular user. This repo
   # path is the deploy target itself, not untrusted input, so it's safe to always trust it - avoids
   # a confusing `git pull` failure with no code changed and no explanation.
-  if ! git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$SCRIPT_DIR"; then
+  if ! git config --global --get-all safe.directory 2>/dev/null | grep -xF "$SCRIPT_DIR" >/dev/null; then
     git config --global --add safe.directory "$SCRIPT_DIR"
   fi
   # Cambios "sucios" que son solo archivos de runtime (el lock del bot, caches de Python): se
@@ -123,6 +129,14 @@ if [ -d .git ]; then
     git merge --ff-only "origin/$BRANCH"
   fi
   echo "Código en: $(git log --oneline -1)"
+  # Si esta actualización trajo una versión nueva de este mismo script, se relanza: bash lee el
+  # archivo mientras lo ejecuta, y seguir con la versión vieja (o una mezcla) fue lo que dejó
+  # deploys a medias.
+  if [ "$(sha256sum "$SCRIPT_DIR/deploy.sh" | cut -d' ' -f1)" != "$SELF_HASH" ] && [ -z "${CANIX_DEPLOY_REEXEC:-}" ]; then
+    echo "deploy.sh cambió con esta actualización - me relanzo con la versión nueva."
+    export CANIX_DEPLOY_REEXEC=1
+    exec bash "$SCRIPT_DIR/deploy.sh" "$@"
+  fi
 else
   echo "Esto no es un repo git ($SCRIPT_DIR) - salto git pull (¿subiste los archivos por scp/rsync?)."
 fi
@@ -148,8 +162,16 @@ mkdir -p data
 step "Aplicando migraciones de base de datos"
 npm run db:init
 
-has_pm2_cania() { command -v pm2 >/dev/null 2>&1 && pm2 jlist 2>/dev/null | grep -q '"name":"cania"'; }
-has_systemd_canix() { systemctl list-unit-files 2>/dev/null | grep -q '^canix\.service'; }
+# Sin tuberías hacia `grep -q`: con `set -o pipefail`, grep -q cierra la tubería en la primera
+# coincidencia, el comando de la izquierda muere por SIGPIPE y la tubería entera "falla" - así es
+# como systemd nunca se detectaba y el deploy terminaba reiniciando el pm2 de root (2026-10).
+has_pm2_cania() {
+  command -v pm2 >/dev/null 2>&1 || return 1
+  local list
+  list="$(pm2 jlist 2>/dev/null || true)"
+  [[ "$list" == *'"name":"cania"'* ]]
+}
+has_systemd_canix() { systemctl cat canix.service >/dev/null 2>&1; }
 detect_supervisor() {
   # systemd gana si existe: corre como el usuario 'canix' (no root) y es el que arranca solo con el
   # servidor. Tener ADEMÁS un 'cania' en pm2 es justo lo que dejó dos bots sobre la misma sesión de
@@ -331,3 +353,7 @@ if ! grep -q '^PANEL_URL=https\?://.\+' .env 2>/dev/null; then
   echo "   pero Twilio no podrá avisar el estado real de cada llamada (se quedan en \"processing\")."
   echo "   Ponla en .env (https://tu-dominio) para que /webhooks/twilio/call-status sea alcanzable."
 fi
+}
+
+main "$@"
+exit $?
