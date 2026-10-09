@@ -1,0 +1,166 @@
+@import '../src/index.css';
+
+/* Landing-only building blocks (same tokens as the portal: see src/index.css). */
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+}
+
+[data-nav].scrolled {
+  @apply border-b border-gray-medium/60 bg-white/85 shadow-sm backdrop-blur-xl dark:border-white/10 dark:bg-[#0b0e24]/85;
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.reveal.visible {
+  opacity: 1;
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.bubble-me,
+.bubble-bot {
+  @apply max-w-[85%] rounded-2xl px-3 py-2 shadow-sm;
+  opacity: 0;
+  animation: pop-in 0.4s ease-out forwards;
+}
+.bubble-me {
+  @apply ml-auto rounded-tr-sm bg-[#d9fdd3];
+}
+.bubble-bot {
+  @apply rounded-tl-sm bg-white;
+}
+.chat > :nth-child(1) { animation-delay: 0.3s; }
+.chat > :nth-child(2) { animation-delay: 1.1s; }
+.chat > :nth-child(3) { animation-delay: 2s; }
+.chat > :nth-child(4) { animation-delay: 2.8s; }
+.chat > :nth-child(5) { animation-delay: 3.7s; }
+.chat > :nth-child(6) { animation-delay: 4.5s; }
+
+.feature {
+  @apply rounded-3xl border border-gray-medium/70 bg-white p-6 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-lift dark:border-white/10 dark:bg-[var(--surface)];
+}
+.feature img {
+  @apply mb-3 h-20 w-20 transition-transform duration-300;
+}
+.feature:hover img {
+  transform: rotate(-6deg) scale(1.08);
+}
+.feature h3 {
+  @apply font-display text-xl font-extrabold text-navy dark:text-white;
+}
+.feature p {
+  @apply mt-2 text-[15px] leading-relaxed text-ink/70 dark:text-white/70;
+}
+.tag {
+  @apply ml-1 inline-flex rounded-full bg-gradient-to-r from-amber-100 to-orange-100 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:from-amber-500/15 dark:to-orange-500/15 dark:text-amber-200;
+}
+
+.mode {
+  @apply flex flex-col items-center gap-1.5 rounded-2xl border border-gray-medium/70 bg-white px-3 py-5 text-3xl shadow-soft transition hover:-translate-y-0.5 hover:border-primary/30 dark:border-white/10 dark:bg-[var(--surface)];
+}
+.mode span {
+  @apply font-display text-base font-extrabold text-navy dark:text-white;
+}
+
+.pro {
+  @apply flex items-start gap-2.5 rounded-2xl bg-white/12 p-3.5 text-[15px] font-semibold backdrop-blur;
+}
+.pro::before {
+  content: '✓';
+  @apply flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-sm font-black text-primary-dark;
+}
+
+.panel {
+  @apply rounded-3xl border border-gray-medium/70 bg-white p-7 shadow-soft dark:border-white/10 dark:bg-[var(--surface)];
+}
+.panel h3 {
+  @apply font-display text-xl font-extrabold text-navy dark:text-white;
+}
+.panel p {
+  @apply mt-2 leading-relaxed text-ink/70 dark:text-white/70;
+}
+
+.plan {
+  @apply relative flex flex-col rounded-3xl border border-gray-medium/70 bg-white p-8 shadow-soft dark:border-white/10 dark:bg-[var(--surface)];
+}
+.plan h3 {
+  @apply font-display text-2xl font-black text-navy dark:text-white;
+}
+.plan-sub {
+  @apply text-sm font-semibold text-gray-dark;
+}
+.plan ul {
+  @apply my-6 flex-1 space-y-2.5;
+}
+.plan li {
+  @apply flex items-start gap-2 text-[15px] text-ink/80 dark:text-white/80;
+}
+.plan li::before {
+  content: '✓';
+  @apply font-black text-success;
+}
+.plan-featured {
+  @apply border-2 border-primary/50 shadow-lift lg:-translate-y-3;
+}
+.plan-badge {
+  background: var(--gradient-brand);
+  @apply absolute -top-3 left-8 rounded-full px-3 py-1 text-xs font-bold text-white;
+}
+.plan-btn {
+  @apply block rounded-2xl border border-gray-medium px-5 py-3 text-center font-bold text-ink transition hover:border-primary/50 hover:text-primary-dark dark:border-white/15 dark:text-white;
+}
+.plan-btn-featured {
+  background: var(--gradient-brand);
+  @apply border-0 text-white hover:text-white hover:brightness-110;
+}
+
+.step {
+  background: var(--gradient-brand);
+  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-black text-white;
+}
+
+.field {
+  @apply w-full rounded-xl border border-gray-medium bg-white px-3.5 py-3 text-[15px] text-ink outline-none transition placeholder:text-gray-dark/60 focus:border-primary focus:ring-4 focus:ring-primary/15 dark:border-white/10 dark:bg-white/5 dark:text-white;
+}
+
+.faq {
+  @apply rounded-2xl border border-gray-medium/70 bg-white px-5 py-4 shadow-soft dark:border-white/10 dark:bg-[var(--surface)];
+}
+.faq summary {
+  @apply flex cursor-pointer list-none items-center justify-between gap-4 font-display text-lg font-extrabold text-navy dark:text-white;
+}
+.faq summary::-webkit-details-marker {
+  display: none;
+}
+.faq summary::after {
+  content: '+';
+  @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xl font-black text-primary-dark transition-transform dark:bg-white/10 dark:text-white;
+}
+.faq[open] summary::after {
+  transform: rotate(45deg);
+}
+.faq p {
+  @apply mt-3 leading-relaxed text-ink/70 dark:text-white/70;
+}
+
+.demo-dialog {
+  @apply m-auto w-[min(92vw,440px)] rounded-3xl border-0 bg-white p-7 shadow-2xl dark:bg-[#1a1f45] dark:text-white;
+}
+.demo-dialog[open] {
+  animation: pop-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.demo-dialog::backdrop {
+  background: rgb(27 33 96 / 0.45);
+  backdrop-filter: blur(4px);
+}

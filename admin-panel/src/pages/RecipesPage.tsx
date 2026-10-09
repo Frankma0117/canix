@@ -8,9 +8,11 @@ import { Button } from '../components/ui/Button.tsx';
 import { Input, Label, Textarea } from '../components/ui/Input.tsx';
 import { Modal } from '../components/ui/Modal.tsx';
 import { EmptyState } from '../components/ui/EmptyState.tsx';
+import { useCreated } from '../components/ui/Created.tsx';
 
 export function RecipesPage() {
   const api = useApi();
+  const created = useCreated();
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
   const [open, setOpen] = useState<Recipe | null>(null);
   const [draft, setDraft] = useState<{ title: string; ingredients: string; instructions: string } | null>(null);
@@ -26,6 +28,7 @@ export function RecipesPage() {
     if (!draft?.title.trim()) return;
     try {
       await api.post('/api/recipes', draft);
+      created({ kind: 'Receta', title: draft.title.trim(), section: 'recipes', sticker: 'listo', shareText: `🍳 ${draft.title.trim()}\n\nIngredientes:\n${draft.ingredients}\n\nPreparación:\n${draft.instructions}` });
       setDraft(null);
       await load();
     } catch (e) {

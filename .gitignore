@@ -19,6 +19,8 @@ public/index.html
 # Copiados por Vite desde admin-panel/public (la fuente sí se versiona)
 public/stickers/
 public/favicon.svg
+public/og-canix.png
+public/conoce/
 
 # Modelos/binarios de audio (se descargan aparte, ver README > Audio)
 models/

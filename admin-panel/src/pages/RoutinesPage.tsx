@@ -8,6 +8,7 @@ import { Input, Label, Select } from '../components/ui/Input.tsx';
 import { Modal } from '../components/ui/Modal.tsx';
 import { EmptyState } from '../components/ui/EmptyState.tsx';
 import { Skeleton } from '../components/ui/Skeleton.tsx';
+import { useCreated } from '../components/ui/Created.tsx';
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -86,6 +87,7 @@ function RoutineRow({
 
 export function RoutinesPage() {
   const api = useApi();
+  const created = useCreated();
   const [categories, setCategories] = useState<Category[]>([]);
   const [routines, setRoutines] = useState<Todo[] | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -129,6 +131,7 @@ export function RoutinesPage() {
         reminder_time: reminderTime,
         duration_minutes: Number(durationMinutes),
       });
+      created({ kind: 'Rutina', title: title.trim(), section: 'routines', details: [`Todos los días a las ${reminderTime} · ${durationMinutes} min`], sticker: 'rutina' });
       setTitle('');
       setCategoryId('');
       setReminderTime('08:00');

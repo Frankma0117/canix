@@ -42,6 +42,10 @@ export interface User {
   // admin/bot, the portal forces a change before anything else.
   password_hash: string | null;
   must_change_password: number;
+  // Free trial created from the public landing page (see growth/demo.ts): when it ends (UTC ISO),
+  // and 'active' | 'expired' | NULL (not a demo account / converted into a real customer).
+  demo_expires_at: string | null;
+  demo_status: 'active' | 'expired' | null;
   password_updated_at: string | null;
   failed_logins: number;
   locked_until: string | null;

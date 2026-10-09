@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useApi, errMsg } from '../../lib/api.ts';
 import type { AdminUser, PermissionDef, PermissionPackage, UsageRow } from '../../lib/types.ts';
-import { identityOf, portalStatus, permissionSource, hasPermission, groupByModule } from '../../lib/admin.ts';
+import { identityOf, portalStatus, permissionSource, hasPermission, groupByModule, demoLabel } from '../../lib/admin.ts';
 import { operationInfo, estimateCost, useRates, usd, compact } from '../../lib/usage.ts';
 import { Drawer } from '../../components/ui/Modal.tsx';
 import { Avatar, Notice, Tabs } from '../../components/ui/Page.tsx';
@@ -64,6 +64,7 @@ export function UserDrawer({
           <Avatar name={user.name} seed={user.id} size={52} />
           <div className="flex flex-wrap gap-1.5">
             {isAdmin && <Badge tone="brand">Administrador</Badge>}
+            {demoLabel(user) && <Badge tone={demoLabel(user)!.tone}>🧪 {demoLabel(user)!.label}</Badge>}
             <Badge tone={status.tone}>{status.label}</Badge>
             {paidOn.map((p) => (
               <Badge key={p.key} tone="premium">
@@ -168,6 +169,8 @@ function SummaryTab({
         </Notice>
       )}
 
+      {user.demo_status && <DemoCard user={user} onChanged={onChanged} />}
+
       <Card className="p-5">
         <p className="mb-4 flex items-center gap-2 font-display text-base font-extrabold text-ink dark:text-white">
           <UserRound size={18} className="text-primary" /> Datos
@@ -239,6 +242,44 @@ function SummaryTab({
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+function DemoCard({ user, onChanged }: { user: AdminUser; onChanged: (u: AdminUser) => void }) {
+  const api = useApi();
+  const toast = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+  const d = demoLabel(user)!;
+  async function act(action: 'extend' | 'convert', hours?: number) {
+    setBusy(action + (hours ?? ''));
+    try {
+      onChanged(await api.post<AdminUser>(`/api/admin/users/${user.id}/demo`, { action, hours }));
+      toast.success(action === 'convert' ? `${user.name ?? 'La persona'} ya es cliente: ajusta sus permisos si hace falta.` : 'Demo extendida.');
+    } catch (e) {
+      toast.error(errMsg(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <div className="rounded-2xl border border-accent/30 bg-gradient-to-br from-accent/10 to-primary/5 p-5">
+      <p className="font-display text-base font-extrabold text-ink dark:text-white">🧪 Cuenta demo · {d.label.replace('Demo · ', '')}</p>
+      <p className="mt-1 text-sm text-gray-dark">
+        {user.demo_expires_at ? `Vence el ${new Date(user.demo_expires_at).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}. ` : ''}
+        Creada desde la página pública. Al vencer se pausa (su información queda guardada).
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button size="sm" onClick={() => act('convert')} loading={busy === 'convert'}>
+          Convertir en cliente
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => act('extend', 24)} loading={busy === 'extend24'}>
+          +1 día
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => act('extend', 72)} loading={busy === 'extend72'}>
+          +3 días
+        </Button>
+      </div>
     </div>
   );
 }

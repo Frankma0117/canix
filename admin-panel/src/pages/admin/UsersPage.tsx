@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Plus, Search, Users, KeyRound, Sparkles, AlertTriangle, Grid3x3, ChevronRight, Phone, Check } from 'lucide-react';
 import { useApi, errMsg } from '../../lib/api.ts';
 import type { AdminUser, PermissionPackage } from '../../lib/types.ts';
-import { useAdminData, identityOf, portalStatus } from '../../lib/admin.ts';
+import { useAdminData, identityOf, portalStatus, demoLabel } from '../../lib/admin.ts';
 import { goTo } from '../../lib/sections.tsx';
 import { Page, Notice, Tabs, StatCard, Avatar } from '../../components/ui/Page.tsx';
 import { Card } from '../../components/ui/Card.tsx';
@@ -15,7 +15,7 @@ import { EmptyState } from '../../components/ui/EmptyState.tsx';
 import { useToast } from '../../components/ui/Toast.tsx';
 import { UserDrawer } from './UserDrawer.tsx';
 
-type Filter = 'all' | 'portal' | 'paid' | 'none' | 'review';
+type Filter = 'all' | 'portal' | 'paid' | 'demo' | 'none' | 'review';
 
 export function UsersPage() {
   const { users, catalog, packages, error, reload, replaceUser } = useAdminData();
@@ -30,6 +30,7 @@ export function UsersPage() {
     all: () => true,
     portal: (u) => u.role === 'admin' || u.effective.includes('portal.access'),
     paid: (u) => u.role !== 'admin' && paidKeys.some((k) => u.effective.includes(k)),
+    demo: (u) => !!u.demo_status,
     none: (u) => u.role !== 'admin' && u.effective.length === 0,
     review: needsReview,
   };
@@ -83,6 +84,7 @@ export function UsersPage() {
           { id: 'all', label: 'Todas', count: count('all') },
           { id: 'portal', label: 'Con portal', count: count('portal') },
           { id: 'paid', label: 'Extras de pago', count: count('paid') },
+          { id: 'demo', label: 'Demos', count: count('demo') },
           { id: 'none', label: 'Sin permisos', count: count('none') },
           { id: 'review', label: 'Revisar', count: count('review') },
         ]}
@@ -145,6 +147,7 @@ export function UsersPage() {
                 {u.role !== 'admin' && u.deny.length > 0 && <Badge tone="error">{u.deny.length} denegado(s)</Badge>}
                 {u.role !== 'admin' && !u.packages.length && !u.allow.length && <Badge tone="warning">Sin permisos</Badge>}
                 {u.is_professional && <Badge tone="cyan">📅 Profesional</Badge>}
+                {demoLabel(u) && <Badge tone={demoLabel(u)!.tone}>🧪 {demoLabel(u)!.label}</Badge>}
               </div>
             </Card>
           );

@@ -25,11 +25,13 @@ import {
   Home,
   Grid3x3,
   BarChart3,
+  LineChart,
 } from 'lucide-react';
 import type { StickerName } from '../components/brand/Sticker.tsx';
 import { HomePage } from '../pages/HomePage.tsx';
 import { AccessMatrixPage } from '../pages/admin/AccessMatrixPage.tsx';
 import { UsagePage } from '../pages/admin/UsagePage.tsx';
+import { AnalyticsPage } from '../pages/admin/AnalyticsPage.tsx';
 import { TodosPage } from '../pages/TodosPage.tsx';
 import { RoutinesPage } from '../pages/RoutinesPage.tsx';
 import { RewardsPage } from '../pages/RewardsPage.tsx';
@@ -91,6 +93,7 @@ export const SECTIONS: SectionDef[] = [
   { id: 'my-appointments', description: 'Pide y revisa tus citas.', sticker: 'evento', label: 'Mis citas', group: 'Agenda', icon: CalendarCheck, perms: ['scheduling.client'], render: () => <MyAppointmentsPage /> },
   { id: 'admin-users', label: 'Personas', group: 'Administración', icon: ShieldCheck, adminOnly: true, render: () => <UsersPage /> },
   { id: 'admin-matrix', label: 'Matriz de acceso', group: 'Administración', icon: Grid3x3, adminOnly: true, render: () => <AccessMatrixPage /> },
+  { id: 'admin-analytics', label: 'Analítica web', group: 'Administración', icon: LineChart, adminOnly: true, render: () => <AnalyticsPage /> },
   { id: 'admin-usage', label: 'Uso y costos', group: 'Administración', icon: BarChart3, adminOnly: true, render: () => <UsagePage /> },
   { id: 'admin-packages', label: 'Paquetes', group: 'Administración', icon: Package, adminOnly: true, render: () => <PackagesPage /> },
   { id: 'admin-scheduling', label: 'Agendas generales', group: 'Administración', icon: Building2, adminOnly: true, render: () => <SchedulingAdminPage /> },

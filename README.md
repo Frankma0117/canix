@@ -339,6 +339,23 @@ Todo lo que le cuesta dinero al dueño por uso queda en el módulo **"Extras de 
 - Todo el uso queda registrado por persona en `ai_usage` (tokens del chat, caracteres de voz,
   llamadas) - consultable en `GET /api/admin/usage?days=30` como base para cobrar más adelante.
 
+## Página de venta, demo gratis y analítica
+
+- **Página pública** (`admin-panel/conoce/`): explica todas las funciones, modos, planes y preguntas
+  frecuentes, con botones "Contáctanos" a `CONTACT_WHATSAPP`. Se sirve en `/conoce` desde cualquier
+  dominio y en `/` del subdominio de `LANDING_URL` (configúralo con
+  `sudo ./deploy/ubuntu-08-setup-landing.sh canix.tu-dominio.com` después de crear el registro DNS A).
+- **SEO:** título/descripción/keywords en español, Open Graph (`og-canix.png`), datos estructurados
+  (SoftwareApplication, Organization, FAQPage), `sitemap.xml`, `robots.txt` (el portal privado no se
+  indexa) y verificación de Google Search Console con `GOOGLE_SITE_VERIFICATION`.
+- **Demo gratis:** la persona pide la demo, recibe un código `DEMO-XXXXX` y lo envía al bot por
+  WhatsApp (así el número queda verificado y el bot nunca escribe en frío). Recibe el paquete "Demo"
+  por `DEMO_HOURS` horas; al vencer se pausa y su información queda guardada. Desde Personas se
+  extiende o se convierte en cliente.
+- **Analítica propia** (Administración → Analítica web): visitantes, visitas, embudo hasta cliente,
+  de dónde llegan, campañas UTM (con generador de links), secciones leídas y botones tocados. Sin
+  cookies ni terceros; los visitantes se cuentan con un hash diario, sin guardar IPs.
+
 ## Fashion Mode (armario y outfits)
 
 Módulo aislado y opcional para gestionar tu armario por WhatsApp: mandas fotos de tus prendas, el

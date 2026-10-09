@@ -23,6 +23,7 @@ import { env } from '../config/env.js';
 import { sleep, typingDelayMs, readingPauseMs, withWorkingUpdates } from '../util/human-delay.js';
 import { workingUpdateMessage } from '../util/motivational.js';
 import { synthesizeVoiceNote } from '../audio/tts.js';
+import { extractDemoCode, activateDemo, isDemoExpired, demoEndedMessage } from '../growth/demo.js';
 
 /** How long a turn can run before the user gets a "still working on it" ping, and how many of
  *  those pings a single turn can rack up - see util/human-delay.ts's withWorkingUpdates(). Tuned
@@ -241,6 +242,21 @@ export class BotManager {
         }
       }
 
+      // A free demo requested on the landing page: the visitor sends the code from their own
+      // WhatsApp, which both proves the number is theirs and keeps the bot replying, never cold-
+      // messaging (see growth/demo.ts).
+      if (!user) {
+        const demoCode = extractDemoCode(text);
+        if (demoCode && phoneJid.endsWith('@s.whatsapp.net')) {
+          if (await activateDemo({ code: demoCode, phoneJid, lid, pushName: name, wa: this.wa })) return;
+          await this.wa.sendText(
+            jid,
+            `Ese código (${demoCode}) no existe o ya se usó/venció. Pide uno nuevo en la página de Canix, o escríbenos: https://wa.me/${env.growth.contactWhatsapp}`,
+          );
+          return;
+        }
+      }
+
       if (!user) {
         console.log('[BOT] %s no tiene acceso, respondo con el mensaje genérico.', phoneJid);
         await this.wa.sendText(jid, PRIVATE_BOT_REPLY);
@@ -248,6 +264,12 @@ export class BotManager {
       }
 
       console.log('[BOT] Usuario resuelto: #%d "%s" (%s)', user.id, user.name ?? '(sin nombre)', user.role);
+
+      // Demo over: no more AI turns (each one costs) - just the way to become a customer.
+      if (isDemoExpired(user)) {
+        await this.wa.sendText(jid, demoEndedMessage(user));
+        return;
+      }
 
       const command = text.trim().toLowerCase();
 

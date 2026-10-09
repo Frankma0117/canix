@@ -25,6 +25,7 @@ import { PERMISSIONS } from '../permissions/catalog.js';
 import { securityHeaders, rateLimit, requestTimeout, errorHandler } from './security.js';
 import { h, userId } from './http-helpers.js';
 import { registerAdminRoutes } from './admin-routes.js';
+import { registerPublicRoutes } from '../growth/routes.js';
 import { registerSchedulingRoutes } from './scheduling-routes.js';
 import { registerModuleRoutes } from './module-routes.js';
 import type { User } from '../types/index.js';
@@ -64,6 +65,9 @@ export function createServer(bot: BotManager): Express {
   app.use('/api', requestTimeout(30_000));
   app.use('/api', rateLimit({ capacity: 240, windowMs: 60_000 }));
   app.use(express.json({ limit: '200kb' }));
+  // Public sales page (+ robots/sitemap) and its unauthenticated API: demo requests and analytics.
+  // Before express.static so the landing host gets the landing at "/" instead of the portal.
+  registerPublicRoutes(app, bot);
   app.use(express.static(publicDir, { maxAge: '1h', index: 'index.html' }));
 
   // ---------- Portal authentication (number + password, see auth/web-auth.ts) ----------

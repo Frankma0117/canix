@@ -131,6 +131,20 @@ export const env = {
     },
   },
 
+  // Public landing page + free demo accounts + web analytics (see src/growth/).
+  growth: {
+    // Canonical public URL of the sales page, e.g. https://canix.cania.app - its host is served the
+    // landing at "/" (any other host still gets the portal at "/" and the landing at /conoce).
+    landingUrl: (process.env.LANDING_URL ?? '').replace(/\/$/, ''),
+    // WhatsApp number (digits, with country code) behind every "Contáctanos" button.
+    contactWhatsapp: (process.env.CONTACT_WHATSAPP ?? '573229457553').replace(/\D/g, ''),
+    demoHours: parseInt(process.env.DEMO_HOURS ?? '24', 10),
+    // Most demos alive at once - a brake on abuse (each demo is real AI usage).
+    maxActiveDemos: parseInt(process.env.DEMO_MAX_ACTIVE ?? '25', 10),
+    // Google Search Console "HTML tag" verification value (content="..."), optional.
+    googleSiteVerification: process.env.GOOGLE_SITE_VERIFICATION ?? '',
+  },
+
   // fal.ai (image generation) - deliberately NOT used by the bot (the user only wants their own
   // sticker pack); kept configured only for generating web-portal assets by hand when needed.
   fal: {

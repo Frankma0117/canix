@@ -68,6 +68,16 @@ export function portalStatus(u: AdminUser): { label: string; tone: 'success' | '
   return { label: 'Portal activo', tone: 'success' };
 }
 
+/** "Demo · quedan 5 h" / "Demo vencida" - null when it isn't a demo account. */
+export function demoLabel(u: Pick<AdminUser, 'demo_status' | 'demo_expires_at'>): { label: string; tone: 'violet' | 'neutral' } | null {
+  if (!u.demo_status) return null;
+  if (u.demo_status === 'expired' || !u.demo_expires_at) return { label: 'Demo vencida', tone: 'neutral' };
+  const ms = new Date(u.demo_expires_at).getTime() - Date.now();
+  if (ms <= 0) return { label: 'Demo vencida', tone: 'neutral' };
+  const h = Math.floor(ms / 3_600_000);
+  return { label: h >= 1 ? `Demo · quedan ${h} h` : `Demo · quedan ${Math.max(1, Math.round(ms / 60_000))} min`, tone: 'violet' };
+}
+
 /** Module -> permissions, in catalog order. */
 export function groupByModule(perms: PermissionDef[]): [string, PermissionDef[]][] {
   const map = new Map<string, PermissionDef[]>();

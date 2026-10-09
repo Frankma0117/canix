@@ -16,6 +16,7 @@ import { permissionsRepo } from './db/repositories/permissions.repo.js';
 import { migrateLegacyAccess } from './permissions/engine.js';
 import { installProcessGuards } from './util/process-guards.js';
 import { setSchedulingNotifier } from './scheduling/service.js';
+import { expireDemos } from './growth/demo.js';
 
 quietLibsignalLogs();
 installProcessGuards();
@@ -88,6 +89,12 @@ async function main() {
   // 4) Reminder scheduler
   const scheduler = new TaskScheduler(bot.session);
   scheduler.start();
+
+  // Free demos from the landing page end on their own (see growth/demo.ts).
+  const demoTimer = setInterval(() => {
+    expireDemos(bot.session).catch((err) => console.error('[DEMO] Error venciendo demos:', (err as Error).message));
+  }, 5 * 60_000);
+  demoTimer.unref();
 
   // 5) HTTP server + admin panel (each client logs in with their own token - see server/auth.ts)
   const app = createServer(bot);

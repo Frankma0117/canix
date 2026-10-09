@@ -58,12 +58,17 @@
   --gradient-brand: linear-gradient(135deg, #2f8bff 0%, #5b4cf5 55%, #8b3fe4 100%);
   --gradient-soft: linear-gradient(135deg, #eaf3ff 0%, #f1edff 100%);
   --surface: #ffffff;
+  /* Single-series chart color - validated against each surface (dataviz validate_palette). */
+  --chart-1: #4b5cf6;
+  --chart-grid: #e8ecf5;
 }
 
 html.dark {
   color-scheme: dark;
   --gradient-soft: linear-gradient(135deg, #18204a 0%, #22184a 100%);
   --surface: #151a3a;
+  --chart-1: #7a86ff;
+  --chart-grid: #252b55;
 }
 
 .brand-gradient {

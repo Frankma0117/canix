@@ -8,9 +8,11 @@ import { Input, Label, Select, Textarea } from '../components/ui/Input.tsx';
 import { Modal } from '../components/ui/Modal.tsx';
 import { EmptyState } from '../components/ui/EmptyState.tsx';
 import { Skeleton } from '../components/ui/Skeleton.tsx';
+import { useCreated } from '../components/ui/Created.tsx';
 
 export function LinksPage() {
   const api = useApi();
+  const created = useCreated();
   const [categories, setCategories] = useState<Category[]>([]);
   const [links, setLinks] = useState<Link[] | null>(null);
   const [filterCategory, setFilterCategory] = useState<string>('');
@@ -50,6 +52,7 @@ export function LinksPage() {
         title: title.trim() || undefined,
         description: description.trim() || undefined,
       });
+      created({ kind: 'Link guardado', title: title.trim() || url.trim(), section: 'links', details: title.trim() ? [url.trim()] : undefined, sticker: 'idea', shareText: `${title.trim() ? `${title.trim()}\n` : ''}${url.trim()}` });
       setUrl('');
       setTitle('');
       setDescription('');

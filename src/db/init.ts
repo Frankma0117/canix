@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { db } from './pool.js';
 import { initAccessSchema } from './schema-access.js';
 import { initSchedulingSchema } from './schema-scheduling.js';
+import { initGrowthSchema } from '../growth/schema.js';
 
 /**
  * Creates every table if it doesn't exist yet, and runs the small set of idempotent migrations
@@ -544,6 +545,7 @@ export function initSchema(): void {
   // Permissions/packages/portal credentials, then the scheduling module (see each file).
   initAccessSchema(db);
   initSchedulingSchema(db);
+  initGrowthSchema(db);
 }
 
 /** Adds a column to `table` if it doesn't already exist (table/column names here are always our own constants, never user input). */

@@ -8,9 +8,11 @@ import { Input, Label, Select } from '../components/ui/Input.tsx';
 import { Modal } from '../components/ui/Modal.tsx';
 import { EmptyState } from '../components/ui/EmptyState.tsx';
 import { Skeleton } from '../components/ui/Skeleton.tsx';
+import { useCreated } from '../components/ui/Created.tsx';
 
 export function TodosPage({ scope, title }: { scope: TodoScope; title: string }) {
   const api = useApi();
+  const created = useCreated();
   const [categories, setCategories] = useState<Category[]>([]);
   const [todos, setTodos] = useState<Todo[] | null>(null);
   const [showDone, setShowDone] = useState(false);
@@ -49,6 +51,7 @@ export function TodosPage({ scope, title }: { scope: TodoScope; title: string })
         category_id: categoryId ? Number(categoryId) : null,
         due_date: dueDate || undefined,
       });
+      created({ kind: scope === 'today' ? 'Pendiente de hoy' : 'Pendiente para después', title: taskTitle.trim(), section: scope === 'today' ? 'today' : 'later', details: dueDate ? [`Para el ${dueDate}`] : undefined, sticker: 'tareas' });
       setTaskTitle('');
       setCategoryId('');
       setDueDate('');

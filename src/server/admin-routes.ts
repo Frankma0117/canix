@@ -13,6 +13,7 @@ import { schedRepo } from '../scheduling/repo.js';
 import { db } from '../db/pool.js';
 import { aiUsageRepo } from '../db/repositories/ai-usage.repo.js';
 import { requirePanelAdmin } from './auth.js';
+import { registerGrowthAdminRoutes } from '../growth/routes.js';
 import { h, userId, str, strArr, intArr, int } from './http-helpers.js';
 import type { User } from '../types/index.js';
 import type { BotManager } from '../whatsapp/bot-manager.js';
@@ -40,6 +41,8 @@ function userView(u: User) {
     deny: overrides.filter((o) => o.effect === 'deny').map((o) => o.permission_key),
     effective: [...effectivePermissions(u)],
     is_professional: !!schedRepo.getProfessional(u.id),
+    demo_status: u.demo_status,
+    demo_expires_at: u.demo_expires_at ? `${u.demo_expires_at.replace(' ', 'T')}Z` : null,
   };
 }
 
@@ -57,6 +60,8 @@ function loadNonAdmin(id: number): User {
  */
 export function registerAdminRoutes(app: Express, bot: BotManager): void {
   app.use('/api/admin', requirePanelAdmin);
+
+  registerGrowthAdminRoutes(app, userView as never);
 
   app.get('/api/admin/permissions', h((_req, res) => res.json(PERMISSIONS.map(({ tools: _t, ...p }) => p))));
 

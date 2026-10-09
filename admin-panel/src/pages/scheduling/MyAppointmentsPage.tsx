@@ -10,6 +10,7 @@ import { EmptyState } from '../../components/ui/EmptyState.tsx';
 import { AppointmentDetail } from '../../components/scheduling/AppointmentDetail.tsx';
 import { STATUS_STYLE } from '../../components/scheduling/Calendar.tsx';
 import { addDaysISO, formatDayLong, formatWhen, nowWall, time12, todayISO } from '../../lib/dates.ts';
+import { useCreated } from '../../components/ui/Created.tsx';
 
 interface Prof {
   id: number;
@@ -95,6 +96,7 @@ function AppointmentRow({ a, onClick }: { a: Appointment; onClick: () => void })
 
 function BookAppointment({ onBooked }: { onBooked: () => void }) {
   const api = useApi();
+  const created = useCreated();
   const [profs, setProfs] = useState<Prof[] | null>(null);
   const [profId, setProfId] = useState<number | ''>('');
   const [from, setFrom] = useState(todayISO());
@@ -135,6 +137,7 @@ function BookAppointment({ onBooked }: { onBooked: () => void }) {
     setError(null);
     try {
       await api.post('/api/scheduling/client/appointments', { professionalId: profId, start: choice.start_at.slice(0, 16), reason });
+      created({ kind: 'Cita solicitada', title: formatDayLong(choice.start_at.slice(0, 10)), section: 'my-appointments', details: [time12(choice.start_at), 'Te aviso por WhatsApp cuando el profesional la confirme.'], sticker: 'evento' });
       setChoice(null);
       onBooked();
     } catch (e) {

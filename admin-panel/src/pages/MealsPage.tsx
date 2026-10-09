@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button.tsx';
 import { Input, Label, Select, Textarea } from '../components/ui/Input.tsx';
 import { Modal } from '../components/ui/Modal.tsx';
 import { addDaysISO, todayISO, formatDayLong } from '../lib/dates.ts';
+import { useCreated } from '../components/ui/Created.tsx';
 
 const SLOTS: { id: MealSlot; label: string; emoji: string }[] = [
   { id: 'desayuno', label: 'Desayuno', emoji: '🍳' },
@@ -18,6 +19,7 @@ const SLOTS: { id: MealSlot; label: string; emoji: string }[] = [
 
 export function MealsPage() {
   const api = useApi();
+  const created = useCreated();
   const [from, setFrom] = useState(todayISO());
   const [plans, setPlans] = useState<MealPlan[]>([]);
   const [draft, setDraft] = useState<{ plan_date: string; meal_slot: MealSlot; title: string; notes: string } | null>(null);
@@ -38,6 +40,7 @@ export function MealsPage() {
     if (!draft?.title.trim()) return;
     try {
       await api.post('/api/meals', draft);
+      created({ kind: 'Comida planeada', title: draft.title.trim(), section: 'meals', details: [draft.plan_date], sticker: 'listo' });
       setDraft(null);
       await load();
     } catch (e) {

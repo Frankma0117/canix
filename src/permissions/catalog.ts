@@ -293,6 +293,12 @@ export const DEFAULT_PACKAGES: PackageDef[] = [
     permissions: ['scheduling.professional', 'reminders.manage', 'portal.access'],
   },
   {
+    key: 'demo',
+    name: 'Demo (prueba gratis)',
+    description: 'Cuentas de prueba creadas desde la página pública: todo lo personal, agenda y portal, sin extras de pago.',
+    permissions: [...PERSONAL, 'scheduling.professional', 'portal.access'],
+  },
+  {
     key: 'cliente_agenda',
     name: 'Cliente de agenda',
     description: 'Solo pedir y ver sus citas con los profesionales que lo compartieron.',

@@ -156,6 +156,10 @@ export interface AdminUser {
   deny: string[];
   effective: string[];
   is_professional: boolean;
+  /** Free trial from the public page: 'active' | 'expired' | null (not a demo). */
+  demo_status: 'active' | 'expired' | null;
+  /** ISO (UTC) end of the trial. */
+  demo_expires_at: string | null;
 }
 
 export interface AuditEntry {
