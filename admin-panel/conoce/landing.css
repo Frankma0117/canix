@@ -164,3 +164,50 @@ html {
   background: rgb(27 33 96 / 0.45);
   backdrop-filter: blur(4px);
 }
+
+.more-link {
+  @apply mt-2 block text-sm font-bold text-primary-dark hover:underline dark:text-[#a9b4ff];
+}
+
+/* Long-form text of the use-case and legal pages (conoce/<slug>/index.html). */
+.prose-canix {
+  @apply text-[17px] leading-relaxed text-ink/80 dark:text-white/80;
+}
+.prose-canix h2 {
+  @apply mt-14 font-display text-2xl font-black text-navy sm:text-3xl dark:text-white;
+}
+.prose-canix h3 {
+  @apply mt-8 font-display text-xl font-extrabold text-navy dark:text-white;
+}
+.prose-canix p,
+.prose-canix ul,
+.prose-canix ol {
+  @apply mt-4;
+}
+.prose-canix ul {
+  @apply list-disc space-y-2 pl-6;
+}
+.prose-canix ol {
+  @apply list-decimal space-y-2 pl-6;
+}
+.prose-canix a {
+  @apply font-semibold text-primary-dark underline decoration-primary/30 underline-offset-2 hover:decoration-primary dark:text-[#a9b4ff];
+}
+.prose-canix strong {
+  @apply text-ink dark:text-white;
+}
+.example {
+  @apply rounded-2xl rounded-tr-sm bg-[#d9fdd3] px-4 py-2.5 text-[15px] text-[#111b21] shadow-sm;
+}
+.crumbs {
+  @apply flex flex-wrap items-center gap-1.5 text-sm text-ink/55 dark:text-white/55;
+}
+.crumbs a {
+  @apply hover:text-primary;
+}
+.prose-canix .panel h3 {
+  @apply mt-0 text-lg;
+}
+.prose-canix .panel p {
+  @apply mt-2 text-[15px];
+}

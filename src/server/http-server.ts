@@ -26,6 +26,7 @@ import { securityHeaders, rateLimit, requestTimeout, errorHandler } from './secu
 import { h, userId } from './http-helpers.js';
 import { registerAdminRoutes } from './admin-routes.js';
 import { registerPublicRoutes } from '../growth/routes.js';
+import { registerNotFound } from '../growth/site.js';
 import { registerSchedulingRoutes } from './scheduling-routes.js';
 import { registerModuleRoutes } from './module-routes.js';
 import type { User } from '../types/index.js';
@@ -553,6 +554,8 @@ export function createServer(bot: BotManager): Express {
 
   // Unknown API path -> JSON 404 (never the SPA's index.html).
   app.use('/api', (_req, res) => void res.status(404).json({ error: 'Ruta no encontrada.' }));
+  // Unknown page -> branded 404 (a real 404 status, so search engines drop dead links).
+  registerNotFound(app);
   app.use(errorHandler);
 
   return app;

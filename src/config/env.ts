@@ -143,6 +143,23 @@ export const env = {
     maxActiveDemos: parseInt(process.env.DEMO_MAX_ACTIVE ?? '25', 10),
     // Google Search Console "HTML tag" verification value (content="..."), optional.
     googleSiteVerification: process.env.GOOGLE_SITE_VERIFICATION ?? '',
+    // Bing Webmaster Tools "meta tag" (msvalidate.01) and Meta Business domain verification values.
+    bingSiteVerification: process.env.BING_SITE_VERIFICATION ?? '',
+    facebookDomainVerification: process.env.FACEBOOK_DOMAIN_VERIFICATION ?? '',
+    // IndexNow key (Bing, Yandex, Seznam, Naver...): when set, the public pages are pushed to the
+    // search engines on startup whenever they changed. Any 8-128 chars of [A-Za-z0-9-].
+    indexNowKey: (process.env.INDEXNOW_KEY ?? '').replace(/[^A-Za-z0-9-]/g, ''),
+    // The brand's public profiles (Instagram, TikTok, Facebook, LinkedIn, YouTube...), comma-separated:
+    // they go into the Organization structured data ("sameAs") so Google ties them to the site.
+    socialLinks: (process.env.SOCIAL_LINKS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => /^https:\/\/\S+$/.test(s)),
+    // Data controller shown in /privacidad and /terminos (Ley 1581 de 2012).
+    legalName: process.env.LEGAL_NAME ?? 'Canix',
+    legalId: process.env.LEGAL_ID ?? '',
+    legalAddress: process.env.LEGAL_ADDRESS ?? 'Colombia',
+    contactEmail: process.env.CONTACT_EMAIL ?? '',
   },
 
   // fal.ai (image generation) - deliberately NOT used by the bot (the user only wants their own

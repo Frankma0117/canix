@@ -155,3 +155,6 @@ dialog?.querySelector('[data-copy-code]')?.addEventListener('click', (e) => {
 });
 dialog?.querySelector('[data-close-dialog]')?.addEventListener('click', () => dialog.close());
 dialog?.addEventListener('click', (e) => e.target === dialog && dialog.close());
+
+// ---------- footer year ----------
+document.querySelectorAll('[data-year]').forEach((el) => (el.textContent = String(new Date().getFullYear())));

@@ -8,6 +8,8 @@ data/*.db-shm
 data/*.db-wal
 # Lock de instancia única (lo escribe el bot al arrancar - ver util/single-instance.ts)
 data/canix.lock
+# Fechas de última modificación de las páginas públicas e IndexNow (ver src/growth/site.ts)
+data/site-pages.json
 *.log
 npm-debug.log*
 *.tsbuildinfo
@@ -20,6 +22,11 @@ public/index.html
 public/stickers/
 public/favicon.svg
 public/og-canix.png
+public/logo-canix.png
+public/favicon.ico
+public/apple-touch-icon.png
+public/icon-*.png
+public/site.webmanifest
 public/conoce/
 
 # Modelos/binarios de audio (se descargan aparte, ver README > Audio)
