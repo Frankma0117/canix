@@ -636,6 +636,7 @@ ${testModeNotice(testMode)}` : ''));
         const voice = await synthesizeVoiceNote(reply, user.voice_gender, {
           premium: can(botUser, 'voice.premium'),
           userId: user.id,
+          voiceId: user.voice_id,
         }).catch(() => null);
         if (voice) {
           try {

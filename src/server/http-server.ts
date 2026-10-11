@@ -19,6 +19,8 @@ import { createRoutineWithReminders, updateRoutineWithReminders, parseScheduleIn
 import { describeSchedule, occursOn, routineStreak, scheduleOf } from '../agent/routine-schedule.js';
 import { logRoutineAnswer } from '../agent/reminder-prompts.js';
 import { reminderPromptsRepo } from '../db/repositories/reminder-prompts.repo.js';
+import { VOICES, currentVoice, findVoice, voiceSample } from '../audio/voices.js';
+import { isFishConfigured } from '../audio/fish-audio.js';
 import { todayLocal, nowLocal } from '../util/datetime.js';
 import { phoneToJid, jidToPhone } from '../util/jid.js';
 import { resolvePanelUser, requirePanelAdmin, requirePermission, extractToken } from './auth.js';
@@ -131,6 +133,7 @@ export function createServer(bot: BotManager): Express {
   app.use('/api/rewards', requirePermission('rewards.manage'));
   app.use('/api/todos', todoPermissionGate);
   app.use('/api/routines', requirePermission('routines.manage'));
+  app.use('/api/voices', requirePermission('voice.premium'));
   app.use('/api/reminder-responses', requirePermission('reminders.manage', 'routines.manage'));
 
   // ---------- WhatsApp connection (admin only - it's a single shared WhatsApp session) ----------
@@ -622,6 +625,39 @@ export function createServer(bot: BotManager): Express {
     h((req, res) => {
       rewardsRepo.remove(userId(req), Number(req.params.id));
       res.json({ ok: true });
+    }),
+  );
+
+  // ---------- Natural voice (paid extra): choose which one Canix speaks with ----------
+  app.get(
+    '/api/voices',
+    h((req, res) => {
+      const me = usersRepo.getById(userId(req))!;
+      res.json({
+        voices: VOICES.map(({ key, gender, name, style }) => ({ key, gender, name, style })),
+        current: currentVoice(me)?.key ?? null,
+        samplesAvailable: isFishConfigured(),
+      });
+    }),
+  );
+  app.put(
+    '/api/voices',
+    h((req, res) => {
+      const voice = findVoice(String(req.body?.voice ?? ''));
+      if (!voice) return res.status(400).json({ error: 'Esa voz no existe.' });
+      usersRepo.setVoice(userId(req), voice.key, voice.gender);
+      res.json({ current: voice.key });
+    }),
+  );
+  app.get(
+    '/api/voices/:key/sample',
+    rateLimit({ capacity: 40, windowMs: 60_000, keyFn: (req) => `voice-sample:${req.panelUser?.id}` }),
+    h(async (req, res) => {
+      const voice = VOICES.find((v) => v.key === req.params.key);
+      if (!voice) return res.status(404).json({ error: 'Esa voz no existe.' });
+      const mp3 = await voiceSample(voice, userId(req));
+      if (!mp3) return res.status(503).json({ error: 'No pude generar la muestra en este momento.' });
+      res.type('audio/mpeg').send(mp3);
     }),
   );
 

@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { env } from '../config/env.js';
 import { wavToOggOpus } from './ffmpeg.js';
 import { fishTts } from './fish-audio.js';
+import { fishVoiceId } from './voices.js';
 import { aiUsageRepo } from '../db/repositories/ai-usage.repo.js';
 
 let unavailableLogged = false;
@@ -98,6 +99,8 @@ export interface VoiceNoteOptions {
   premium?: boolean;
   /** Whose usage this is (logged to ai_usage for future billing). */
   userId?: number;
+  /** The natural voice this person chose (users.voice_id, see audio/voices.ts) - premium only. */
+  voiceId?: string | null;
 }
 
 /**
@@ -121,7 +124,7 @@ export async function synthesizeVoiceNote(
       console.log('[TTS] Respuesta de %d caracteres > FISH_AUDIO_MAX_CHARS (%d) - va como texto.', trimmed.length, env.audio.fish.maxChars);
       return null;
     }
-    const mp3 = await fishTts(trimmed, voiceGender);
+    const mp3 = await fishTts(trimmed, fishVoiceId({ voice_id: opts.voiceId ?? null, voice_gender: voiceGender ?? null, gender: null }));
     if (mp3) {
       if (opts.userId) {
         try {

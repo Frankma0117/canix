@@ -81,6 +81,7 @@ import { deleteStickerTool } from './delete-sticker.tool.js';
 import { announceUpdateTool } from './announce-update.tool.js';
 import { setUserGenderTool } from './set-user-gender.tool.js';
 import { setVoiceGenderTool } from './set-voice-gender.tool.js';
+import { chooseVoiceTool } from './choose-voice.tool.js';
 import { setFashionProfileTool } from './set-fashion-profile.tool.js';
 import { createListTool } from './create-list.tool.js';
 import { addListItemTool } from './add-list-item.tool.js';
@@ -173,6 +174,7 @@ export function registerTools(): void {
   registry.register(announceUpdateTool);
   registry.register(setUserGenderTool);
   registry.register(setVoiceGenderTool);
+  registry.register(chooseVoiceTool);
   registry.register(setFashionProfileTool);
   registry.register(createListTool);
   registry.register(addListItemTool);

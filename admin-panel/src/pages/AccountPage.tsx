@@ -3,9 +3,10 @@ import { Card } from '../components/ui/Card.tsx';
 import { Badge } from '../components/ui/Badge.tsx';
 import { Page } from '../components/ui/Page.tsx';
 import { PasswordForm } from '../components/PasswordForm.tsx';
+import { VoicePicker } from '../components/VoicePicker.tsx';
 
 export function AccountPage() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   if (!user) return null;
   return (
     <Page title="Mi cuenta">
@@ -28,6 +29,12 @@ export function AccountPage() {
         </div>
         {user.role !== 'admin' && <p className="mt-3 text-xs text-gray-dark">Los módulos los asigna el administrador.</p>}
       </Card>
+
+      {can('voice.premium') && (
+        <Card className="mb-5 p-5">
+          <VoicePicker />
+        </Card>
+      )}
 
       <Card className="p-5">
         <p className="mb-3 font-display text-lg font-semibold text-ink dark:text-white">{user.hasPassword ? 'Cambiar contraseña' : 'Crear contraseña'}</p>

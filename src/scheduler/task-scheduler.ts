@@ -423,6 +423,7 @@ export class TaskScheduler {
         const voice = await synthesizeVoiceNote(text, owner?.voice_gender, {
           premium: can(owner, 'voice.premium'),
           userId: reminder.user_id,
+          voiceId: owner?.voice_id,
         }).catch(() => null);
         if (voice) await this.wa.sendAudio(target, voice).catch(() => {});
       }

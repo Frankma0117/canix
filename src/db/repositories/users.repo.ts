@@ -101,7 +101,18 @@ export const usersRepo = {
   /** Stores this person's preferred TTS voice for voice-note replies (see set-voice-gender.tool.ts
    *  and audio/tts.ts) - independent from setGender() above, which is grammatical, not audio. */
   setVoiceGender(id: number, voiceGender: 'male' | 'female'): void {
-    db.prepare('UPDATE users SET voice_gender = ? WHERE id = ?').run(voiceGender, id);
+    // A specific voice chosen earlier (see setVoice) only survives if it's of that same gender.
+    db.prepare(
+      `UPDATE users SET voice_gender = ?,
+         voice_id = CASE WHEN voice_id LIKE ? THEN voice_id ELSE NULL END
+       WHERE id = ?`,
+    ).run(voiceGender, voiceGender === 'female' ? 'M%' : 'H%', id);
+  },
+
+  /** Stores the natural voice this person picked (a key of audio/voices.ts's catalog) together
+   *  with its gender, so the free local voice follows the same choice. */
+  setVoice(id: number, voiceKey: string, voiceGender: 'male' | 'female'): void {
+    db.prepare('UPDATE users SET voice_id = ?, voice_gender = ? WHERE id = ?').run(voiceKey, voiceGender, id);
   },
 
   /** Parses a user's allowed_tools column. Null means unrestricted (every tool available). */

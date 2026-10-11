@@ -9,10 +9,11 @@ export function isFishConfigured(): boolean {
 /**
  * Text -> MP3 with a natural voice through Fish Audio (https://docs.fish.audio). Returns null on any
  * failure (no key, HTTP error, timeout) so callers can fall back to local Piper - a paid extra must
- * never be the reason a reply is lost. Never logs the API key or the full text.
+ * never be the reason a reply is lost. Never logs the API key or the full text. `voiceId` is the
+ * Fish "reference_id" to speak with (see audio/voices.ts's fishVoiceId for whose voice is whose).
  */
-export async function fishTts(text: string, voiceGender: 'male' | 'female' | null | undefined): Promise<Buffer | null> {
-  const { apiKey, model, voiceMale, voiceFemale, timeoutMs } = env.audio.fish;
+export async function fishTts(text: string, voiceId: string): Promise<Buffer | null> {
+  const { apiKey, model, timeoutMs } = env.audio.fish;
   if (!apiKey) {
     if (!missingKeyLogged) {
       console.log('[TTS] FISH_AUDIO_API_KEY no configurada - uso Piper (voz local).');
@@ -27,7 +28,7 @@ export async function fishTts(text: string, voiceGender: 'male' | 'female' | nul
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', model },
       body: JSON.stringify({
         text,
-        reference_id: voiceGender === 'female' ? voiceFemale : voiceMale,
+        reference_id: voiceId,
         format: 'mp3',
         mp3_bitrate: 64, // voice notes: 64kbps is indistinguishable on a phone and half the bytes
         latency: 'balanced',

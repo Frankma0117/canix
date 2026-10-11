@@ -127,6 +127,7 @@ export const ALWAYS_ON_TOOLS = [
   'announce_update',
   'set_user_gender',
   'set_voice_gender',
+  'choose_voice',
   'set_fashion_profile',
 ];
 

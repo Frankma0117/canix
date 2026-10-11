@@ -9,6 +9,7 @@ import { usersRepo } from '../db/repositories/users.repo.js';
 import { aiUsageRepo } from '../db/repositories/ai-usage.repo.js';
 import { can } from '../permissions/engine.js';
 import { fishTts } from '../audio/fish-audio.js';
+import { fishVoiceId } from '../audio/voices.js';
 import { sanitizeForSpeech } from '../audio/tts.js';
 import { canServeCallAudio, publishCallAudio } from './call-audio.js';
 
@@ -108,7 +109,7 @@ async function naturalVoiceUrl(reminder: CallReminder): Promise<string | null> {
   const owner = usersRepo.getById(reminder.user_id);
   if (!owner || !can(owner, 'voice.premium')) return null;
   const text = sanitizeForSpeech(reminder.message);
-  const mp3 = await fishTts(text, owner.voice_gender ?? owner.gender);
+  const mp3 = await fishTts(text, fishVoiceId(owner));
   if (!mp3) return null;
   try {
     aiUsageRepo.log(owner.id, 'voice.fish.call', env.audio.fish.model, text.length, 0);

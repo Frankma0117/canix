@@ -502,6 +502,10 @@ export function initSchema(): void {
   // set_voice_gender (self, or admin on behalf of another granted user, same pattern as
   // set_user_gender). Validated at the application layer, same reasoning as gender above.
   ensureColumn('users', 'voice_gender', 'voice_gender TEXT');
+  // Which natural voice (a key of audio/voices.ts's catalog, e.g. 'M3') this person chose for
+  // voice notes and calls. NULL = the default voice of their voice_gender. Only matters for people
+  // with the paid 'voice.premium' permission.
+  ensureColumn('users', 'voice_id', 'voice_id TEXT');
 
   // Deeper garment attributes (see taxonomy.ts's candidateLabelsForVisionPass2 / NECKLINES/SLEEVES/
   // LENGTHS/CLOSURES/POCKETS) - only auto-detected for garment types where they're visually

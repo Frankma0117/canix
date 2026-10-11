@@ -37,6 +37,8 @@ export interface User {
   // voice-note replies back to this person. See set-voice-gender.tool.ts / audio/tts.ts. Separate
   // from `gender` above (that's grammatical, this is audio).
   voice_gender: 'male' | 'female' | null;
+  // Chosen natural voice (key of audio/voices.ts's catalog) - NULL = default for voice_gender.
+  voice_id: string | null;
   // Web portal credentials (see auth/web-auth.ts). Login = WhatsApp number; NULL hash = no
   // password set yet (can't log in). must_change_password = temporary password handed out by the
   // admin/bot, the portal forces a change before anything else.

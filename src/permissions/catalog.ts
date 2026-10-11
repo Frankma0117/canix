@@ -199,8 +199,8 @@ export const PERMISSIONS: PermissionDef[] = [
     module: 'Extras de pago',
     label: 'Voz natural (IA)',
     description:
-      'Notas de voz y llamadas con voz humana natural (Fish Audio), masculina o femenina según la persona. Sin este permiso se usa la voz local gratuita.',
-    tools: [],
+      'Notas de voz y llamadas con voz humana natural (Fish Audio), eligiendo entre varias voces de hombre y mujer. Sin este permiso se usa la voz local gratuita.',
+    tools: ['choose_voice'],
     billable: true,
   },
 ];
