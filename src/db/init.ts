@@ -593,6 +593,21 @@ export function initSchema(): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_reminder_responses_prompt ON reminder_responses(prompt_id);
+
+    -- Tappable options sent under one of the bot's closed questions (see agent/choices.ts): the
+    -- poll's secret to read the vote, and what each option counts as when tapped. Only the latest question's
+    -- poll(s) per person stay 'open'.
+    CREATE TABLE IF NOT EXISTS choice_polls (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      poll_msg_id TEXT NOT NULL,
+      poll_secret BLOB NOT NULL,
+      options TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_choice_polls_msg ON choice_polls(poll_msg_id);
+    CREATE INDEX IF NOT EXISTS idx_choice_polls_user ON choice_polls(user_id, status);
   `);
 
   // The daily "agenda del día" auto-push (kind 'daily_agenda') is no longer created (see

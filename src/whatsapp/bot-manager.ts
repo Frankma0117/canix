@@ -3,6 +3,8 @@ import { handleTestModeCommand, testModeNotice } from '../permissions/test-mode.
 import { reminderPromptsRepo } from '../db/repositories/reminder-prompts.repo.js';
 import { applyAnswer, answerFromVote, answerFromText } from '../agent/reminder-prompts.js';
 import { sendAutoSticker, ROUTINE_DONE_KEYWORDS } from '../util/stickers.js';
+import { choicePollsRepo } from '../db/repositories/choice-polls.repo.js';
+import { splitChoices, sendChoices, optionFromVote } from '../agent/choices.js';
 import type { PromptAnswer, PromptSource, ReminderPrompt } from '../types/index.js';
 import { jidNormalizedUser, downloadMediaMessage, type WAMessage } from 'baileys';
 import { WaManager } from './wa-manager.js';
@@ -22,7 +24,7 @@ import { ensureWeeklyReportReminder } from '../agent/weekly-report.js';
 import { ensureDailyResetReminder } from '../agent/daily-reset.js';
 import { ensureDailyDedupReminder } from '../agent/dedup.js';
 import { legacyAdminToken } from '../server/auth.js';
-import { renderMainMenu, resolveMenuCategory, renderCategoryDetail, renderUnknownCategory } from '../agent/menu.js';
+import { renderMainMenu, menuChoices, resolveMenuCategory, renderCategoryDetail, renderUnknownCategory } from '../agent/menu.js';
 import { isTwilioConfigured } from '../calls/twilio-client.js';
 import { handleModeMessage } from '../agent/modes.js';
 import { env } from '../config/env.js';
@@ -130,7 +132,10 @@ export class BotManager {
     const user = usersRepo.getByJidOrLid(phoneJid) ?? usersRepo.getByJidOrLid(jid);
     if (!user) return;
     const prompt = reminderPromptsRepo.findByMessageId(user.id, pollMessageId);
-    if (!prompt?.poll_secret) return;
+    if (!prompt?.poll_secret) {
+      await this.handleChoiceVote(user.id, { jid, altJid, pollMessageId, decrypt });
+      return;
+    }
 
     const selected = decrypt(prompt.poll_secret);
     if (!selected) {
@@ -143,6 +148,35 @@ export class BotManager {
     const answer = answerFromVote(selected);
     if (!answer) return; // vote removed - the last recorded answer stays
     await this.recordPromptAnswer(jid, prompt, answer, 'poll');
+  }
+
+  /**
+   * A tap on the options under one of the bot's questions (see agent/choices.ts): the chosen
+   * option goes through the normal message pipeline as if it had been typed. Only the question
+   * still waiting for an answer counts - once the conversation moved on, an old one says so
+   * instead of being taken as a reply to something else.
+   */
+  private async handleChoiceVote(
+    userId: number,
+    { jid, altJid, pollMessageId, decrypt }: { jid: string; altJid?: string; pollMessageId: string; decrypt: (secret: Uint8Array) => string[] | null },
+  ): Promise<void> {
+    const poll = choicePollsRepo.findByMessageId(userId, pollMessageId);
+    if (!poll) return;
+    const selected = decrypt(poll.poll_secret);
+    if (!selected) {
+      console.error('[CHOICES] No se pudo leer el voto de #%d en %s.', userId, pollMessageId);
+      await this.wa.sendText(jid, '🙈 No alcancé a leer lo que tocaste. Escríbeme tu respuesta y seguimos.').catch(() => {});
+      return;
+    }
+    const option = optionFromVote(poll.options, selected);
+    if (!option) return; // vote removed
+    if (poll.status !== 'open') {
+      await this.wa.sendText(jid, 'Esa pregunta ya quedó atrás 🙂 Dime qué necesitas ahora y lo vemos.').catch(() => {});
+      return;
+    }
+    choicePollsRepo.closeOpenFor(userId); // this one and any sibling poll of the same question
+    console.log('[CHOICES] Usuario #%d tocó "%s" -> "%s".', userId, option.label, option.reply);
+    await this.enqueueIncoming({ jid, altJid, text: option.reply });
   }
 
   private async recordPromptAnswer(jid: string, prompt: ReminderPrompt, answer: PromptAnswer, source: PromptSource): Promise<void> {
@@ -280,6 +314,10 @@ export class BotManager {
               'solo "hombre" o "mujer").',
           )
           .catch(() => {});
+        await sendChoices(this.wa, admin.id, admin.jid, [
+          { label: 'Hombre', reply: 'hombre' },
+          { label: 'Mujer', reply: 'mujer' },
+        ]);
       }
 
       let user = usersRepo.getByJidOrLid(phoneJid) ?? usersRepo.getByJidOrLid(jid);
@@ -315,6 +353,9 @@ export class BotManager {
       }
 
       console.log('[BOT] Usuario resuelto: #%d "%s" (%s)', user.id, user.name ?? '(sin nombre)', user.role);
+
+      // The conversation moved on: options offered under an earlier question no longer wait for a tap.
+      choicePollsRepo.closeOpenFor(user.id);
 
       // Demo over: no more AI turns (each one costs) - just the way to become a customer.
       if (isDemoExpired(user)) {
@@ -477,6 +518,10 @@ export class BotManager {
             '¿Los guardo? Responde "sí" para guardar todos, los números separados por coma para guardar ' +
             'solo algunos (ej. "1,3"), o "no" para descartar.',
         );
+        await sendChoices(this.wa, user.id, jid, [
+          { label: shared.length > 1 ? '✅ Sí, guardar todos' : '✅ Sí, guardarlo', reply: 'sí' },
+          { label: '❌ No, descartar', reply: 'no' },
+        ]);
         return;
       }
 
@@ -568,9 +613,8 @@ export class BotManager {
       // source of truth also used by the show_menu AI tool, so both entry points stay in sync.
       if (command === '/menu') {
         const access = { fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: botUser.role === 'admin', permissions: effectivePermissions(botUser) };
-        await this.wa.sendText(jid, renderMainMenu(access) + (testMode ? `
-
-${testModeNotice(testMode)}` : ''));
+        await this.wa.sendText(jid, renderMainMenu(access) + (testMode ? `\n\n${testModeNotice(testMode)}` : ''));
+        await sendChoices(this.wa, user.id, jid, menuChoices(access), '¿Qué quieres abrir? 👇');
         return;
       }
       if (command.startsWith('/menu ')) {
@@ -612,7 +656,7 @@ ${testModeNotice(testMode)}` : ''));
       // processMessage() already catches AI-provider failures internally and returns a friendly
       // message instead of throwing (see ai-agent.ts's callModelWithRetry) - the outer try/catch
       // here is the last-resort net for anything else unexpected.
-      const reply = await withWorkingUpdates(
+      const rawReply = await withWorkingUpdates(
         processMessage(text, this.wa, {
           id: user.id,
           jid: user.jid,
@@ -624,6 +668,8 @@ ${testModeNotice(testMode)}` : ''));
         },
         { intervalMs: WORKING_UPDATE_INTERVAL_MS, maxTicks: WORKING_UPDATE_MAX_TICKS },
       );
+      // A closed question at the end of the reply comes with its options to tap (see agent/choices.ts).
+      const { text: reply, options: replyOptions } = splitChoices(rawReply);
       console.log('[BOT] Respuesta final a #%d: "%s"', user.id, reply.length > 200 ? `${reply.slice(0, 200)}…` : reply);
       await sleep(typingDelayMs(reply));
 
@@ -651,6 +697,7 @@ ${testModeNotice(testMode)}` : ''));
       } else {
         await this.wa.sendText(jid, reply);
       }
+      if (replyOptions) await sendChoices(this.wa, user.id, jid, replyOptions);
 
       // A sticker that fits what just happened (a successful action, or a greeting/thanks/goodbye)
       // - after the reply, so it reads as the closing touch. Same cooldown as every sticker.

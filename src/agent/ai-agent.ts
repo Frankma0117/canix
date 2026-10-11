@@ -15,6 +15,7 @@ import { isModeKey, toolsForMode, getModeCategory, type ModeKey } from './modes.
 import { sleep } from '../util/human-delay.js';
 import { allowedToolsFor, isSchedulingClientOnly, effectivePermissions, describePermissions, asBotUser } from '../permissions/engine.js';
 import { buildClientSystemPrompt, schedulingPromptSection } from '../scheduling/prompts.js';
+import { CHOICES_RULE, stripChoices } from './choices.js';
 import { env } from '../config/env.js';
 import type { WaManager } from '../whatsapp/wa-manager.js';
 
@@ -516,7 +517,7 @@ function buildSystemPrompt(
         'el recordatorio por WhatsApp.';
 
   return [
-    BASE_PROMPT + (isAdmin ? ADMIN_PROMPT_ADDENDUM : '') + permsAddendum + callsAddendum + schedulingAddendum + modeAddendum,
+    BASE_PROMPT + CHOICES_RULE + (isAdmin ? ADMIN_PROMPT_ADDENDUM : '') + permsAddendum + callsAddendum + schedulingAddendum + modeAddendum,
     '',
     currentTimeContext(),
     upcomingDaysContext(),
@@ -694,7 +695,9 @@ export async function processMessage(
     if (toolCalls.length === 0) {
       const text = (choice.content ?? '').trim() || 'Disculpa, ¿me repites por favor? 🙏';
       console.log('[LLM] Sin tool calls, respondo directo: "%s"', text);
-      messagesRepo.add(user.id, 'assistant', text);
+      // Stored without the [[opciones: ...]] line (see agent/choices.ts) - the caller still gets
+      // it, to turn it into tappable options.
+      messagesRepo.add(user.id, 'assistant', stripChoices(text));
       return text;
     }
 

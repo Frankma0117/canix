@@ -346,6 +346,17 @@ function isModeCategory(key: string): boolean {
   return (MODE_KEYS as readonly string[]).includes(key);
 }
 
+/**
+ * The main menu's categories as tappable options (see agent/choices.ts): tapping a mode enters it,
+ * tapping any other category shows its detail - the same two things the menu text asks to type.
+ */
+export function menuChoices(access: MenuAccess): { label: string; reply: string }[] {
+  return visibleCategories(access).map((cat) => ({
+    label: `${cat.emoji} ${cat.title}`,
+    reply: isModeCategory(cat.key) ? cat.aliases[0] : `/menu ${cat.key}`,
+  }));
+}
+
 export function renderMainMenu(access: MenuAccess): string {
   const lines: string[] = ['📋 *Menú Canix*', '', 'Todo lo que puedo hacer por vos:', ''];
 

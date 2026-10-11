@@ -1,3 +1,4 @@
+import { sendChoices } from '../agent/choices.js';
 import { db } from '../db/pool.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { permissionsRepo } from '../db/repositories/permissions.repo.js';
@@ -28,6 +29,7 @@ export class SchedulingError extends Error {}
 /** Anything that can send a WhatsApp text - the live WaManager, injected once at boot. */
 interface Notifier {
   sendText(jid: string, text: string): Promise<void>;
+  sendPoll?(jid: string, question: string, options: string[], secret: Uint8Array): Promise<string | null>;
   checkOnWhatsApp?(jid: string): Promise<boolean | null>;
   ownPhone?(): string | null;
 }
@@ -226,6 +228,18 @@ export async function requestAppointment(client: User, prof: Professional, start
       `📅 *Nueva solicitud de cita #${id}*\n${who} - ${formatWhen(appt.start_at)}${appt.reason ? `\nMotivo: ${appt.reason}` : ''}\n\n` +
         `Responde "confirmar cita ${id}" o "rechazar cita ${id}" (o hazlo desde el calendario del portal).`,
     );
+    if (notifier?.sendPoll) {
+      await sendChoices(
+        { sendPoll: notifier.sendPoll.bind(notifier) },
+        appt.professional_id,
+        appt.professional_jid,
+        [
+          { label: '✅ Confirmar', reply: `confirmar cita ${id}` },
+          { label: '❌ Rechazar', reply: `rechazar cita ${id}` },
+        ],
+        `Cita #${id}: ¿qué hacemos? 👇`,
+      );
+    }
   } else {
     await notify(appt.professional_jid, `📅 Cita #${id} agendada y confirmada automáticamente: ${who} - ${formatWhen(appt.start_at)}.`);
   }
