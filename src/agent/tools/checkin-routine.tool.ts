@@ -4,6 +4,8 @@ import { habitLogsRepo } from '../../db/repositories/habit-logs.repo.js';
 import { todayLocal } from '../../util/datetime.js';
 import { sendAutoSticker, ROUTINE_DONE_KEYWORDS, NIGHT_KEYWORDS } from '../../util/stickers.js';
 import { maybeNightFarewell } from '../agenda.js';
+import { routineStreak } from '../routine-schedule.js';
+import { logRoutineAnswer } from '../reminder-prompts.js';
 import { resolveActingUser } from './act-on-behalf.js';
 
 export const checkinRoutineTool: Tool = {
@@ -38,7 +40,9 @@ export const checkinRoutineTool: Tool = {
     const done = args.done === undefined ? true : Boolean(args.done);
     habitLogsRepo.checkIn(id, date, done, args.note ? String(args.note) : null);
 
-    const streak = habitLogsRepo.currentStreak(id, todayLocal());
+    logRoutineAnswer(userId, id, date, done, 'chat');
+
+    const streak = routineStreak(todo, todayLocal());
 
     let farewell: string | null = null;
     if (done) {
@@ -55,7 +59,7 @@ export const checkinRoutineTool: Tool = {
     }
 
     return done
-      ? `¡"${todo.title}" hecha el ${date}! 🎉 Racha actual: ${streak} día(s).${farewell ? `\n\n${farewell}` : ''}`
-      : `Ok, marqué "${todo.title}" como NO hecha el ${date}. Racha actual: ${streak} día(s).`;
+      ? `¡"${todo.title}" hecha el ${date}! 🎉 Racha actual: ${streak}.${farewell ? `\n\n${farewell}` : ''}`
+      : `Ok, marqué "${todo.title}" como NO hecha el ${date}. Racha actual: ${streak}.`;
   },
 };

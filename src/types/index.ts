@@ -46,6 +46,9 @@ export interface User {
   // and 'active' | 'expired' | NULL (not a demo account / converted into a real customer).
   demo_expires_at: string | null;
   demo_status: 'active' | 'expired' | null;
+  // Administrator only: JSON { label, permissions, since } while trying the bot with a reduced set
+  // of permissions (see permissions/test-mode.ts). NULL = off.
+  test_mode: string | null;
   password_updated_at: string | null;
   failed_logins: number;
   locked_until: string | null;
@@ -202,6 +205,12 @@ export interface Todo {
   // before the bot asks for a check-in (see create-routine.tool.ts / task-scheduler.ts).
   reminder_time: string | null;
   duration_minutes: number | null;
+  // Routine schedule details (see agent/routine-schedule.ts): weekdays as "1,3,5" (0 = domingo),
+  // every how many days/weeks/months, day of the month for monthly ones, and the anchor date.
+  weekdays: string | null;
+  recurrence_interval: number;
+  month_day: number | null;
+  start_date: string | null; // 'YYYY-MM-DD'
   status: TodoStatus;
   completed_at: string | null;
   created_at: string;
@@ -459,5 +468,36 @@ export interface RewardPunishment {
   description: string;
   note: string | null;
   date: string; // 'YYYY-MM-DD'
+  created_at: string;
+}
+
+export type PromptAnswer = 'yes' | 'no';
+/** Where an answer came from: the poll under the reminder, a quoted "sí/no" reply, telling the bot
+ *  in chat (checkin_routine), or the web portal. */
+export type PromptSource = 'poll' | 'reply' | 'chat' | 'web';
+
+/** One occurrence of a reminder/routine that can be answered "sí/no" (see agent/reminder-prompts.ts). */
+export interface ReminderPrompt {
+  id: number;
+  user_id: number;
+  reminder_id: number | null;
+  todo_id: number | null;
+  title: string;
+  occurrence_date: string; // 'YYYY-MM-DD'
+  sent_at: string | null; // NULL = answered without a notice having gone out (marked by hand)
+  text_msg_id: string | null;
+  poll_msg_id: string | null;
+  poll_secret: Buffer | null;
+  answer: PromptAnswer | null;
+  answered_at: string | null;
+  answer_source: PromptSource | null;
+  created_at: string;
+}
+
+export interface ReminderResponse {
+  id: number;
+  prompt_id: number;
+  answer: PromptAnswer;
+  source: PromptSource;
   created_at: string;
 }

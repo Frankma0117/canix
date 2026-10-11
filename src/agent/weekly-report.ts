@@ -2,6 +2,7 @@ import { todosRepo } from '../db/repositories/todos.repo.js';
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { todayLocal, nowLocal, addDays, parseWall, weekdayName } from '../util/datetime.js';
+import { countOccurrences, routineStreak, scheduleOf } from './routine-schedule.js';
 import { env } from '../config/env.js';
 
 /**
@@ -22,10 +23,16 @@ export function buildWeeklyReportMessage(userId: number): string {
     lines.push('(No tienes rutinas activas.)');
   } else {
     for (const r of routines) {
-      const done = habitLogsRepo.countDoneInRange(r.id, weekStart, today);
-      const streak = habitLogsRepo.currentStreak(r.id, today);
-      const badge = done === 7 ? ' 🏆' : done >= 4 ? ' 💪' : done === 0 ? ' 😴' : '';
-      lines.push(`- ${r.title}: ${done}/7 días cumplidos${badge} (racha actual: ${streak} día${streak === 1 ? '' : 's'})`);
+      // Out of the times it was actually due this week (a Monday-only routine is 1, not 7).
+      const due = countOccurrences(scheduleOf(r), weekStart, today);
+      if (due === 0) {
+        lines.push(`- ${r.title}: no tocaba esta semana`);
+        continue;
+      }
+      const done = Math.min(habitLogsRepo.countDoneInRange(r.id, weekStart, today), due);
+      const streak = routineStreak(r, today);
+      const badge = done === due ? ' 🏆' : done * 2 >= due ? ' 💪' : done === 0 ? ' 😴' : '';
+      lines.push(`- ${r.title}: ${done}/${due} cumplidas${badge} (racha actual: ${streak})`);
     }
   }
 

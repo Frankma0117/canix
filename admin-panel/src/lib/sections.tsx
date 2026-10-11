@@ -26,6 +26,7 @@ import {
   Grid3x3,
   BarChart3,
   LineChart,
+  FlaskConical,
 } from 'lucide-react';
 import type { StickerName } from '../components/brand/Sticker.tsx';
 import { HomePage } from '../pages/HomePage.tsx';
@@ -53,6 +54,7 @@ import { UsersPage } from '../pages/admin/UsersPage.tsx';
 import { PackagesPage } from '../pages/admin/PackagesPage.tsx';
 import { AuditPage } from '../pages/admin/AuditPage.tsx';
 import { SchedulingAdminPage } from '../pages/admin/SchedulingAdminPage.tsx';
+import { TestModePage } from '../pages/admin/TestModePage.tsx';
 
 export interface SectionDef {
   id: string;
@@ -96,6 +98,7 @@ export const SECTIONS: SectionDef[] = [
   { id: 'admin-analytics', label: 'Analítica web', group: 'Administración', icon: LineChart, adminOnly: true, render: () => <AnalyticsPage /> },
   { id: 'admin-usage', label: 'Uso y costos', group: 'Administración', icon: BarChart3, adminOnly: true, render: () => <UsagePage /> },
   { id: 'admin-packages', label: 'Paquetes', group: 'Administración', icon: Package, adminOnly: true, render: () => <PackagesPage /> },
+  { id: 'admin-test-mode', label: 'Modo prueba', group: 'Administración', icon: FlaskConical, adminOnly: true, render: () => <TestModePage /> },
   { id: 'admin-scheduling', label: 'Agendas generales', group: 'Administración', icon: Building2, adminOnly: true, render: () => <SchedulingAdminPage /> },
   { id: 'admin-audit', label: 'Auditoría', group: 'Administración', icon: ScrollText, adminOnly: true, render: () => <AuditPage /> },
   { id: 'connection', label: 'Conexión WhatsApp', group: 'Administración', icon: Smartphone, adminOnly: true, render: () => <ConnectionPage /> },

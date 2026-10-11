@@ -2,7 +2,8 @@ import type { Express } from 'express';
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { permissionsRepo, AccessError } from '../db/repositories/permissions.repo.js';
 import { PERMISSIONS, isPermissionKey } from '../permissions/catalog.js';
-import { effectivePermissions } from '../permissions/engine.js';
+import { effectivePermissions, testModeOf } from '../permissions/engine.js';
+import { enterTestMode, exitTestMode } from '../permissions/test-mode.js';
 import { issueTemporaryPassword, revokeAllSessions } from '../auth/web-auth.js';
 import { phoneToJid, jidToPhone } from '../util/jid.js';
 import { ensureWeeklyReportReminder } from '../agent/weekly-report.js';
@@ -64,6 +65,30 @@ export function registerAdminRoutes(app: Express, bot: BotManager): void {
   registerGrowthAdminRoutes(app, userView as never);
 
   app.get('/api/admin/permissions', h((_req, res) => res.json(PERMISSIONS.map(({ tools: _t, ...p }) => p))));
+
+  // ---------- modo prueba (see permissions/test-mode.ts) ----------
+  // The administrator tries the WhatsApp bot with one package's permissions, or a hand-picked set.
+  app.get('/api/admin/test-mode', h((req, res) => res.json({ testMode: testModeOf(req.panelUser) })));
+  app.post(
+    '/api/admin/test-mode',
+    h((req, res) => {
+      const packageId = int(req.body?.packageId);
+      const pkg = packageId !== undefined ? permissionsRepo.getPackage(packageId) : undefined;
+      if (packageId !== undefined && !pkg) throw new AccessError('Ese paquete no existe.');
+      const testMode = enterTestMode(req.panelUser!, {
+        label: pkg?.name ?? str(req.body?.label, 80) ?? 'Personalizado',
+        permissions: pkg?.permissions ?? strArr(req.body?.permissions),
+      });
+      res.json({ testMode });
+    }),
+  );
+  app.delete(
+    '/api/admin/test-mode',
+    h((req, res) => {
+      exitTestMode(req.panelUser!);
+      res.json({ testMode: null });
+    }),
+  );
 
   // ---------- users ----------
   app.get('/api/admin/users', h((_req, res) => res.json(usersRepo.listAll().map(userView))));

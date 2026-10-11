@@ -1,3 +1,4 @@
+import { routineStreak, describeSchedule, scheduleOf } from '../routine-schedule.js';
 import type { Tool } from '../tool-registry.js';
 import { todosRepo } from '../../db/repositories/todos.repo.js';
 import { habitLogsRepo } from '../../db/repositories/habit-logs.repo.js';
@@ -32,12 +33,12 @@ export const routineProgressTool: Tool = {
 
     const days = Number(args.days) > 0 ? Number(args.days) : 7;
     const history = habitLogsRepo.history(id, days);
-    const streak = habitLogsRepo.currentStreak(id, todayLocal());
+    const streak = routineStreak(todo, todayLocal());
 
     const historyText = history.length
       ? history.map((h) => `${h.log_date}: ${h.done ? '✅' : '❌'}${h.note ? ` (${h.note})` : ''}`).join('\n')
       : '(Sin registros todavía.)';
 
-    return `Rutina "${todo.title}" — racha actual: ${streak} día(s).\n${historyText}`;
+    return `Rutina "${todo.title}" (${describeSchedule(scheduleOf(todo))}) — racha actual: ${streak}.\n${historyText}`;
   },
 };

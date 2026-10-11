@@ -3,6 +3,7 @@ import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { todayLocal, weekdayName, dateOnly, nowLocal } from '../util/datetime.js';
 import { nightFarewellMessage } from '../util/motivational.js';
+import { occursOn, scheduleOf } from './routine-schedule.js';
 import { env } from '../config/env.js';
 
 interface AgendaItem {
@@ -27,7 +28,7 @@ export function buildAgendaMessage(userId: number): string {
 
   const routines = todosRepo.list(userId, { scope: 'routine' });
   for (const r of routines) {
-    if (!r.reminder_time) continue;
+    if (!r.reminder_time || !occursOn(scheduleOf(r), today)) continue; // not one of its days
     const log = habitLogsRepo.getForDate(r.id, today);
     const runAt = `${today} ${r.reminder_time}:00`;
     const paused = remindersRepo.listByTodo(r.id).some((rem) => rem.paused_until && rem.paused_until > now);
@@ -81,7 +82,7 @@ function remainingTodayCount(userId: number): number {
   const today = todayLocal();
   const todosToday = todosRepo.list(userId, { scope: 'today', status: 'pending' }).length;
   const routines = todosRepo.list(userId, { scope: 'routine' });
-  const routinesPending = routines.filter((r) => !habitLogsRepo.getForDate(r.id, today)?.done).length;
+  const routinesPending = routines.filter((r) => occursOn(scheduleOf(r), today) && !habitLogsRepo.getForDate(r.id, today)?.done).length;
   return todosToday + routinesPending;
 }
 

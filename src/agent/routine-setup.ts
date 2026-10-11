@@ -1,22 +1,107 @@
 import { todosRepo } from '../db/repositories/todos.repo.js';
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { db } from '../db/pool.js';
-import { todayLocal, addMinutes, addDays, parseWall, nowLocal } from '../util/datetime.js';
+import { addMinutes, nowLocal } from '../util/datetime.js';
 import { routineStartMessage, routineCheckinMessage } from '../util/motivational.js';
-import type { RecurrenceFreq, Reminder } from '../types/index.js';
+import {
+  anchorDate,
+  nextOccurrence,
+  normalizeWeekdays,
+  scheduleOf,
+  type RoutineFreq,
+  type RoutineSchedule,
+} from './routine-schedule.js';
+import type { RecurrenceFreq, Reminder, Todo } from '../types/index.js';
 
-/** Pushes a same-day run_at forward one cycle if it's already in the past, so a routine set up
- *  mid-day doesn't immediately fire for a reminder_time that already happened today. */
-function firstFutureOccurrence(runAt: string, freq: RecurrenceFreq): string {
-  if (parseWall(runAt) > parseWall(nowLocal())) return runAt;
-  return freq === 'weekly' ? addDays(runAt, 7) : addDays(runAt, 1);
+/** What a caller (chat tool or web portal) may say about when a routine happens. */
+export interface RoutineScheduleInput {
+  freq?: RoutineFreq;
+  /** Every how many days/weeks/months (2 + weekly = "cada 15 días"). */
+  interval?: number;
+  weekdays?: number[];
+  monthDay?: number | null;
+  /** 'YYYY-MM-DD' - first day it may happen; default: its next occurrence from now. */
+  startDate?: string | null;
+}
+
+const TIME_RE = /^\d{1,2}:\d{2}$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Reads the schedule fields the chat tools and the portal both send (frequency, interval,
+ * weekdays, month_day, start_date) into a RoutineScheduleInput, or returns a message saying what's
+ * wrong. Only the keys actually present are set, so it serves edits too.
+ */
+export function parseScheduleInput(raw: {
+  frequency?: unknown;
+  interval?: unknown;
+  weekdays?: unknown;
+  month_day?: unknown;
+  start_date?: unknown;
+}): RoutineScheduleInput | { error: string } {
+  const out: RoutineScheduleInput = {};
+  if (raw.frequency !== undefined && raw.frequency !== null && raw.frequency !== '') {
+    const f = String(raw.frequency);
+    if (f !== 'daily' && f !== 'weekly' && f !== 'monthly') return { error: 'La frecuencia debe ser daily, weekly o monthly.' };
+    out.freq = f;
+  }
+  if (raw.interval !== undefined && raw.interval !== null && raw.interval !== '') {
+    const n = Number(raw.interval);
+    if (!Number.isInteger(n) || n < 1 || n > 52) return { error: 'El intervalo debe ser un número entero entre 1 y 52.' };
+    out.interval = n;
+  }
+  if (raw.weekdays !== undefined && raw.weekdays !== null) {
+    out.weekdays = normalizeWeekdays(raw.weekdays);
+    if (Array.isArray(raw.weekdays) && raw.weekdays.length > 0 && out.weekdays.length === 0) {
+      return { error: 'No reconocí los días de la semana (usa lunes, martes... o números 0-6, 0 = domingo).' };
+    }
+  }
+  if (raw.month_day !== undefined && raw.month_day !== null && raw.month_day !== '') {
+    const d = Number(raw.month_day);
+    if (!Number.isInteger(d) || d < 1 || d > 31) return { error: 'El día del mes debe estar entre 1 y 31.' };
+    out.monthDay = d;
+  }
+  if (raw.start_date !== undefined && raw.start_date !== null && raw.start_date !== '') {
+    const s = String(raw.start_date);
+    if (!DATE_RE.test(s)) return { error: "La fecha de inicio debe ir en formato 'YYYY-MM-DD'." };
+    out.startDate = s;
+  }
+  return out;
+}
+
+export function isValidTime(time: string): boolean {
+  if (!TIME_RE.test(time)) return false;
+  const [h, m] = time.split(':').map(Number);
+  return h <= 23 && m <= 59;
+}
+
+/** Fills in the defaults a schedule needs to be complete (weekly needs days, monthly needs a day). */
+function completeSchedule(input: RoutineScheduleInput, time: string, base?: RoutineSchedule): RoutineSchedule {
+  const freq = input.freq ?? base?.freq ?? 'daily';
+  const today = nowLocal().slice(0, 10);
+  const [, , dd] = today.split('-').map(Number);
+  const todayWeekday = new Date(`${today}T00:00:00Z`).getUTCDay();
+  const sameFreq = base?.freq === freq;
+  return {
+    freq,
+    interval: input.interval ?? (sameFreq ? base!.interval : 1),
+    weekdays: freq === 'weekly' ? (input.weekdays?.length ? input.weekdays : sameFreq && base!.weekdays.length ? base!.weekdays : [todayWeekday]) : [],
+    monthDay: freq === 'monthly' ? (input.monthDay ?? (sameFreq ? base!.monthDay : null) ?? dd) : null,
+    startDate: input.startDate ?? null,
+    time,
+  };
+}
+
+function storedFreq(freq: RoutineFreq): RecurrenceFreq {
+  return freq;
 }
 
 /**
- * Creates a routine todo plus its auto-created reminder pair: a heads-up at reminder_time, and a
- * check-in prompt reminder_time + duration_minutes later. Both linked to the routine (todo_id) so
- * deleting it cascades and removes them too. Shared by the create_routine chat tool and the admin
- * panel's routine form, so routines behave the same regardless of where they're created.
+ * Creates a routine todo plus its auto-created reminder pair: the notice at reminder_time (which
+ * carries the "¿lo hiciste?" poll, see agent/reminder-prompts.ts) and a check-in question
+ * duration_minutes later, only sent if that poll couldn't go out. Both linked to the routine
+ * (todo_id) so deleting it cascades and removes them too. Shared by the create_routine chat tool
+ * and the portal's routine form, so routines behave the same wherever they're created.
  */
 export function createRoutineWithReminders(
   userId: number,
@@ -24,57 +109,54 @@ export function createRoutineWithReminders(
   fields: {
     title: string;
     categoryId: number | null;
-    freq: RecurrenceFreq;
     reminderTime: string;
     durationMinutes: number;
-  },
+  } & RoutineScheduleInput,
 ): number {
+  const draft = completeSchedule(fields, fields.reminderTime);
+  const schedule: RoutineSchedule = { ...draft, startDate: anchorDate(draft, fields.startDate) };
+
   const id = todosRepo.create(userId, {
     title: fields.title,
     categoryId: fields.categoryId,
     scope: 'routine',
     dueDate: null,
-    recurrenceFreq: fields.freq,
-    reminderTime: fields.reminderTime,
+    recurrenceFreq: storedFreq(schedule.freq),
+    reminderTime: schedule.time,
     durationMinutes: fields.durationMinutes,
+    weekdays: schedule.weekdays.length ? schedule.weekdays.join(',') : null,
+    recurrenceInterval: schedule.interval,
+    monthDay: schedule.monthDay,
+    startDate: schedule.startDate,
   });
 
-  const [h, m] = fields.reminderTime.split(':').map(Number);
-  const todayAtReminderTime = `${todayLocal()} ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
-  const reminderRunAt = firstFutureOccurrence(todayAtReminderTime, fields.freq);
-  const checkinRunAt = addMinutes(reminderRunAt, fields.durationMinutes);
-
-  remindersRepo.create(userId, {
-    message: routineStartMessage(fields.title),
-    runAt: reminderRunAt,
+  const reminderRunAt = nextOccurrence(schedule, nowLocal()) ?? `${schedule.startDate} ${schedule.time}:00`;
+  const base = {
     targetJid,
     categoryId: fields.categoryId,
-    recurrenceFreq: fields.freq,
-    recurrenceInterval: 1,
-    kind: 'routine_reminder',
+    recurrenceFreq: storedFreq(schedule.freq),
+    recurrenceInterval: schedule.interval,
     todoId: id,
-  });
+  };
+  remindersRepo.create(userId, { ...base, message: routineStartMessage(fields.title), runAt: reminderRunAt, kind: 'routine_reminder' });
   remindersRepo.create(userId, {
+    ...base,
     message: routineCheckinMessage(fields.title),
-    runAt: checkinRunAt,
-    targetJid,
-    categoryId: fields.categoryId,
-    recurrenceFreq: fields.freq,
-    recurrenceInterval: 1,
+    runAt: addMinutes(reminderRunAt, fields.durationMinutes),
     kind: 'routine_checkin',
-    todoId: id,
   });
 
   return id;
 }
 
 /**
- * Edits an existing routine in place - title, category, frequency, reminder time and/or duration -
+ * Edits an existing routine in place - title, category, schedule, reminder time and/or duration -
  * instead of requiring a delete + recreate (which used to lose the streak/history since a new todo
- * id starts a fresh habit_logs series). Only the fields passed are changed; when reminder_time,
- * duration_minutes or freq changes, both linked reminders (routine_reminder/routine_checkin) are
- * recomputed the same way createRoutineWithReminders does it, so the new schedule takes effect
- * from the next occurrence on. Returns false if the routine doesn't exist (or isn't a routine).
+ * id starts a fresh habit_logs series). Only the fields passed are changed; when anything about
+ * the timing changes, both linked reminders are moved to the routine's next occurrence. Changing
+ * only the hour or the duration keeps the anchor (so an every-two-weeks routine stays on the same
+ * weeks); changing the days/frequency re-anchors it to its next occurrence. Returns false if the
+ * routine doesn't exist (or isn't a routine).
  */
 export function updateRoutineWithReminders(
   userId: number,
@@ -82,50 +164,69 @@ export function updateRoutineWithReminders(
   fields: {
     title?: string;
     categoryId?: number | null;
-    freq?: RecurrenceFreq;
     reminderTime?: string;
     durationMinutes?: number;
-  },
+  } & RoutineScheduleInput,
 ): boolean {
   const todo = todosRepo.getById(userId, id);
   if (!todo || todo.scope !== 'routine') return false;
 
   const title = fields.title ?? todo.title;
   const categoryId = fields.categoryId === undefined ? todo.category_id : fields.categoryId;
-  const freq = fields.freq ?? (todo.recurrence_freq as RecurrenceFreq);
-  const reminderTime = fields.reminderTime ?? todo.reminder_time!;
   const durationMinutes = fields.durationMinutes ?? todo.duration_minutes!;
+  const current = scheduleOf(todo);
+  const time = fields.reminderTime ?? current.time;
+
+  const patternChanged =
+    fields.freq !== undefined ||
+    fields.interval !== undefined ||
+    fields.weekdays !== undefined ||
+    fields.monthDay !== undefined ||
+    (fields.startDate !== undefined && fields.startDate !== null);
+  const timeChanged = patternChanged || fields.reminderTime !== undefined || fields.durationMinutes !== undefined;
+
+  let schedule: RoutineSchedule = { ...current, time };
+  if (patternChanged) {
+    const draft = completeSchedule(fields, time, current);
+    schedule = { ...draft, startDate: anchorDate(draft, fields.startDate) };
+  }
 
   db.prepare(
-    `UPDATE todos SET title = ?, category_id = ?, recurrence_freq = ?, reminder_time = ?, duration_minutes = ?
+    `UPDATE todos SET title = ?, category_id = ?, recurrence_freq = ?, reminder_time = ?, duration_minutes = ?,
+       weekdays = ?, recurrence_interval = ?, month_day = ?, start_date = ?
      WHERE id = ? AND user_id = ?`,
-  ).run(title, categoryId, freq, reminderTime, durationMinutes, id, userId);
+  ).run(
+    title,
+    categoryId,
+    storedFreq(schedule.freq),
+    schedule.time,
+    durationMinutes,
+    schedule.weekdays.length ? schedule.weekdays.join(',') : null,
+    schedule.interval,
+    schedule.monthDay,
+    schedule.startDate,
+    id,
+    userId,
+  );
 
-  const timeChanged = fields.reminderTime !== undefined || fields.durationMinutes !== undefined || fields.freq !== undefined;
   const linked = remindersRepo.listByTodo(id).filter((r) => r.user_id === userId) as Reminder[];
   const reminderLink = linked.find((r) => r.kind === 'routine_reminder');
   const checkinLink = linked.find((r) => r.kind === 'routine_checkin');
 
   if (timeChanged) {
-    const [h, m] = reminderTime.split(':').map(Number);
-    const todayAtReminderTime = `${todayLocal()} ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
-    const reminderRunAt = firstFutureOccurrence(todayAtReminderTime, freq);
-    const checkinRunAt = addMinutes(reminderRunAt, durationMinutes);
-    if (reminderLink) {
-      remindersRepo.update(userId, reminderLink.id, {
-        message: routineStartMessage(title),
-        runAt: reminderRunAt,
-        categoryId,
-        recurrenceFreq: freq,
-      });
-    }
-    if (checkinLink) {
-      remindersRepo.update(userId, checkinLink.id, {
-        message: routineCheckinMessage(title),
-        runAt: checkinRunAt,
-        categoryId,
-        recurrenceFreq: freq,
-      });
+    const reminderRunAt = nextOccurrence(schedule, nowLocal());
+    if (reminderRunAt) {
+      const recurrence = { recurrenceFreq: storedFreq(schedule.freq), recurrenceInterval: schedule.interval, categoryId };
+      if (reminderLink) {
+        remindersRepo.update(userId, reminderLink.id, { ...recurrence, message: routineStartMessage(title), runAt: reminderRunAt });
+      }
+      if (checkinLink) {
+        remindersRepo.update(userId, checkinLink.id, {
+          ...recurrence,
+          message: routineCheckinMessage(title),
+          runAt: addMinutes(reminderRunAt, durationMinutes),
+        });
+      }
     }
   } else {
     // Only title/category changed - keep the existing run_at, just refresh the wording/category.
@@ -133,14 +234,27 @@ export function updateRoutineWithReminders(
       remindersRepo.update(userId, reminderLink.id, { message: routineStartMessage(title), categoryId });
     }
     if (checkinLink) {
-      remindersRepo.update(userId, checkinLink.id, {
-        message: routineCheckinMessage(title),
-        categoryId,
-      });
+      remindersRepo.update(userId, checkinLink.id, { message: routineCheckinMessage(title), categoryId });
     }
   }
 
   return true;
+}
+
+/**
+ * Next run of a routine's linked reminder after the occurrence it just handled - the routine's own
+ * schedule decides (weekdays, every N weeks, monthly), not the reminder row's plain "add N days".
+ * The check-in sits duration_minutes after each occurrence. Returns undefined when the routine
+ * can't be read, so the caller falls back to the generic recurrence.
+ */
+export function nextRoutineRunAt(reminder: Pick<Reminder, 'kind' | 'todo_id' | 'user_id' | 'run_at'>): string | undefined {
+  if (!reminder.todo_id) return undefined;
+  const todo = todosRepo.getById(reminder.user_id, reminder.todo_id) as Todo | undefined;
+  if (!todo || todo.scope !== 'routine' || !todo.reminder_time) return undefined;
+  const schedule = scheduleOf(todo);
+  const offset = reminder.kind === 'routine_checkin' ? (todo.duration_minutes ?? 0) : 0;
+  const next = nextOccurrence(schedule, addMinutes(reminder.run_at, -offset));
+  return next ? addMinutes(next, offset) : undefined;
 }
 
 /**

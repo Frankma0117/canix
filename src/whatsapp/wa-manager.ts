@@ -5,6 +5,8 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   downloadMediaMessage,
   normalizeMessageContent,
+  decryptPollVote,
+  jidNormalizedUser,
   Browsers,
   DisconnectReason,
   type WASocket,
@@ -47,6 +49,22 @@ export type IncomingHandler = (msg: {
   /** Present for a WhatsApp "share contact" message (one or several at once) - no media download
    *  involved here, the vCard(s) are already inline on the message (see util/vcard.ts). */
   contactMessage?: WAMessage;
+  /** Id of the message this one replies to (WhatsApp's "responder"), when it quotes one - lets a
+   *  typed "sí"/"no" be tied to the exact reminder it answers (see agent/reminder-prompts.ts). */
+  quotedId?: string;
+}) => Promise<void>;
+
+/**
+ * A tap on one of the bot's polls. Votes arrive encrypted with the poll's own secret, which only
+ * whoever stored it at send time knows - so the handler looks the poll up and calls `decrypt` with
+ * that secret to learn which options are now selected (hex sha256 of each option's text; an empty
+ * list means the vote was removed; null means it couldn't be decrypted).
+ */
+export type PollVoteHandler = (vote: {
+  jid: string;
+  altJid?: string;
+  pollMessageId: string;
+  decrypt: (secret: Uint8Array) => string[] | null;
 }) => Promise<void>;
 
 /**
@@ -57,6 +75,7 @@ export type IncomingHandler = (msg: {
 export class WaManager {
   private sock: WASocket | undefined;
   private handler: IncomingHandler | undefined;
+  private pollVoteHandler: PollVoteHandler | undefined;
   private authDir: string;
   private stopping = false;
   private reconnectAttempt = 0;
@@ -88,6 +107,11 @@ export class WaManager {
   /** Registers the callback that processes incoming messages. */
   onMessage(handler: IncomingHandler): void {
     this.handler = handler;
+  }
+
+  /** Registers the callback that processes taps on the bot's polls. */
+  onPollVote(handler: PollVoteHandler): void {
+    this.pollVoteHandler = handler;
   }
 
   /**
@@ -254,6 +278,29 @@ export class WaManager {
         // that in a loop, so every extraction below sees the real content either way.
         const content = normalizeMessageContent(m.message);
 
+        // A tap on one of our polls (the Sí/No under a reminder) - not a chat message, so it never
+        // reaches the normal handler/AI.
+        const pollUpdate = content?.pollUpdateMessage;
+        if (pollUpdate) {
+          const pollMessageId = pollUpdate.pollCreationMessageKey?.id;
+          const vote = pollUpdate.vote;
+          if (pollMessageId && vote?.encPayload && vote.encIv) {
+            await sock.readMessages([m.key]).catch(() => {});
+            const altJid = m.key.remoteJidAlt ?? undefined;
+            try {
+              await this.pollVoteHandler?.({
+                jid,
+                altJid,
+                pollMessageId,
+                decrypt: (secret) => this.decryptVote({ encPayload: vote.encPayload!, encIv: vote.encIv! }, secret, pollMessageId, [jid, altJid]),
+              });
+            } catch (err) {
+              console.error('[WA] Error procesando voto de encuesta:', (err as Error).message);
+            }
+          }
+          continue;
+        }
+
         let text = content?.conversation ?? content?.extendedTextMessage?.text ?? content?.imageMessage?.caption ?? '';
         let fromAudio = false;
         // Present only when this message carries an image - see IncomingHandler's comment. Passed
@@ -299,7 +346,8 @@ export class WaManager {
 
         try {
           const altJid = m.key.remoteJidAlt ?? undefined;
-          await this.handler?.({ jid, altJid, name, text: text.trim(), fromAudio, imageMessage, documentMessage, stickerMessage, contactMessage });
+          const quotedId = content?.extendedTextMessage?.contextInfo?.stanzaId ?? undefined;
+          await this.handler?.({ jid, altJid, name, text: text.trim(), fromAudio, imageMessage, documentMessage, stickerMessage, contactMessage, quotedId });
         } catch (err) {
           console.error('[WA] Error procesando mensaje:', (err as Error).message);
         }
@@ -421,6 +469,56 @@ export class WaManager {
     await this.ensurePrivacyToken(jid);
     console.log('[WA] Enviando texto a %s', jid);
     await this.sock.sendMessage(jid, { text });
+  }
+
+  /** Same as sendText, returning the sent message's id (null if WhatsApp didn't give one back) so
+   *  a later quoted reply to it can be recognized. */
+  async sendTextWithId(jid: string, text: string): Promise<string | null> {
+    if (!this.sock) throw new Error('WhatsApp no esta conectado');
+    await this.ensurePrivacyToken(jid);
+    console.log('[WA] Enviando texto a %s', jid);
+    const sent = await this.sock.sendMessage(jid, { text });
+    return sent?.key.id ?? null;
+  }
+
+  /**
+   * Sends a single-choice poll - the closest thing to tappable buttons a normal (non-Business-API)
+   * WhatsApp number has. `secret` (32 random bytes) is the key votes come back encrypted with; the
+   * caller keeps it to read them later (see onPollVote). Returns the poll message's id.
+   */
+  async sendPoll(jid: string, question: string, options: string[], secret: Uint8Array): Promise<string | null> {
+    if (!this.sock) throw new Error('WhatsApp no esta conectado');
+    console.log('[WA] Enviando encuesta a %s', jid);
+    const sent = await this.sock.sendMessage(jid, { poll: { name: question, values: options, selectableCount: 1, messageSecret: secret } });
+    return sent?.key.id ?? null;
+  }
+
+  /**
+   * Decrypts a poll vote into the hex sha256 of each selected option. The key is derived from the
+   * poll's secret plus the ids of whoever created the poll (us) and whoever voted - and WhatsApp
+   * may address either side by phone jid or by @lid, so every combination is tried; a wrong one
+   * simply fails authentication.
+   */
+  private decryptVote(
+    vote: { encPayload: Uint8Array; encIv: Uint8Array },
+    secret: Uint8Array,
+    pollMsgId: string,
+    voterJids: (string | undefined)[],
+  ): string[] | null {
+    const me = this.sock?.user;
+    const creators = [me?.id, me?.lid].filter((j): j is string => !!j).map((j) => jidNormalizedUser(j));
+    const voters = voterJids.filter((j): j is string => !!j).map((j) => jidNormalizedUser(j));
+    for (const pollCreatorJid of new Set(creators)) {
+      for (const voterJid of new Set(voters)) {
+        try {
+          const decoded = decryptPollVote(vote, { pollCreatorJid, pollMsgId, pollEncKey: secret, voterJid });
+          return (decoded.selectedOptions ?? []).map((o) => Buffer.from(o).toString('hex'));
+        } catch {
+          /* wrong id combination - try the next one */
+        }
+      }
+    }
+    return null;
   }
 
   /** Sends a WhatsApp voice note (ogg/opus, played inline like a recorded ptt message). */

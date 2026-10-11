@@ -303,3 +303,61 @@ export interface UsageRow {
   input_units: number;
   output_units: number;
 }
+
+export type RoutineFreq = 'daily' | 'weekly' | 'monthly';
+export type PromptAnswer = 'yes' | 'no';
+/** Where an answer came from: the WhatsApp poll, a quoted reply, telling the bot, or this portal. */
+export type PromptSource = 'poll' | 'reply' | 'chat' | 'web';
+
+/** A routine as /api/routines returns it: schedule spelled out plus today's state. */
+export interface Routine {
+  id: number;
+  title: string;
+  category_id: number | null;
+  reminder_time: string;
+  duration_minutes: number | null;
+  freq: RoutineFreq;
+  interval: number;
+  /** 0 = domingo ... 6 = sábado (weekly only). */
+  weekdays: number[];
+  month_day: number | null;
+  start_date: string | null;
+  schedule_label: string;
+  occurs_today: boolean;
+  today_answer: PromptAnswer | null;
+  today_answered_at: string | null;
+  today_sent_at: string | null;
+  streak: number;
+  next_run_at: string | null;
+  suspended: boolean;
+  paused_until: string | null;
+}
+
+export interface PromptResponse {
+  id: number;
+  prompt_id: number;
+  answer: PromptAnswer;
+  source: PromptSource;
+  created_at: string;
+}
+
+/** One "¿lo hiciste?" (a routine day or a reminder) with every answer given, oldest first. */
+export interface PromptWithResponses {
+  id: number;
+  todo_id: number | null;
+  reminder_id: number | null;
+  title: string;
+  occurrence_date: string;
+  sent_at: string | null;
+  answer: PromptAnswer | null;
+  answered_at: string | null;
+  answer_source: PromptSource | null;
+  responses: PromptResponse[];
+}
+
+/** Administrator's "modo prueba": the reduced access being tried on WhatsApp. */
+export interface TestMode {
+  label: string;
+  permissions: string[];
+  since: string;
+}

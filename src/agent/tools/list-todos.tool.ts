@@ -1,3 +1,4 @@
+import { describeSchedule, scheduleOf } from '../routine-schedule.js';
 import type { Tool } from '../tool-registry.js';
 import { todosRepo } from '../../db/repositories/todos.repo.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
@@ -47,7 +48,9 @@ export const listTodosTool: Tool = {
         const link = t.link_id ? linksRepo.getById(userId, t.link_id) : undefined;
         return (
           `#${t.id} ${t.title}${t.due_date ? ` (${t.due_date})` : ''} [${t.scope}]` +
-          (t.scope === 'routine' && t.reminder_time ? ` ⏰${t.reminder_time} (${t.duration_minutes}min)` : '') +
+          (t.scope === 'routine' && t.reminder_time
+            ? ` ⏰${t.reminder_time} (${t.duration_minutes}min) · ${describeSchedule(scheduleOf(t))}`
+            : '') +
           (link ? ` 🔗${link.url}` : '')
         );
       })

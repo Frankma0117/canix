@@ -95,7 +95,8 @@ export const CORE_CATEGORIES: MenuCategory[] = [
     detail:
       `🔁 *Rutinas y hábitos*\n\n` +
       `- Crear con hora de aviso + duración: "crea rutina de ejercicio a las 7am, 30 minutos"\n` +
-      `- Marcar cumplida o no cumplida cada día, ver racha e historial\n` +
+      `- Elegir cada cuánto: todos los días, "lunes y jueves", "cada 15 días", "cada mes el 5"\n` +
+      `- Marcar cumplida o no con un toque en la encuesta de Sí/No que llega con el aviso; ver racha e historial\n` +
       `- Editar horario/frecuencia sin perder la racha\n` +
       `- Pausar unos días (vacaciones, lesión) sin borrarla\n` +
       `- Desglosar una rutina en ejercicios concretos (series/repeticiones/peso)`,
@@ -314,7 +315,8 @@ const ADMIN_CATEGORY: MenuCategory = {
     `- Ver quién tiene acceso\n` +
     `- Asignar permisos y paquetes: "que Juan solo pueda usar recordatorios y rutinas"\n` +
     `- Ver y actuar sobre los datos de cualquier otra persona con acceso (pasando su nombre/número)\n` +
-    `- Crear contraseñas temporales del portal web, y gestionar todo desde el portal (Administración)`,
+    `- Crear contraseñas temporales del portal web, y gestionar todo desde el portal (Administración)\n` +
+    `- Modo prueba: */prueba* para usar el asistente como alguien con un paquete, */prueba salir* para volver`,
 };
 
 export interface MenuAccess {

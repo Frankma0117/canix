@@ -18,7 +18,7 @@ import { usersRepo } from '../db/repositories/users.repo.js';
 import { messagesRepo } from '../db/repositories/messages.repo.js';
 import { CORE_CATEGORIES, STICKERS_CATEGORY, AGENDA_CATEGORY, MODE_KEYS, categoryAllowed, type MenuCategory } from './menu.js';
 import { PERMISSIONS } from '../permissions/catalog.js';
-import { effectivePermissions } from '../permissions/engine.js';
+import { effectivePermissions, asBotUser } from '../permissions/engine.js';
 
 export type ModeKey = (typeof MODE_KEYS)[number];
 
@@ -210,7 +210,8 @@ export function handleModeMessage(userId: number, text: string): ModeRouterResul
   const textLower = text.trim().toLowerCase();
   if (!textLower) return { consumed: false };
 
-  const user = usersRepo.getById(userId);
+  const storedUser = usersRepo.getById(userId);
+  const user = storedUser && asBotUser(storedUser);
   const currentMode = isModeKey(user?.active_mode) ? user!.active_mode : null;
 
   if (EXIT_KEYWORDS.includes(textLower)) {

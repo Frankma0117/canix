@@ -1,0 +1,176 @@
+import { createHash, randomBytes } from 'node:crypto';
+import { reminderPromptsRepo } from '../db/repositories/reminder-prompts.repo.js';
+import { remindersRepo } from '../db/repositories/reminders.repo.js';
+import { todosRepo } from '../db/repositories/todos.repo.js';
+import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
+import { usersRepo } from '../db/repositories/users.repo.js';
+import { nowLocal, todayLocal, time12h, parseWall, dateOnly } from '../util/datetime.js';
+import { plainReminderPrefix, routineStartPrefix } from '../util/motivational.js';
+import { routineStreak } from './routine-schedule.js';
+import { maybeNightFarewell } from './agenda.js';
+import { env } from '../config/env.js';
+import type { WaManager } from '../whatsapp/wa-manager.js';
+import type { PromptAnswer, PromptSource, Reminder, ReminderPrompt, Todo } from '../types/index.js';
+
+/**
+ * "¿Lo hiciste?" under a reminder, answered with one tap. WhatsApp only offers real buttons to
+ * Business API accounts; on a normal number the native equivalent is a single-choice poll, which
+ * is what goes out right below the reminder text. Every answer (and every change of answer) is
+ * stored with its time and where it came from, because things often get done on time and marked
+ * later - see reminder_prompts / reminder_responses in db/init.ts.
+ */
+export const POLL_YES = '✅ Sí, hecho';
+export const POLL_NO = '❌ No';
+const POLL_OPTIONS = [POLL_YES, POLL_NO];
+
+const optionHash = (name: string) => createHash('sha256').update(name).digest('hex');
+const YES_HASH = optionHash(POLL_YES);
+const NO_HASH = optionHash(POLL_NO);
+
+/** Which answer a decrypted vote (hex sha256 of each selected option) means; null = vote removed. */
+export function answerFromVote(selectedHashes: string[]): PromptAnswer | null {
+  if (selectedHashes.includes(YES_HASH)) return 'yes';
+  if (selectedHashes.includes(NO_HASH)) return 'no';
+  return null;
+}
+
+const YES_RE = /^(s[ií]+|sip|sisas|listo|hecho|hecha|ya|ya lo hice|ya la hice|cumplido|cumplida|cumpl[ií]|✅|👍)[\s.!]*$/i;
+const NO_RE = /^(no+|nop|nel|todav[ií]a no|a[uú]n no|no pude|no lo hice|no la hice|❌|👎)[\s.!]*$/i;
+
+/** A short "sí"/"no" typed as a reply to the reminder; null for anything else. */
+export function answerFromText(text: string): PromptAnswer | null {
+  const t = text.trim();
+  if (YES_RE.test(t)) return 'yes';
+  if (NO_RE.test(t)) return 'no';
+  return null;
+}
+
+/** WhatsApp only renders *bold* around a single line with no inner asterisks. */
+function bold(text: string): string {
+  const t = text.trim();
+  return !t || t.includes('\n') || t.includes('*') ? t : `*${t}*`;
+}
+
+function wantsPoll(reminder: Reminder, target: string): boolean {
+  if (env.reminderConfirmPolls === 'off') return false;
+  if (reminder.kind === 'routine_reminder') return !!reminder.todo_id;
+  if (env.reminderConfirmPolls !== 'all') return false;
+  if (reminder.kind !== 'reminder' && reminder.kind !== 'flexible') return false;
+  // Only for the person's own reminders - one aimed at somebody else is a message to them, not a
+  // task of theirs to confirm.
+  const owner = usersRepo.getById(reminder.user_id);
+  return !!owner && (target === owner.jid || target === owner.lid);
+}
+
+/** The reminder text as it goes out: lead-in line, the thing itself in bold, then the details. */
+export function formatReminderText(reminder: Reminder, routine?: Todo): string {
+  if (routine) {
+    const details = [`🕒 ${time12h(reminder.run_at)}`];
+    if (routine.duration_minutes) details.push(`⏱️ ${routine.duration_minutes} min`);
+    const streak = routineStreak(routine, todayLocal());
+    if (streak > 0) details.push(`🔥 racha ${streak}`);
+    return `${routineStartPrefix()}\n${bold(routine.title)}\n${details.join('  ·  ')}`;
+  }
+  if (reminder.kind === 'reminder') return `${plainReminderPrefix()}\n${bold(reminder.message)}`;
+  // Every other kind already carries its own emoji/wording from creation time.
+  return reminder.message;
+}
+
+/**
+ * Sends a due reminder: the formatted text and, when it's something to confirm, the Sí/No poll
+ * right under it. Throws only if the text itself couldn't be sent; a poll that fails just leaves
+ * the reminder without one (a routine then falls back to its written check-in, see hasPollFor).
+ * Returns how many WhatsApp messages actually went out, for the send governor.
+ */
+export async function sendReminderWithPrompt(wa: WaManager, reminder: Reminder, target: string): Promise<number> {
+  const routine = reminder.kind === 'routine_reminder' && reminder.todo_id ? todosRepo.getById(reminder.user_id, reminder.todo_id) : undefined;
+  const text = formatReminderText(reminder, routine);
+  const textMsgId = await wa.sendTextWithId(target, text);
+  if (!wantsPoll(reminder, target)) return 1;
+
+  const title = routine?.title ?? reminder.message;
+  const secret = randomBytes(32);
+  let pollMsgId: string | null = null;
+  try {
+    const shortTitle = title.length > 90 ? `${title.slice(0, 89)}…` : title;
+    pollMsgId = await wa.sendPoll(target, `¿Ya hiciste "${shortTitle}"? Márcalo cuando termines`, POLL_OPTIONS, secret);
+  } catch (err) {
+    console.error('[PROMPT] No se pudo enviar la encuesta del recordatorio #%d:', reminder.id, (err as Error).message);
+  }
+
+  reminderPromptsRepo.create({
+    userId: reminder.user_id,
+    reminderId: reminder.id,
+    todoId: routine?.id ?? null,
+    title,
+    occurrenceDate: dateOnly(reminder.run_at),
+    sentAt: nowLocal(),
+    textMsgId,
+    pollMsgId,
+    pollSecret: pollMsgId ? secret : null,
+  });
+  return pollMsgId ? 2 : 1;
+}
+
+/** True when that day's notice of a routine went out with its poll - the written check-in question
+ *  is then redundant and stays silent. */
+export function hasPollFor(todoId: number, occurrenceDate: string): boolean {
+  return !!reminderPromptsRepo.findForRoutineDate(todoId, occurrenceDate)?.poll_msg_id;
+}
+
+function delayNote(prompt: ReminderPrompt, at: string): string {
+  if (!prompt.sent_at) return '';
+  const minutes = Math.round((parseWall(at).getTime() - parseWall(prompt.sent_at).getTime()) / 60_000);
+  if (minutes < 10) return '';
+  const span = minutes < 60 ? `${minutes} min` : minutes < 1440 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${Math.floor(minutes / 1440)} día(s)`;
+  return `\n_Marcado ${span} después del aviso._`;
+}
+
+/**
+ * Applies an answer that came from WhatsApp itself (the poll or a quoted "sí"/"no"): stores it in
+ * the sequence, marks the routine for that day, and returns the short acknowledgement to send
+ * back. null = nothing changed (same answer tapped again), so nothing should be sent.
+ */
+export function applyAnswer(prompt: ReminderPrompt, answer: PromptAnswer, source: PromptSource): { ack: string; celebrate: boolean } | null {
+  // Any tap or reply is proof the chat is two-way - same as a normal message (see ai-agent.ts).
+  remindersRepo.confirmForUser(prompt.user_id);
+  if (prompt.answer === answer) return null;
+
+  const at = nowLocal();
+  reminderPromptsRepo.setAnswer(prompt.id, answer, source, at);
+
+  const routine = prompt.todo_id ? todosRepo.getById(prompt.user_id, prompt.todo_id) : undefined;
+  if (!routine) {
+    return {
+      ack: (answer === 'yes' ? `✅ Listo, ${bold(prompt.title)} quedó como hecho.` : `📝 Anotado: ${bold(prompt.title)} no se hizo.`) + delayNote(prompt, at),
+      celebrate: false,
+    };
+  }
+
+  habitLogsRepo.checkIn(routine.id, prompt.occurrence_date, answer === 'yes', null);
+  const streak = routineStreak(routine, todayLocal());
+  if (answer === 'no') {
+    return { ack: `📝 Anotado: ${bold(routine.title)} no se hizo esta vez. La próxima va con toda 💪${delayNote(prompt, at)}`, celebrate: false };
+  }
+  const farewell = prompt.occurrence_date === todayLocal() ? maybeNightFarewell(prompt.user_id) : null;
+  return {
+    ack: `✅ ${bold(routine.title)} cumplida 🎉\n🔥 Racha: ${streak}${delayNote(prompt, at)}${farewell ? `\n\n${farewell}` : ''}`,
+    celebrate: true,
+  };
+}
+
+/**
+ * Records a routine check-in made outside the poll (told to the bot in chat, or marked on the
+ * portal) in the same answer sequence, so the history shows every mark wherever it came from. The
+ * caller has already written the habit log itself.
+ */
+export function logRoutineAnswer(userId: number, todoId: number, date: string, done: boolean, source: PromptSource): void {
+  const todo = todosRepo.getById(userId, todoId);
+  if (!todo) return;
+  const prompt =
+    reminderPromptsRepo.findForRoutineDate(todoId, date) ??
+    reminderPromptsRepo.create({ userId, reminderId: null, todoId, title: todo.title, occurrenceDate: date, sentAt: null });
+  const answer: PromptAnswer = done ? 'yes' : 'no';
+  if (prompt.answer === answer) return;
+  reminderPromptsRepo.setAnswer(prompt.id, answer, source, nowLocal());
+}

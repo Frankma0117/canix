@@ -535,6 +535,62 @@ export function initSchema(): void {
   ensureColumn('reminders', 'awaiting_confirmation', 'awaiting_confirmation INTEGER NOT NULL DEFAULT 0');
   ensureColumn('reminders', 'missed_confirmations', 'missed_confirmations INTEGER NOT NULL DEFAULT 0');
 
+  // Routine schedules beyond plain daily/weekly (see agent/routine-schedule.ts): which weekdays
+  // ("1,3,5", 0 = domingo), every how many days/weeks/months, the day of the month for monthly
+  // ones, and the date the pattern is anchored to (decides which week/month is "on" when the
+  // interval is > 1). All NULL/1 on older rows, which keep behaving exactly as before.
+  ensureColumn('todos', 'weekdays', 'weekdays TEXT');
+  ensureColumn('todos', 'recurrence_interval', 'recurrence_interval INTEGER NOT NULL DEFAULT 1');
+  ensureColumn('todos', 'month_day', 'month_day INTEGER');
+  ensureColumn('todos', 'start_date', 'start_date TEXT');
+  // Weekly routines created before weekdays existed: their day is whatever weekday their reminder
+  // currently falls on.
+  db.exec(`
+    UPDATE todos SET weekdays = (
+      SELECT CAST(strftime('%w', r.run_at) AS TEXT) FROM reminders r
+      WHERE r.todo_id = todos.id AND r.kind = 'routine_reminder' LIMIT 1
+    )
+    WHERE scope = 'routine' AND recurrence_freq = 'weekly' AND weekdays IS NULL
+  `);
+
+  // Administrator's "modo prueba" (see permissions/test-mode.ts): JSON { label, permissions, since }
+  // while the admin is trying the bot as if they only had those permissions; NULL = off.
+  ensureColumn('users', 'test_mode', 'test_mode TEXT');
+
+  // One row per reminder/routine occurrence that asked "¿lo hiciste?" (see agent/reminder-prompts.ts),
+  // holding the current answer; reminder_responses keeps every answer in order, with its time and
+  // where it came from, since things often get done on time but marked later.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS reminder_prompts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reminder_id INTEGER REFERENCES reminders(id) ON DELETE SET NULL,
+      todo_id INTEGER REFERENCES todos(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      occurrence_date TEXT NOT NULL,
+      sent_at TEXT,
+      text_msg_id TEXT,
+      poll_msg_id TEXT,
+      poll_secret BLOB,
+      answer TEXT CHECK (answer IN ('yes', 'no')),
+      answered_at TEXT,
+      answer_source TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_reminder_prompts_user ON reminder_prompts(user_id, occurrence_date);
+    CREATE INDEX IF NOT EXISTS idx_reminder_prompts_todo ON reminder_prompts(todo_id, occurrence_date);
+    CREATE INDEX IF NOT EXISTS idx_reminder_prompts_poll ON reminder_prompts(poll_msg_id);
+
+    CREATE TABLE IF NOT EXISTS reminder_responses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      prompt_id INTEGER NOT NULL REFERENCES reminder_prompts(id) ON DELETE CASCADE,
+      answer TEXT NOT NULL CHECK (answer IN ('yes', 'no')),
+      source TEXT NOT NULL CHECK (source IN ('poll', 'reply', 'chat', 'web')),
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_reminder_responses_prompt ON reminder_responses(prompt_id);
+  `);
+
   // The daily "agenda del día" auto-push (kind 'daily_agenda') is no longer created (see
   // agent/agenda.ts) - the user's own ask was to stop all proactive messaging beyond notifications
   // they actually scheduled themselves. This cancels any already-scheduled ones left over from

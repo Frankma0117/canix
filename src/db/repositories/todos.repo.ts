@@ -38,12 +38,17 @@ export const todosRepo = {
       reminderTime?: string | null;
       durationMinutes?: number | null;
       linkId?: number | null;
+      weekdays?: string | null;
+      recurrenceInterval?: number;
+      monthDay?: number | null;
+      startDate?: string | null;
     },
   ): number {
     const info = db
       .prepare(
-        `INSERT INTO todos (user_id, title, category_id, scope, due_date, recurrence_freq, reminder_time, duration_minutes, link_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO todos (user_id, title, category_id, scope, due_date, recurrence_freq, reminder_time, duration_minutes, link_id,
+                            weekdays, recurrence_interval, month_day, start_date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         userId,
@@ -55,6 +60,10 @@ export const todosRepo = {
         fields.reminderTime ?? null,
         fields.durationMinutes ?? null,
         fields.linkId ?? null,
+        fields.weekdays ?? null,
+        fields.recurrenceInterval ?? 1,
+        fields.monthDay ?? null,
+        fields.startDate ?? null,
       );
     return Number(info.lastInsertRowid);
   },

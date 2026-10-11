@@ -15,6 +15,8 @@ export interface PanelUser {
   modules: string[];
   mustChangePassword: boolean;
   hasPassword: boolean;
+  /** Administrator only: the reduced access being tried on WhatsApp ("modo prueba"), or null. */
+  testMode?: { label: string; permissions: string[]; since: string } | null;
 }
 
 interface AuthContextValue {

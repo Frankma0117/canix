@@ -115,6 +115,11 @@ export const usersRepo = {
     }
   },
 
+  /** Turns the administrator's test mode on (JSON, see permissions/test-mode.ts) or off (null). */
+  setTestMode(id: number, testMode: string | null): void {
+    db.prepare(`UPDATE users SET test_mode = ? WHERE id = ? AND role = 'admin'`).run(testMode, id);
+  },
+
   getByPanelToken(token: string): User | undefined {
     return db.prepare('SELECT * FROM users WHERE panel_token = ?').get(token) as User | undefined;
   },

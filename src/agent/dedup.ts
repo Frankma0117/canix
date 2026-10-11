@@ -228,7 +228,7 @@ function dedupeRoutines(userId: number): number {
   const routines = todosRepo.list(userId, { scope: 'routine' });
   const groups = new Map<string, Todo[]>();
   for (const r of routines) {
-    const key = [normalize(r.title), r.recurrence_freq, r.reminder_time, r.duration_minutes].join('|');
+    const key = [normalize(r.title), r.recurrence_freq, r.reminder_time, r.duration_minutes, r.weekdays, r.recurrence_interval, r.month_day].join('|');
     const arr = groups.get(key) ?? [];
     arr.push(r);
     groups.set(key, arr);

@@ -15,12 +15,15 @@ import { callRemindersRepo } from '../db/repositories/call-reminders.repo.js';
 import { createCallReminder, updateCallReminder, testCallNow } from '../calls/call-reminders.service.js';
 import { registerCallAudioRoute } from '../calls/call-audio.js';
 import { registerTwilioWebhook } from './twilio-webhook.js';
-import { createRoutineWithReminders, updateRoutineWithReminders } from '../agent/routine-setup.js';
+import { createRoutineWithReminders, updateRoutineWithReminders, parseScheduleInput, isValidTime } from '../agent/routine-setup.js';
+import { describeSchedule, occursOn, routineStreak, scheduleOf } from '../agent/routine-schedule.js';
+import { logRoutineAnswer } from '../agent/reminder-prompts.js';
+import { reminderPromptsRepo } from '../db/repositories/reminder-prompts.repo.js';
 import { todayLocal, nowLocal } from '../util/datetime.js';
 import { phoneToJid, jidToPhone } from '../util/jid.js';
 import { resolvePanelUser, requirePanelAdmin, requirePermission, extractToken } from './auth.js';
 import { login, logout, changePassword, setPassword, createSession, AuthError } from '../auth/web-auth.js';
-import { effectivePermissions } from '../permissions/engine.js';
+import { effectivePermissions, testModeOf } from '../permissions/engine.js';
 import { PERMISSIONS } from '../permissions/catalog.js';
 import { securityHeaders, rateLimit, requestTimeout, errorHandler } from './security.js';
 import { h, userId } from './http-helpers.js';
@@ -127,6 +130,8 @@ export function createServer(bot: BotManager): Express {
   app.use('/api/call-reminders', requirePermission('reminders.calls'));
   app.use('/api/rewards', requirePermission('rewards.manage'));
   app.use('/api/todos', todoPermissionGate);
+  app.use('/api/routines', requirePermission('routines.manage'));
+  app.use('/api/reminder-responses', requirePermission('reminders.manage', 'routines.manage'));
 
   // ---------- WhatsApp connection (admin only - it's a single shared WhatsApp session) ----------
   app.use('/api/connection', requirePanelAdmin);
@@ -415,16 +420,21 @@ export function createServer(bot: BotManager): Express {
       const uid = userId(req);
 
       if (scope === 'routine') {
-        if (!reminder_time || !duration_minutes) {
-          return res.status(400).json({ error: 'Las rutinas necesitan reminder_time y duration_minutes' });
+        if (!reminder_time || !isValidTime(String(reminder_time)) || !(Number(duration_minutes) > 0)) {
+          return res.status(400).json({ error: 'Las rutinas necesitan una hora de aviso válida y una duración mayor a 0.' });
+        }
+        const schedule = routineScheduleFromBody(req.body);
+        if ('error' in schedule) return res.status(400).json({ error: schedule.error });
+        if (schedule.freq === 'weekly' && !schedule.weekdays?.length) {
+          return res.status(400).json({ error: 'Elige al menos un día de la semana.' });
         }
         const owner = usersRepo.getById(uid)!;
         const id = createRoutineWithReminders(uid, owner.jid, {
           title,
           categoryId: category_id ?? null,
-          freq: recurrence_freq === 'weekly' ? 'weekly' : 'daily',
-          reminderTime: reminder_time,
+          reminderTime: String(reminder_time),
           durationMinutes: Number(duration_minutes),
+          ...schedule,
         });
         return res.json({ id });
       }
@@ -447,15 +457,24 @@ export function createServer(bot: BotManager): Express {
       const todo = todosRepo.getById(uid, id);
       if (!todo) return res.status(404).json({ error: 'No existe esa tarea' });
 
-      const { title, category_id, due_date, recurrence_freq, reminder_time, duration_minutes } = req.body ?? {};
+      const { title, category_id, due_date, reminder_time, duration_minutes } = req.body ?? {};
 
       if (todo.scope === 'routine') {
+        if (reminder_time && !isValidTime(String(reminder_time))) return res.status(400).json({ error: 'La hora de aviso no es válida.' });
+        if (duration_minutes !== undefined && !(Number(duration_minutes) > 0)) {
+          return res.status(400).json({ error: 'La duración debe ser mayor a 0.' });
+        }
+        const schedule = routineScheduleFromBody(req.body);
+        if ('error' in schedule) return res.status(400).json({ error: schedule.error });
+        if (schedule.freq === 'weekly' && schedule.weekdays && schedule.weekdays.length === 0) {
+          return res.status(400).json({ error: 'Elige al menos un día de la semana.' });
+        }
         const ok = updateRoutineWithReminders(uid, id, {
           title: title || undefined,
           categoryId: category_id === undefined ? undefined : category_id,
-          freq: recurrence_freq === 'weekly' ? 'weekly' : recurrence_freq === 'daily' ? 'daily' : undefined,
           reminderTime: reminder_time || undefined,
           durationMinutes: duration_minutes === undefined ? undefined : Number(duration_minutes),
+          ...schedule,
         });
         if (!ok) return res.status(404).json({ error: 'No existe esa rutina' });
         return res.json({ ok: true });
@@ -498,7 +517,7 @@ export function createServer(bot: BotManager): Express {
       const days = req.query.days ? Number(req.query.days) : 30;
       res.json({
         history: habitLogsRepo.history(id, days),
-        streak: habitLogsRepo.currentStreak(id, todayLocal()),
+        streak: routineStreak(todosRepo.getById(userId(req), id)!, todayLocal()),
       });
     }),
   );
@@ -510,7 +529,65 @@ export function createServer(bot: BotManager): Express {
       const { date, done, note } = req.body ?? {};
       const logDate = date || todayLocal();
       habitLogsRepo.checkIn(id, logDate, done !== false, note || null);
+      logRoutineAnswer(userId(req), id, logDate, done !== false, 'web');
       res.json({ ok: true });
+    }),
+  );
+  // Every "¿lo hiciste?" of a routine with its answers in order (see agent/reminder-prompts.ts).
+  app.get(
+    '/api/todos/:id/responses',
+    h((req, res) => {
+      const id = Number(req.params.id);
+      if (!todosRepo.getById(userId(req), id)) return res.status(404).json({ error: 'No existe esa rutina' });
+      res.json(reminderPromptsRepo.listWithResponses(userId(req), { todoId: id, limit: Number(req.query.limit) || 30 }));
+    }),
+  );
+  // Same, across everything this person was asked (routines and plain reminders).
+  app.get(
+    '/api/reminder-responses',
+    h((req, res) => res.json(reminderPromptsRepo.listWithResponses(userId(req), { limit: Number(req.query.limit) || 50 }))),
+  );
+
+  // ---------- Routines, ready to show ----------
+  // Each routine with its schedule spelled out, whether it's due today, today's answer, streak,
+  // next notice and pause - so the portal can group them by day/frequency without a request per row.
+  app.get(
+    '/api/routines',
+    h((req, res) => {
+      const uid = userId(req);
+      const today = todayLocal();
+      const now = nowLocal();
+      res.json(
+        todosRepo.list(uid, { scope: 'routine' }).map((t) => {
+          const schedule = scheduleOf(t);
+          const linked = remindersRepo.listByTodo(t.id);
+          const notice = linked.find((r) => r.kind === 'routine_reminder');
+          const pausedUntil = linked.map((r) => r.paused_until).find((p) => p && p > now) ?? null;
+          const log = habitLogsRepo.getForDate(t.id, today);
+          const prompt = reminderPromptsRepo.findForRoutineDate(t.id, today);
+          return {
+            id: t.id,
+            title: t.title,
+            category_id: t.category_id,
+            reminder_time: schedule.time,
+            duration_minutes: t.duration_minutes,
+            freq: schedule.freq,
+            interval: schedule.interval,
+            weekdays: schedule.weekdays,
+            month_day: schedule.monthDay,
+            start_date: t.start_date,
+            schedule_label: describeSchedule(schedule),
+            occurs_today: occursOn(schedule, today),
+            today_answer: log ? (log.done ? 'yes' : 'no') : null,
+            today_answered_at: prompt?.answered_at ?? null,
+            today_sent_at: prompt?.sent_at ?? null,
+            streak: routineStreak(t, today),
+            next_run_at: notice && notice.status === 'pending' ? notice.run_at : null,
+            suspended: notice?.status === 'suspended',
+            paused_until: pausedUntil,
+          };
+        }),
+      );
     }),
   );
 
@@ -574,7 +651,20 @@ function sessionView(user: User) {
     modules: [...new Set(PERMISSIONS.filter((p) => perms.has(p.key)).map((p) => p.module))],
     mustChangePassword: !!user.must_change_password,
     hasPassword: !!user.password_hash,
+    // Administrator only: the reduced access they're trying on WhatsApp (the portal stays complete).
+    testMode: testModeOf(user),
   };
+}
+
+/** The schedule fields of a routine as the portal sends them (see agent/routine-setup.ts). */
+function routineScheduleFromBody(body: Record<string, unknown> | undefined) {
+  return parseScheduleInput({
+    frequency: body?.recurrence_freq,
+    interval: body?.recurrence_interval,
+    weekdays: body?.weekdays,
+    month_day: body?.month_day,
+    start_date: body?.start_date,
+  });
 }
 
 /**

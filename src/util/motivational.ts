@@ -80,6 +80,10 @@ export function plainReminderPrefix(): string {
   return pick(PLAIN_REMINDER_PREFIXES);
 }
 
+export function routineStartPrefix(): string {
+  return pick(ROUTINE_START_PREFIXES);
+}
+
 export function routineStartMessage(title: string): string {
   return `${pick(ROUTINE_START_PREFIXES)} ${title}`;
 }

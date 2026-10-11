@@ -26,6 +26,13 @@ export const habitLogsRepo = {
     ).c;
   },
 
+  /** Every date marked done ('YYYY-MM-DD') - see agent/routine-schedule.ts's routineStreak. */
+  doneDates(todoId: number): string[] {
+    return (db.prepare('SELECT log_date FROM habit_logs WHERE todo_id = ? AND done = 1').all(todoId) as { log_date: string }[]).map(
+      (r) => r.log_date,
+    );
+  },
+
   /** Last N days of history for a routine, most recent first. */
   history(todoId: number, days: number): HabitLog[] {
     return db

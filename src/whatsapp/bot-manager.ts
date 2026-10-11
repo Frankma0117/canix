@@ -1,4 +1,9 @@
-import { effectivePermissions, can } from '../permissions/engine.js';
+import { effectivePermissions, can, asBotUser, testModeOf } from '../permissions/engine.js';
+import { handleTestModeCommand, testModeNotice } from '../permissions/test-mode.js';
+import { reminderPromptsRepo } from '../db/repositories/reminder-prompts.repo.js';
+import { applyAnswer, answerFromVote, answerFromText } from '../agent/reminder-prompts.js';
+import { sendAutoSticker, ROUTINE_DONE_KEYWORDS } from '../util/stickers.js';
+import type { PromptAnswer, PromptSource, ReminderPrompt } from '../types/index.js';
 import { jidNormalizedUser, downloadMediaMessage, type WAMessage } from 'baileys';
 import { WaManager } from './wa-manager.js';
 import { handleFashionMessage } from '../fashion/router.js';
@@ -103,6 +108,49 @@ export class BotManager {
   constructor() {
     this.wa = new WaManager(env.wa.session);
     this.wa.onMessage((msg) => this.enqueueIncoming(msg));
+    this.wa.onPollVote((vote) => this.handlePollVote(vote));
+  }
+
+  /**
+   * A tap on the Sí/No poll under a reminder (see agent/reminder-prompts.ts). Votes for a poll we
+   * have no record of (someone else's, or older than the history kept) are ignored.
+   */
+  private async handlePollVote({
+    jid,
+    altJid,
+    pollMessageId,
+    decrypt,
+  }: {
+    jid: string;
+    altJid?: string;
+    pollMessageId: string;
+    decrypt: (secret: Uint8Array) => string[] | null;
+  }): Promise<void> {
+    const { phoneJid } = await this.resolveIncomingIdentity(jid, altJid);
+    const user = usersRepo.getByJidOrLid(phoneJid) ?? usersRepo.getByJidOrLid(jid);
+    if (!user) return;
+    const prompt = reminderPromptsRepo.findByMessageId(user.id, pollMessageId);
+    if (!prompt?.poll_secret) return;
+
+    const selected = decrypt(prompt.poll_secret);
+    if (!selected) {
+      console.error('[PROMPT] No se pudo leer el voto de #%d en la encuesta %s.', user.id, pollMessageId);
+      await this.wa
+        .sendText(jid, '🙈 No alcancé a leer tu respuesta en la encuesta. Respóndeme "sí" o "no" a ese mensaje y la anoto.')
+        .catch(() => {});
+      return;
+    }
+    const answer = answerFromVote(selected);
+    if (!answer) return; // vote removed - the last recorded answer stays
+    await this.recordPromptAnswer(jid, prompt, answer, 'poll');
+  }
+
+  private async recordPromptAnswer(jid: string, prompt: ReminderPrompt, answer: PromptAnswer, source: PromptSource): Promise<void> {
+    const result = applyAnswer(prompt, answer, source);
+    console.log('[PROMPT] Usuario #%d respondió "%s" (%s) a "%s"%s.', prompt.user_id, answer, source, prompt.title, result ? '' : ' - sin cambio');
+    if (!result) return;
+    await this.wa.sendText(jid, result.ack);
+    if (result.celebrate) sendAutoSticker(this.wa, jid, ROUTINE_DONE_KEYWORDS);
   }
 
   private enqueueIncoming(msg: Parameters<BotManager['handleIncoming']>[0]): Promise<void> {
@@ -170,6 +218,7 @@ export class BotManager {
     documentMessage,
     stickerMessage,
     contactMessage,
+    quotedId,
   }: {
     jid: string;
     altJid?: string;
@@ -180,6 +229,7 @@ export class BotManager {
     documentMessage?: WAMessage;
     stickerMessage?: WAMessage;
     contactMessage?: WAMessage;
+    quotedId?: string;
   }) {
     // Everything below can fail in ways that have nothing to do with the user's message itself
     // (AI provider hiccup, a bug, WhatsApp acting up) - wrapping the whole thing means there is
@@ -273,6 +323,31 @@ export class BotManager {
       }
 
       const command = text.trim().toLowerCase();
+
+      // Modo prueba (see permissions/test-mode.ts): the administrator's own commands to try the bot
+      // with a reduced set of permissions and to come back - raw commands, so getting out never
+      // depends on what the set being tried allows.
+      if (user.role === 'admin' && !stickerMessage) {
+        const testReply = handleTestModeCommand(user, text);
+        if (testReply) {
+          await this.wa.sendText(jid, testReply);
+          return;
+        }
+      }
+      // From here on the bot treats an administrator in test mode as the ordinary user they're
+      // simulating; `user` stays the real record for what only the real admin does (sticker pack).
+      const botUser = asBotUser(user);
+      const testMode = testModeOf(user);
+
+      // "sí"/"no" typed as a reply to a reminder (or to its poll): same as tapping the poll.
+      if (quotedId) {
+        const quotedAnswer = answerFromText(text);
+        const prompt = quotedAnswer ? reminderPromptsRepo.findByMessageId(user.id, quotedId) : undefined;
+        if (prompt && quotedAnswer) {
+          await this.recordPromptAnswer(jid, prompt, quotedAnswer, 'reply');
+          return;
+        }
+      }
 
       // Sticker pack (see agent/tools/send-sticker.tool.ts) - only the admin can teach the bot a
       // new one, by sending it as a real WhatsApp sticker. Checked before everything else below:
@@ -492,12 +567,14 @@ export class BotManager {
       // token, same raw-command pattern as /reset/ayuda above. See agent/menu.ts for the single
       // source of truth also used by the show_menu AI tool, so both entry points stay in sync.
       if (command === '/menu') {
-        const access = { fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: user.role === 'admin', permissions: effectivePermissions(user) };
-        await this.wa.sendText(jid, renderMainMenu(access));
+        const access = { fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: botUser.role === 'admin', permissions: effectivePermissions(botUser) };
+        await this.wa.sendText(jid, renderMainMenu(access) + (testMode ? `
+
+${testModeNotice(testMode)}` : ''));
         return;
       }
       if (command.startsWith('/menu ')) {
-        const access = { fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: user.role === 'admin', permissions: effectivePermissions(user) };
+        const access = { fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: botUser.role === 'admin', permissions: effectivePermissions(botUser) };
         const category = resolveMenuCategory(command.slice('/menu '.length), access);
         await this.wa.sendText(jid, category ? renderCategoryDetail(category) : renderUnknownCategory(access));
         return;
@@ -508,7 +585,7 @@ export class BotManager {
       // zero behavior change here. Runs BEFORE the AI loop (pure state-machine, no tokens spent)
       // for exactly the same reason the /reset-style commands above do - a structured wizard step
       // (a numbered menu choice, a photo) doesn't need a model in the loop.
-      if (env.fashion.enabled && can(user, 'fashion.use')) {
+      if (env.fashion.enabled && can(botUser, 'fashion.use')) {
         const result = await handleFashionMessage({ userId: user.id, jid, text, imageMessage, documentMessage, wa: this.wa });
         if (result.consumed) {
           if (result.reply) await this.wa.sendText(jid, result.reply);
@@ -539,7 +616,7 @@ export class BotManager {
         processMessage(text, this.wa, {
           id: user.id,
           jid: user.jid,
-          isAdmin: user.role === 'admin',
+          isAdmin: botUser.role === 'admin',
         }),
         async () => {
           await this.wa.sendTyping(jid).catch(() => {});
@@ -557,7 +634,7 @@ export class BotManager {
         // fails (or the reply is too long for a note), fall back to the text reply so the answer
         // isn't lost - never send both when the voice note actually went out.
         const voice = await synthesizeVoiceNote(reply, user.voice_gender, {
-          premium: can(user, 'voice.premium'),
+          premium: can(botUser, 'voice.premium'),
           userId: user.id,
         }).catch(() => null);
         if (voice) {

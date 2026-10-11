@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { X, CalendarClock } from 'lucide-react';
 import { useApi } from '../lib/api.ts';
-import type { Category, Reminder, ReminderStatus } from '../lib/types.ts';
+import type { Category, PromptWithResponses, Reminder, ReminderStatus } from '../lib/types.ts';
+import { formatWhen } from '../lib/dates.ts';
 import { Card } from '../components/ui/Card.tsx';
 import { Badge } from '../components/ui/Badge.tsx';
 import { Select } from '../components/ui/Input.tsx';
@@ -39,6 +40,8 @@ export function RemindersPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [reminders, setReminders] = useState<Reminder[] | null>(null);
   const [status, setStatus] = useState<ReminderStatus>('pending');
+  // Answers to the Sí/No poll that goes out with each reminder (routines show theirs on their own page).
+  const [answers, setAnswers] = useState<PromptWithResponses[]>([]);
 
   async function load() {
     const [cats, items] = await Promise.all([
@@ -47,6 +50,10 @@ export function RemindersPage() {
     ]);
     setCategories(cats);
     setReminders(items);
+    api
+      .get<PromptWithResponses[]>('/api/reminder-responses?limit=60')
+      .then((all) => setAnswers(all.filter((p) => p.todo_id === null).slice(0, 15)))
+      .catch(() => setAnswers([]));
   }
 
   useEffect(() => {
@@ -122,6 +129,37 @@ export function RemindersPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {answers.length > 0 && (
+        <section aria-label="Respuestas recientes" className="mt-10">
+          <h2 className="font-display text-lg font-semibold text-ink dark:text-white">Respuestas recientes</h2>
+          <p className="mb-3 text-sm text-gray-dark">
+            Lo que respondiste en la encuesta de Sí / No de cada recordatorio, con la hora en que lo marcaste.
+          </p>
+          <div className="space-y-2">
+            {answers.map((p) => (
+              <Card key={p.id} className="p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium text-ink dark:text-white">{p.title}</p>
+                  <Badge tone={p.answer === 'yes' ? 'success' : p.answer === 'no' ? 'error' : 'warning'}>
+                    {p.answer === 'yes' ? 'Hecho' : p.answer === 'no' ? 'No se hizo' : 'Sin respuesta'}
+                  </Badge>
+                </div>
+                <p className="text-xs text-gray-dark">{p.sent_at ? `Aviso: ${formatWhen(p.sent_at)}` : 'Sin aviso'}</p>
+                {p.responses.length > 0 && (
+                  <ul className="mt-2 space-y-1 border-l-2 border-gray-medium pl-3 text-sm text-ink dark:border-white/15 dark:text-white/90">
+                    {p.responses.map((r) => (
+                      <li key={r.id}>
+                        {r.answer === 'yes' ? '✅ Sí' : '❌ No'} · {formatWhen(r.created_at)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );

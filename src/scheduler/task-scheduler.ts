@@ -7,7 +7,9 @@ import { processSchedulingTick } from '../scheduling/service.js';
 import { nowLocal, addMinutes, addMonths, addDays, addSeconds, dateOnly, randomTimeOnDate } from '../util/datetime.js';
 import { buildWeeklyReportMessage } from '../agent/weekly-report.js';
 import { dedupeUser, summaryTotal, summaryLine } from '../agent/dedup.js';
-import { plainReminderPrefix } from '../util/motivational.js';
+import { nextRoutineRunAt } from '../agent/routine-setup.js';
+import { sendReminderWithPrompt, hasPollFor } from '../agent/reminder-prompts.js';
+import { todosRepo } from '../db/repositories/todos.repo.js';
 import { checkBudget, recordSend } from '../whatsapp/send-guard.js';
 import { env } from '../config/env.js';
 import { synthesizeVoiceNote } from '../audio/tts.js';
@@ -28,6 +30,13 @@ const BETWEEN_SENDS_MS = 350;
 /** Computes the next run_at for a recurring reminder. */
 function nextRunAt(reminder: Reminder): string | undefined {
   const { recurrence_freq, recurrence_interval, run_at, kind, window_start, window_end } = reminder;
+
+  // A routine's own schedule (certain weekdays, every N weeks, monthly...) decides its next
+  // occurrence - see agent/routine-schedule.ts.
+  if (kind === 'routine_reminder' || kind === 'routine_checkin') {
+    const next = nextRoutineRunAt(reminder);
+    if (next) return next;
+  }
 
   // Flexible reminders (e.g. "pausa activa entre 3pm y 5pm") don't repeat at the same clock time -
   // each occurrence gets a fresh random time within its window, so it doesn't feel mechanical.
@@ -273,17 +282,22 @@ export class TaskScheduler {
         // A routine check-in whose habit was already marked done for the day (e.g. the user did
         // it early and called checkin_routine before this reminder was due) shouldn't ask again -
         // just move it along silently instead of re-asking a question that's already answered.
+        // Same when that day's notice already went out with its Sí/No poll (see
+        // agent/reminder-prompts.ts): the answer is one tap away there, so the written question is
+        // only the fallback for a notice whose poll couldn't be sent.
         if (reminder.kind === 'routine_checkin' && reminder.todo_id) {
-          const log = habitLogsRepo.getForDate(reminder.todo_id, dateOnly(reminder.run_at));
-          if (log?.done) {
+          const duration = todosRepo.getById(reminder.user_id, reminder.todo_id)?.duration_minutes ?? 0;
+          const occurrenceDate = dateOnly(addMinutes(reminder.run_at, -duration));
+          const log = habitLogsRepo.getForDate(reminder.todo_id, occurrenceDate);
+          if (log?.done || hasPollFor(reminder.todo_id, occurrenceDate)) {
             const next = nextRunAt(reminder);
             if (next) remindersRepo.reschedule(reminder.id, next);
             else remindersRepo.markStatus(reminder.id, 'executed');
             console.log(
-              '[SCHEDULER] Chequeo #%d omitido (rutina #%d ya marcada el %s).',
+              '[SCHEDULER] Chequeo #%d omitido (rutina #%d ya marcada o con encuesta el %s).',
               reminder.id,
               reminder.todo_id,
-              dateOnly(reminder.run_at),
+              occurrenceDate,
             );
             continue;
           }
@@ -324,18 +338,13 @@ export class TaskScheduler {
           // kind 'weekly_report' ignores its stored `message` and builds the real content fresh at
           // send time (see agent/weekly-report.ts) - it must reflect whatever changed since the
           // reminder was created, not a stale snapshot.
-          const text =
-            reminder.kind === 'weekly_report'
-              ? buildWeeklyReportMessage(reminder.user_id)
-              : // Plain reminders get a rotating warm/motivational lead-in (see util/motivational.ts) so
-                // they read like a friend's nudge instead of a flat notification; every other kind
-                // already carries its own emoji/wording at creation time (important_date, flexible,
-                // routine_reminder/checkin - see schedule-important-date.tool.ts,
-                // schedule-flexible-reminder.tool.ts, routine-setup.ts).
-                `${reminder.kind === 'reminder' ? `${plainReminderPrefix()} ` : ''}${reminder.message}`;
-
-          await this.wa.sendText(target, text);
-          recordSend('proactive', target);
+          // Everything else goes out formatted (lead-in, the thing itself in bold, details) and,
+          // when it's something to confirm, with its Sí/No poll underneath - see
+          // agent/reminder-prompts.ts.
+          let sent = 1;
+          if (reminder.kind === 'weekly_report') await this.wa.sendText(target, buildWeeklyReportMessage(reminder.user_id));
+          else sent = await sendReminderWithPrompt(this.wa, reminder, target);
+          for (let i = 0; i < sent; i++) recordSend('proactive', target);
           console.log('[SCHEDULER] Recordatorio #%d enviado a %s.', reminder.id, target);
 
           // Now that it actually went out, start/continue tracking whether it gets confirmed - see

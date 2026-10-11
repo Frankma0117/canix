@@ -13,7 +13,7 @@ import { currentTimeContext, todayLocal, upcomingDaysContext } from '../util/dat
 import { buildAgendaMessage } from './agenda.js';
 import { isModeKey, toolsForMode, getModeCategory, type ModeKey } from './modes.js';
 import { sleep } from '../util/human-delay.js';
-import { allowedToolsFor, isSchedulingClientOnly, effectivePermissions, describePermissions } from '../permissions/engine.js';
+import { allowedToolsFor, isSchedulingClientOnly, effectivePermissions, describePermissions, asBotUser } from '../permissions/engine.js';
 import { buildClientSystemPrompt, schedulingPromptSection } from '../scheduling/prompts.js';
 import { env } from '../config/env.js';
 import type { WaManager } from '../whatsapp/wa-manager.js';
@@ -344,6 +344,13 @@ Reglas de las herramientas:
 - Una vez una rutina queda marcada como cumplida hoy (checkin_routine con done=true), NO vuelvas a
   preguntarme si ya la hice por el resto del día - ya quedó registrada. Abajo en el contexto ves
   cuáles rutinas de hoy ya están marcadas.
+- Frecuencia de una rutina (create_routine/edit_routine): "todos los días" = frequency daily; "los
+  lunes y jueves" = weekly con weekdays; "cada 15 días"/"quincenal" = weekly con interval 2 (y el
+  día de la semana en weekdays); "cada mes el 5" = monthly con month_day 5; "cada 3 días" = daily
+  con interval 3. Si me piden una rutina semanal o quincenal sin decir qué día, pregúntalo.
+- Los avisos de rutinas y recordatorios llegan con una encuesta de "✅ Sí, hecho / ❌ No" debajo: yo
+  la toco cuando termino (aunque sea horas después) y queda registrado con la hora. Si en vez de eso
+  te escribo que ya lo hice, igual márcalo tú con checkin_routine/complete_todo.
 - Si te pregunto qué tengo pendiente, cómo va mi día, cuál es mi primera tarea/rutina, o qué se me
   quedó sin hacer hoy, usa get_today_agenda - te da todo ordenado por hora con lo que ya se cumplió
   y lo que quedó atrasado, así puedes ofrecerme reprogramarlo el mismo día en vez de solo reportarlo.
@@ -544,7 +551,10 @@ export async function processMessage(
   // Everything a non-admin can do comes from the permissions the administrator assigned them
   // (packages + allow/deny - see permissions/engine.ts). null = admin, unrestricted. A user record
   // that vanished mid-turn gets nothing (empty list), never "everything".
-  const fullUser = usersRepo.getById(user.id);
+  // asBotUser: an administrator in test mode is handled as the ordinary user they're simulating
+  // (see permissions/test-mode.ts).
+  const storedUser = usersRepo.getById(user.id);
+  const fullUser = storedUser && asBotUser(storedUser);
   const permissionAllowedTools = user.isAdmin ? null : fullUser ? allowedToolsFor(fullUser) : [];
   const clientOnly = !!fullUser && isSchedulingClientOnly(fullUser);
 

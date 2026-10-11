@@ -3,12 +3,48 @@ import { usersRepo } from '../db/repositories/users.repo.js';
 import { PERMISSION_KEYS, PERMISSIONS, ADMIN_ONLY_TOOLS, toolsForPermissions, permissionForTool } from './catalog.js';
 import type { User } from '../types/index.js';
 
+/** The administrator's "modo prueba": the reduced set of permissions they're trying the bot with. */
+export interface TestMode {
+  label: string;
+  permissions: string[];
+  since: string;
+}
+
+/** The active test mode of this user, or null. Only an administrator can have one. */
+export function testModeOf(user: Pick<User, 'role' | 'test_mode'> | undefined): TestMode | null {
+  if (!user || user.role !== 'admin' || !user.test_mode) return null;
+  try {
+    const parsed = JSON.parse(user.test_mode) as Partial<TestMode>;
+    if (!Array.isArray(parsed.permissions)) return null;
+    return {
+      label: String(parsed.label ?? 'Personalizado'),
+      permissions: parsed.permissions.filter((k): k is string => typeof k === 'string' && PERMISSION_KEYS.includes(k)),
+      since: String(parsed.since ?? ''),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * How the WhatsApp bot should treat this person. Identical to the stored user, except for an
+ * administrator in test mode: the bot then sees an ordinary user, whose permissions resolve to
+ * the test set (see effectivePermissions). The web portal never uses this - there the
+ * administrator keeps full access, which is where they turn the mode on and off.
+ */
+export function asBotUser<T extends Pick<User, 'role' | 'test_mode'>>(user: T): T {
+  return testModeOf(user) ? { ...user, role: 'user' } : user;
+}
+
 /**
  * Effective permissions of a user = (union of their packages' permissions + direct 'allow')
- * minus direct 'deny'. The administrator always has everything.
+ * minus direct 'deny'. The administrator always has everything - unless asked about as a plain
+ * user while in test mode (see asBotUser), which yields the permissions being tried.
  */
 export function effectivePermissions(user: Pick<User, 'id' | 'role'>): Set<string> {
   if (user.role === 'admin') return new Set(PERMISSION_KEYS);
+  const testMode = testModeOf(usersRepo.getById(user.id));
+  if (testMode) return new Set(testMode.permissions);
   const set = new Set(permissionsRepo.packagePermissionsFor(user.id));
   const overrides = permissionsRepo.userOverrides(user.id);
   for (const o of overrides) if (o.effect === 'allow') set.add(o.permission_key);
