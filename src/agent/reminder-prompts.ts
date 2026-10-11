@@ -4,7 +4,7 @@ import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { todosRepo } from '../db/repositories/todos.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
-import { nowLocal, todayLocal, time12h, parseWall, dateOnly } from '../util/datetime.js';
+import { nowLocal, todayLocal, time12h, parseWall, dateOnly, addMinutes } from '../util/datetime.js';
 import { plainReminderPrefix, routineStartPrefix } from '../util/motivational.js';
 import { routineStreak } from './routine-schedule.js';
 import { maybeNightFarewell } from './agenda.js';
@@ -53,7 +53,7 @@ function bold(text: string): string {
 
 function wantsPoll(reminder: Reminder, target: string): boolean {
   if (env.reminderConfirmPolls === 'off') return false;
-  if (reminder.kind === 'routine_reminder') return !!reminder.todo_id;
+  if (reminder.kind === 'routine_reminder' || reminder.kind === 'routine_checkin') return !!reminder.todo_id;
   if (env.reminderConfirmPolls !== 'all') return false;
   if (reminder.kind !== 'reminder' && reminder.kind !== 'flexible') return false;
   // Only for the person's own reminders - one aimed at somebody else is a message to them, not a
@@ -83,8 +83,14 @@ export function formatReminderText(reminder: Reminder, routine?: Todo): string {
  * Returns how many WhatsApp messages actually went out, for the send governor.
  */
 export async function sendReminderWithPrompt(wa: WaManager, reminder: Reminder, target: string): Promise<number> {
-  const routine = reminder.kind === 'routine_reminder' && reminder.todo_id ? todosRepo.getById(reminder.user_id, reminder.todo_id) : undefined;
-  const text = formatReminderText(reminder, routine);
+  const isRoutine = reminder.kind === 'routine_reminder' || reminder.kind === 'routine_checkin';
+  const routine = isRoutine && reminder.todo_id ? todosRepo.getById(reminder.user_id, reminder.todo_id) : undefined;
+  // The written check-in (only sent when that day's notice went out without its poll - see
+  // hasPollFor) is a question too, so it carries the same Sí/No; it belongs to the day the routine
+  // started, which is `duration` before this check-in.
+  const isCheckin = reminder.kind === 'routine_checkin';
+  const occurrenceDate = dateOnly(isCheckin && routine ? addMinutes(reminder.run_at, -(routine.duration_minutes ?? 0)) : reminder.run_at);
+  const text = isCheckin ? reminder.message : formatReminderText(reminder, routine);
   const textMsgId = await wa.sendTextWithId(target, text);
   if (!wantsPoll(reminder, target)) return 1;
 
@@ -103,7 +109,7 @@ export async function sendReminderWithPrompt(wa: WaManager, reminder: Reminder, 
     reminderId: reminder.id,
     todoId: routine?.id ?? null,
     title,
-    occurrenceDate: dateOnly(reminder.run_at),
+    occurrenceDate,
     sentAt: nowLocal(),
     textMsgId,
     pollMsgId,
