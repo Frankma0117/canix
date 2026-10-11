@@ -8,7 +8,8 @@ import type { User } from '../types/index.js';
 
 /**
  * The natural voices (Fish Audio voice library) a person with the paid 'voice.premium' permission
- * can choose from - all Spanish, picked by ear as Colombian/neutral. `id` is the Fish
+ * can choose from - all Spanish, Colombian or neutral, and none a clone of a real, recognizable
+ * person (the library is full of singers and politicians: never add those). `id` is the Fish
  * "reference_id". To add one: listen to it on fish.audio, copy its id, add a row. `key` is what
  * gets stored in users.voice_id, so never reuse or renumber an existing key.
  */
@@ -26,11 +27,21 @@ export const VOICES: VoiceOption[] = [
   { key: 'H3', gender: 'male', name: 'Santiago', style: 'bogotano, calmado y claro', id: 'e3ce51cfea59447b8ce2c63b3b681e31' },
   { key: 'H4', gender: 'male', name: 'Camilo', style: 'sereno, de narrador', id: 'da13e1b3f87c4f40b8090d0fd6454921' },
   { key: 'H5', gender: 'male', name: 'Pedro', style: 'neutro', id: '17ed67335f0145c9a850fddecd3c40e0' },
+  { key: 'H6', gender: 'male', name: 'Julián', style: 'claro y seguro, de asistente', id: 'de3042eb048a4d37baf2e61d10183e23' },
+  { key: 'H7', gender: 'male', name: 'Nicolás', style: 'joven, claro y profesional', id: 'c7a15a61f379424ca773a8eda073fdf0' },
+  { key: 'H8', gender: 'male', name: 'Sebastián', style: 'juvenil y amigable', id: 'b861ebdd5bfc4e4ca1d8dc967bc56eac' },
+  { key: 'H9', gender: 'male', name: 'Felipe', style: 'conversacional y animado', id: '4aa3bdb4a90449dfbd7aba351b288858' },
+  { key: 'H10', gender: 'male', name: 'Tomás', style: 'grave, cálido y pausado', id: '51aead15fd23476291a10b5ccf7ab8fb' },
   { key: 'M1', gender: 'female', name: 'Valentina', style: 'joven y amigable', id: '08ecaf85075041fc9aa66698ae430dc4' },
   { key: 'M2', gender: 'female', name: 'Camila', style: 'conversacional y expresiva', id: '84a980d0ef3d4f8ea185951bd920afbe' },
   { key: 'M3', gender: 'female', name: 'Laura', style: 'clara y profesional', id: 'f186d3dafbd244eca689a212b5ba0269' },
   { key: 'M4', gender: 'female', name: 'Daniela', style: 'paisa, suave y cercana', id: '10509ddabaaf48089ad5cf2d1b1eaf1d' },
   { key: 'M5', gender: 'female', name: 'Sofía', style: 'cálida, de narradora', id: 'e296306da5d449999f6e35c2b9f60aea' },
+  { key: 'M6', gender: 'female', name: 'Isabela', style: 'clara y segura, de asistente', id: 'fb9d5855f185451983404deb10788ad4' },
+  { key: 'M7', gender: 'female', name: 'Mariana', style: 'calmada y pausada', id: 'f95998e46fdb4bd4aefe591c312b72a4' },
+  { key: 'M8', gender: 'female', name: 'Gabriela', style: 'clara y cálida', id: 'c5db0dd415bd4521a5c3c36372a4c464' },
+  { key: 'M9', gender: 'female', name: 'Paula', style: 'paisa, expresiva y amigable', id: 'e8ffb4ccb56a4eb0b1d85b57f2f45a47' },
+  { key: 'M10', gender: 'female', name: 'Juliana', style: 'enérgica y profesional', id: '14909251a5064426ab1ae84cdbb4aeac' },
 ];
 
 function norm(text: string): string {
