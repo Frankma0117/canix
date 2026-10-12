@@ -1,37 +1,45 @@
-import { createHash, randomBytes } from 'node:crypto';
-import { choicePollsRepo, type ChoiceOption } from '../db/repositories/choice-polls.repo.js';
+import { choicePromptsRepo, type ChoiceOption } from '../db/repositories/choice-prompts.repo.js';
 import { nowLocal } from '../util/datetime.js';
 
 /**
- * Tappable answers for the bot's closed questions ("¿la dejo o miramos otra?"). WhatsApp gives
- * real buttons only to Business API accounts, so the options go out as a single-choice poll right
- * under the question (same mechanism as the Sí/No of reminders, see agent/reminder-prompts.ts).
- * A tap is fed back into the conversation as if the person had typed that option, so every flow -
- * the AI and the fixed commands alike - keeps working exactly as when answered in writing, which
- * also stays possible.
+ * Quick answers to the bot's closed questions, without extra messages: a yes/no question is
+ * answered by reacting to it (👍 / 👎), and a question with a few named options shows them
+ * numbered inside the same message, answered with the number. Either way the answer is fed back
+ * into the conversation as if the person had typed it, so every flow - the AI and the fixed
+ * commands alike - behaves exactly as when answered in writing, which always stays possible.
+ * (Polls were tried for this and dropped: one extra bulky message per question.)
  */
-
-/** WhatsApp allows up to 12 options in a poll - a longer list goes out as several polls. */
-const MAX_OPTIONS = 12;
+const MAX_OPTIONS = 9;
 const MAX_LABEL = 60;
+const NUMBER_EMOJI = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
 
-export const YES_NO: ChoiceOption[] = [
-  { label: '✅ Sí', reply: 'sí' },
-  { label: '❌ No', reply: 'no' },
-];
+export interface Choices {
+  options: ChoiceOption[];
+  binary: boolean;
+  /** Answers are complete commands on their own: stays answerable while the chat moves on. */
+  sticky?: boolean;
+}
+
+export const YES_NO: Choices = { options: [{ label: 'Sí', reply: 'sí' }, { label: 'No', reply: 'no' }], binary: true };
+
+/** Yes/no answered by reaction, with what each reaction counts as (e.g. "confirmar cita 12"). */
+export function yesNo(yesReply: string, noReply: string): Choices {
+  return { options: [{ label: 'Sí', reply: yesReply }, { label: 'No', reply: noReply }], binary: true, sticky: true };
+}
 
 /**
- * Told to the model in every system prompt: how to mark a closed question so its options become
- * tappable. Kept as one line the code strips before the person sees the message.
+ * Told to the model in every system prompt: how to mark a closed question so its options can be
+ * answered quickly. Kept as one line the code strips before the person sees the message.
  */
 export const CHOICES_RULE = `
-- OPCIONES PARA TOCAR: cuando tu mensaje termine con una pregunta que se responde eligiendo entre 2
-  y 4 opciones concretas (sí/no, "¿la dejo o miramos otra?", "¿hoy o mañana?", "¿A o B?"), agrega al
+- OPCIONES RÁPIDAS: cuando tu mensaje termine con una pregunta que se responde eligiendo entre 2 y 4
+  opciones concretas (sí/no, "¿la dejo o miramos otra?", "¿hoy o mañana?", "¿A o B?"), agrega al
   FINAL del mensaje, en una línea aparte, exactamente: [[opciones: Opción 1 | Opción 2]] - con el
   texto corto (máximo 4 palabras) de lo que yo respondería en cada una, ej. [[opciones: Sí | No]] o
-  [[opciones: Dejar esta | Ver otra]]. Yo las veo como botones para tocar. NO lo pongas en preguntas
-  abiertas (una hora, una fecha, un nombre, un texto) ni cuando no estés preguntando nada. Nunca
-  menciones esa línea ni la expliques.`;
+  [[opciones: Dejar esta | Ver otra]]. El sistema se encarga de mostrármelas (con 👍/👎 o con
+  números) - tú NO las numeres ni las repitas en el texto. NO lo pongas en preguntas abiertas (una
+  hora, una fecha, un nombre, un texto) ni cuando no estés preguntando nada. Nunca menciones esa
+  línea ni la expliques.`;
 
 const MARKER_RE = /\[\[\s*opci[oó]n(?:es)?\s*:\s*([^\]]*)\]\]/gi;
 
@@ -39,10 +47,14 @@ function cleanLabel(raw: string): string {
   return raw.replace(/[*_~`"“”]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_LABEL);
 }
 
-/** Options given by hand: ['Sí', 'No'] - each one is its own typed reply. */
-export function plainOptions(labels: string[]): ChoiceOption[] {
-  return labels.map((label) => ({ label, reply: label }));
-}
+const norm = (t: string) =>
+  t
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim();
+const isYes = (label: string) => /^(si|sip|claro|dale|ok|de una)\b/.test(norm(label));
+const isNo = (label: string) => /^(no|nop|todavia no|aun no)\b/.test(norm(label));
 
 // A closed yes/no question the model forgot to mark: starts like an offer/confirmation and has
 // neither an "o" alternative nor an open-ended question word.
@@ -50,7 +62,7 @@ const YES_NO_START_RE = /^¿\s*(quieres|quer[eé]s|deseas|te (gustar[ií]a|parec
 // Accented forms only: unaccented "que"/"como"/"cuando" are ordinary connectors ("¿quieres que...?").
 const OPEN_WORD_RE = /(^|[\s¿])(qué|cuál(es)?|cuándo|cuánt[oa]s?|cómo|dónde|quién(es)?)(?=[\s?,]|$)/i;
 
-function inferYesNo(text: string): ChoiceOption[] | null {
+function inferYesNo(text: string): Choices | null {
   const last = text.trim().split('\n').pop() ?? '';
   const start = last.lastIndexOf('¿');
   if (start < 0 || !/\?\s*(\p{Extended_Pictographic}|\s)*$/u.test(last)) return null;
@@ -61,11 +73,11 @@ function inferYesNo(text: string): ChoiceOption[] | null {
 }
 
 /**
- * Splits a reply into the text to show and the options to offer under it: the model's own
- * [[opciones: ...]] line when present (always removed from the text), otherwise Sí/No when the
- * message plainly ends in a yes/no question. `options` is null when there's nothing to tap.
+ * Splits a reply into the text to show and the quick answers to offer with it: the model's own
+ * [[opciones: ...]] line when present (always removed from the text), otherwise yes/no when the
+ * message plainly ends in a yes/no question. `choices` is null when there's nothing to choose.
  */
-export function splitChoices(reply: string): { text: string; options: ChoiceOption[] | null } {
+export function splitChoices(reply: string): { text: string; choices: Choices | null } {
   let marked: string | null = null;
   const text = reply
     .replace(MARKER_RE, (_m, inner: string) => {
@@ -75,12 +87,12 @@ export function splitChoices(reply: string): { text: string; options: ChoiceOpti
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  if (marked !== null) {
-    const labels = [...new Set((marked as string).split('|').map(cleanLabel).filter(Boolean))];
-    if (labels.length >= 2 && labels.length <= MAX_OPTIONS) return { text, options: plainOptions(labels) };
-    return { text, options: null };
-  }
-  return { text, options: inferYesNo(text) };
+  if (marked === null) return { text, choices: inferYesNo(text) };
+  const labels = [...new Set((marked as string).split('|').map(cleanLabel).filter(Boolean))];
+  if (labels.length < 2 || labels.length > MAX_OPTIONS) return { text, choices: null };
+  if (labels.length === 2 && isYes(labels[0]) && isNo(labels[1])) return { text, choices: YES_NO };
+  if (labels.length === 2 && isNo(labels[0]) && isYes(labels[1])) return { text, choices: YES_NO };
+  return { text, choices: { options: labels.map((label) => ({ label, reply: label })), binary: false } };
 }
 
 /** Removes the options line - for what gets stored as the conversation and read aloud. */
@@ -88,39 +100,56 @@ export function stripChoices(reply: string): string {
   return splitChoices(reply).text;
 }
 
-interface PollSender {
-  sendPoll(jid: string, question: string, options: string[], secret: Uint8Array): Promise<string | null>;
+/** The line added under a question saying how to answer it quickly. */
+export function choicesHint(choices: Choices): string {
+  if (choices.binary) return '_👍 sí  ·  👎 no_';
+  return `${choices.options.map((o, i) => `${NUMBER_EMOJI[i]} ${o.label}`).join('\n')}\n_Responde con el número._`;
+}
+
+/** The message as it goes out: the question followed by its quick-answer hint. */
+export function withChoices(text: string, choices: Choices | null): string {
+  return choices ? `${text}\n\n${choicesHint(choices)}` : text;
+}
+
+/** Remembers that `msgId` is a question waiting for one of these answers, replacing any earlier one. */
+export function registerChoices(userId: number, msgId: string | null, choices: Choices): void {
+  if (!msgId) return;
+  if (!choices.sticky) choicePromptsRepo.closeOpenFor(userId);
+  choicePromptsRepo.create(userId, msgId, choices.options, { binary: choices.binary, sticky: !!choices.sticky }, nowLocal());
+}
+
+// Skin-tone modifiers and the variation selector ride along with the base emoji.
+const baseEmoji = (emoji: string) => emoji.replace(/[\u{1F3FB}-\u{1F3FF}️]/gu, '');
+const YES_REACTIONS = new Set(['👍', '✅', '✔', '👌', '💪', '🙌', '👏', '🔥', '💯', '❤', '🫡', '🙏']);
+const NO_REACTIONS = new Set(['👎', '❌', '✖', '🚫', '😢', '😞', '😔']);
+
+/** What a reaction means as an answer: 'yes', 'no', or null for anything else (😂, removed...). */
+export function reactionAnswer(emoji: string | null | undefined): 'yes' | 'no' | null {
+  const e = baseEmoji(emoji ?? '');
+  if (YES_REACTIONS.has(e)) return 'yes';
+  if (NO_REACTIONS.has(e)) return 'no';
+  return null;
 }
 
 /**
- * Sends the options as a poll (several, when there are more than fit in one) and remembers them,
- * replacing whatever earlier question was still waiting. Best-effort: the question already went
- * out as text and can be answered in writing, so a poll that fails to send only logs. Returns
- * whether anything went out.
+ * A 👍/👎 on one of the bot's questions. Returns the text it counts as, 'stale' when that question
+ * is no longer the one waiting (the conversation moved on), or null when the message isn't a
+ * yes/no question of ours at all.
  */
-export async function sendChoices(wa: PollSender, userId: number, jid: string, options: ChoiceOption[], title = 'Toca tu respuesta 👇'): Promise<boolean> {
-  const unique = options.filter((o, i) => o.label && options.findIndex((x) => x.label === o.label) === i);
-  if (unique.length < 2) return false;
-  // Never leave a lone option in the last poll (a poll needs two).
-  const size = unique.length % MAX_OPTIONS === 1 ? MAX_OPTIONS - 1 : MAX_OPTIONS;
-  let sent = false;
-  try {
-    for (let i = 0; i < unique.length; i += size) {
-      const chunk = unique.slice(i, i + size);
-      const secret = randomBytes(32);
-      const pollMsgId = await wa.sendPoll(jid, i === 0 ? title : 'Más opciones 👇', chunk.map((o) => o.label), secret);
-      if (!pollMsgId) break;
-      if (!sent) choicePollsRepo.closeOpenFor(userId);
-      choicePollsRepo.create(userId, pollMsgId, secret, chunk, nowLocal());
-      sent = true;
-    }
-  } catch (err) {
-    console.error('[CHOICES] No se pudieron enviar las opciones a %s:', jid, (err as Error).message);
-  }
-  return sent;
+export function replyForReaction(userId: number, msgId: string, answer: 'yes' | 'no'): string | 'stale' | null {
+  const prompt = choicePromptsRepo.findByMessageId(userId, msgId);
+  if (!prompt || !prompt.binary || prompt.options.length < 2) return null;
+  if (prompt.status !== 'open') return 'stale';
+  if (prompt.sticky) choicePromptsRepo.close(prompt.id);
+  else choicePromptsRepo.closeOpenFor(userId);
+  return prompt.options[answer === 'yes' ? 0 : 1].reply;
 }
 
-/** Which option a decrypted vote (hex sha256 of each selected option) points at. */
-export function optionFromVote(options: ChoiceOption[], selectedHashes: string[]): ChoiceOption | undefined {
-  return options.find((o) => selectedHashes.includes(createHash('sha256').update(o.label).digest('hex')));
+/** "2" typed while a numbered question is waiting -> that option's text; null otherwise. */
+export function replyForNumber(userId: number, text: string): string | null {
+  const m = /^\s*([1-9])\s*[.)]?\s*$/.exec(text);
+  if (!m) return null;
+  const prompt = choicePromptsRepo.openFor(userId);
+  if (!prompt || prompt.binary) return null;
+  return prompt.options[Number(m[1]) - 1]?.reply ?? null;
 }

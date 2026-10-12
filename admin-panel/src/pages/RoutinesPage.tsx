@@ -43,7 +43,7 @@ function delayText(sentAt: string | null, answeredAt: string): string {
 
 const SOURCE_LABEL: Record<PromptSource, string> = {
   poll: 'con la encuesta de WhatsApp',
-  reply: 'respondiendo el mensaje',
+  reply: 'reaccionando o respondiendo al aviso',
   chat: 'diciéndoselo a Canix',
   web: 'desde el portal',
 };

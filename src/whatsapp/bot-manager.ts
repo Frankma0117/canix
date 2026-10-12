@@ -3,8 +3,8 @@ import { handleTestModeCommand, testModeNotice } from '../permissions/test-mode.
 import { reminderPromptsRepo } from '../db/repositories/reminder-prompts.repo.js';
 import { applyAnswer, answerFromVote, answerFromText } from '../agent/reminder-prompts.js';
 import { sendAutoSticker, ROUTINE_DONE_KEYWORDS } from '../util/stickers.js';
-import { choicePollsRepo } from '../db/repositories/choice-polls.repo.js';
-import { splitChoices, sendChoices, optionFromVote } from '../agent/choices.js';
+import { choicePromptsRepo } from '../db/repositories/choice-prompts.repo.js';
+import { splitChoices, withChoices, choicesHint, registerChoices, reactionAnswer, replyForReaction, replyForNumber, YES_NO } from '../agent/choices.js';
 import type { PromptAnswer, PromptSource, ReminderPrompt } from '../types/index.js';
 import { jidNormalizedUser, downloadMediaMessage, type WAMessage } from 'baileys';
 import { WaManager } from './wa-manager.js';
@@ -24,7 +24,7 @@ import { ensureWeeklyReportReminder } from '../agent/weekly-report.js';
 import { ensureDailyResetReminder } from '../agent/daily-reset.js';
 import { ensureDailyDedupReminder } from '../agent/dedup.js';
 import { legacyAdminToken } from '../server/auth.js';
-import { renderMainMenu, menuChoices, resolveMenuCategory, renderCategoryDetail, renderUnknownCategory } from '../agent/menu.js';
+import { renderMainMenu, resolveMenuCategory, renderCategoryDetail, renderUnknownCategory } from '../agent/menu.js';
 import { isTwilioConfigured } from '../calls/twilio-client.js';
 import { handleModeMessage } from '../agent/modes.js';
 import { env } from '../config/env.js';
@@ -111,6 +111,7 @@ export class BotManager {
     this.wa = new WaManager(env.wa.session);
     this.wa.onMessage((msg) => this.enqueueIncoming(msg));
     this.wa.onPollVote((vote) => this.handlePollVote(vote));
+    this.wa.onReaction((reaction) => this.handleReaction(reaction));
   }
 
   /**
@@ -132,16 +133,13 @@ export class BotManager {
     const user = usersRepo.getByJidOrLid(phoneJid) ?? usersRepo.getByJidOrLid(jid);
     if (!user) return;
     const prompt = reminderPromptsRepo.findByMessageId(user.id, pollMessageId);
-    if (!prompt?.poll_secret) {
-      await this.handleChoiceVote(user.id, { jid, altJid, pollMessageId, decrypt });
-      return;
-    }
+    if (!prompt?.poll_secret) return;
 
     const selected = decrypt(prompt.poll_secret);
     if (!selected) {
       console.error('[PROMPT] No se pudo leer el voto de #%d en la encuesta %s.', user.id, pollMessageId);
       await this.wa
-        .sendText(jid, '🙈 No alcancé a leer tu respuesta en la encuesta. Respóndeme "sí" o "no" a ese mensaje y la anoto.')
+        .sendText(jid, '🙈 No alcancé a leer tu respuesta en la encuesta. Reacciona con 👍 o 👎 al aviso (o respóndeme "sí" o "no") y la anoto.')
         .catch(() => {});
       return;
     }
@@ -151,32 +149,32 @@ export class BotManager {
   }
 
   /**
-   * A tap on the options under one of the bot's questions (see agent/choices.ts): the chosen
-   * option goes through the normal message pipeline as if it had been typed. Only the question
-   * still waiting for an answer counts - once the conversation moved on, an old one says so
-   * instead of being taken as a reply to something else.
+   * A 👍 / 👎 reaction. On a reminder or routine notice (or its poll) it marks it done / not done,
+   * same as the poll. On one of the bot's yes/no questions (see agent/choices.ts) it counts as the
+   * answer and goes through the normal message pipeline as if typed. Any other emoji, or a
+   * reaction to any other message, is just a reaction.
    */
-  private async handleChoiceVote(
-    userId: number,
-    { jid, altJid, pollMessageId, decrypt }: { jid: string; altJid?: string; pollMessageId: string; decrypt: (secret: Uint8Array) => string[] | null },
-  ): Promise<void> {
-    const poll = choicePollsRepo.findByMessageId(userId, pollMessageId);
-    if (!poll) return;
-    const selected = decrypt(poll.poll_secret);
-    if (!selected) {
-      console.error('[CHOICES] No se pudo leer el voto de #%d en %s.', userId, pollMessageId);
-      await this.wa.sendText(jid, '🙈 No alcancé a leer lo que tocaste. Escríbeme tu respuesta y seguimos.').catch(() => {});
+  private async handleReaction({ jid, altJid, targetId, emoji }: { jid: string; altJid?: string; targetId: string; emoji: string }): Promise<void> {
+    const answer = reactionAnswer(emoji);
+    if (!answer) return;
+    const { phoneJid } = await this.resolveIncomingIdentity(jid, altJid);
+    const user = usersRepo.getByJidOrLid(phoneJid) ?? usersRepo.getByJidOrLid(jid);
+    if (!user) return;
+
+    const prompt = reminderPromptsRepo.findByMessageId(user.id, targetId);
+    if (prompt) {
+      await this.recordPromptAnswer(jid, prompt, answer, 'reply');
       return;
     }
-    const option = optionFromVote(poll.options, selected);
-    if (!option) return; // vote removed
-    if (poll.status !== 'open') {
+
+    const reply = replyForReaction(user.id, targetId, answer);
+    if (reply === null) return;
+    if (reply === 'stale') {
       await this.wa.sendText(jid, 'Esa pregunta ya quedó atrás 🙂 Dime qué necesitas ahora y lo vemos.').catch(() => {});
       return;
     }
-    choicePollsRepo.closeOpenFor(userId); // this one and any sibling poll of the same question
-    console.log('[CHOICES] Usuario #%d tocó "%s" -> "%s".', userId, option.label, option.reply);
-    await this.enqueueIncoming({ jid, altJid, text: option.reply });
+    console.log('[CHOICES] Usuario #%d reaccionó %s -> "%s".', user.id, emoji, reply);
+    await this.enqueueIncoming({ jid, altJid, text: reply });
   }
 
   private async recordPromptAnswer(jid: string, prompt: ReminderPrompt, answer: PromptAnswer, source: PromptSource): Promise<void> {
@@ -314,10 +312,6 @@ export class BotManager {
               'solo "hombre" o "mujer").',
           )
           .catch(() => {});
-        await sendChoices(this.wa, admin.id, admin.jid, [
-          { label: 'Hombre', reply: 'hombre' },
-          { label: 'Mujer', reply: 'mujer' },
-        ]);
       }
 
       let user = usersRepo.getByJidOrLid(phoneJid) ?? usersRepo.getByJidOrLid(jid);
@@ -354,8 +348,15 @@ export class BotManager {
 
       console.log('[BOT] Usuario resuelto: #%d "%s" (%s)', user.id, user.name ?? '(sin nombre)', user.role);
 
-      // The conversation moved on: options offered under an earlier question no longer wait for a tap.
-      choicePollsRepo.closeOpenFor(user.id);
+      // A bare number answers the numbered question that's waiting, if there is one (see
+      // agent/choices.ts). Either way the conversation moved on: earlier questions stop waiting.
+      const numbered = text ? replyForNumber(user.id, text) : null;
+      choicePromptsRepo.closeOpenFor(user.id);
+      if (numbered) {
+        console.log('[CHOICES] Usuario #%d respondió "%s" -> "%s".', user.id, text.trim(), numbered);
+        await this.handleIncoming({ jid, altJid, name, text: numbered, fromAudio });
+        return;
+      }
 
       // Demo over: no more AI turns (each one costs) - just the way to become a customer.
       if (isDemoExpired(user)) {
@@ -512,16 +513,13 @@ export class BotManager {
         pendingContactsRepo.replaceForUser(user.id, shared);
         console.log('[CONTACTS] Usuario #%d compartió %d contacto(s), pendiente de confirmación.', user.id, shared.length);
         const list = shared.map((c, i) => `${i + 1}. ${c.name} - ${c.phone}`).join('\n');
-        await this.wa.sendText(
+        const offerId = await this.wa.sendTextWithId(
           jid,
           `📇 Recibí ${shared.length} contacto${shared.length > 1 ? 's' : ''}:\n\n${list}\n\n` +
-            '¿Los guardo? Responde "sí" para guardar todos, los números separados por coma para guardar ' +
-            'solo algunos (ej. "1,3"), o "no" para descartar.',
+            '¿Los guardo? Reacciona 👍 para guardar todos o 👎 para descartar (o responde "sí"/"no"; para ' +
+            'guardar solo algunos, sus números separados por coma, ej. "1,3").',
         );
-        await sendChoices(this.wa, user.id, jid, [
-          { label: shared.length > 1 ? '✅ Sí, guardar todos' : '✅ Sí, guardarlo', reply: 'sí' },
-          { label: '❌ No, descartar', reply: 'no' },
-        ]);
+        registerChoices(user.id, offerId, YES_NO);
         return;
       }
 
@@ -614,7 +612,6 @@ export class BotManager {
       if (command === '/menu') {
         const access = { fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: botUser.role === 'admin', permissions: effectivePermissions(botUser) };
         await this.wa.sendText(jid, renderMainMenu(access) + (testMode ? `\n\n${testModeNotice(testMode)}` : ''));
-        await sendChoices(this.wa, user.id, jid, menuChoices(access), '¿Qué quieres abrir? 👇');
         return;
       }
       if (command.startsWith('/menu ')) {
@@ -668,8 +665,13 @@ export class BotManager {
         },
         { intervalMs: WORKING_UPDATE_INTERVAL_MS, maxTicks: WORKING_UPDATE_MAX_TICKS },
       );
-      // A closed question at the end of the reply comes with its options to tap (see agent/choices.ts).
-      const { text: reply, options: replyOptions } = splitChoices(rawReply);
+      // A closed question at the end of the reply can be answered with a reaction or a number
+      // (see agent/choices.ts) - the hint goes in the same message, no extra one.
+      const { text: reply, choices } = splitChoices(rawReply);
+      const sendReplyText = async () => {
+        const id = await this.wa.sendTextWithId(jid, withChoices(reply, choices));
+        if (choices) registerChoices(user.id, id, choices);
+      };
       console.log('[BOT] Respuesta final a #%d: "%s"', user.id, reply.length > 200 ? `${reply.slice(0, 200)}…` : reply);
       await sleep(typingDelayMs(reply));
 
@@ -687,17 +689,18 @@ export class BotManager {
         if (voice) {
           try {
             await this.wa.sendAudio(jid, voice);
+            // A voice note can't carry the hint, so the options follow as one short line.
+            if (choices) registerChoices(user.id, await this.wa.sendTextWithId(jid, choicesHint(choices)), choices);
           } catch (err) {
             console.error('[BOT] Error enviando nota de voz:', (err as Error).message);
-            await this.wa.sendText(jid, reply);
+            await sendReplyText();
           }
         } else {
-          await this.wa.sendText(jid, reply);
+          await sendReplyText();
         }
       } else {
-        await this.wa.sendText(jid, reply);
+        await sendReplyText();
       }
-      if (replyOptions) await sendChoices(this.wa, user.id, jid, replyOptions);
 
       // A sticker that fits what just happened (a successful action, or a greeting/thanks/goodbye)
       // - after the reply, so it reads as the closing touch. Same cooldown as every sticker.

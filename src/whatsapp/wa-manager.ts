@@ -67,6 +67,9 @@ export type PollVoteHandler = (vote: {
   decrypt: (secret: Uint8Array) => string[] | null;
 }) => Promise<void>;
 
+/** Someone reacted to a message with an emoji (`targetId` = the message reacted to). */
+export type ReactionHandler = (reaction: { jid: string; altJid?: string; targetId: string; emoji: string }) => Promise<void>;
+
 /**
  * Manages the single WhatsApp session (this is a personal, single-user bot -
  * one dedicated WhatsApp number, unlike a multi-tenant setup): connection,
@@ -76,6 +79,7 @@ export class WaManager {
   private sock: WASocket | undefined;
   private handler: IncomingHandler | undefined;
   private pollVoteHandler: PollVoteHandler | undefined;
+  private reactionHandler: ReactionHandler | undefined;
   private authDir: string;
   private stopping = false;
   private reconnectAttempt = 0;
@@ -107,6 +111,11 @@ export class WaManager {
   /** Registers the callback that processes incoming messages. */
   onMessage(handler: IncomingHandler): void {
     this.handler = handler;
+  }
+
+  /** Registers the callback that processes emoji reactions to messages. */
+  onReaction(handler: ReactionHandler): void {
+    this.reactionHandler = handler;
   }
 
   /** Registers the callback that processes taps on the bot's polls. */
@@ -277,6 +286,21 @@ export class WaManager {
         // el sticker" symptom this was. `normalizeMessageContent` (from baileys) unwraps all of
         // that in a loop, so every extraction below sees the real content either way.
         const content = normalizeMessageContent(m.message);
+
+        // An emoji reaction (👍 on a reminder or on one of the bot's questions) - an answer, not a
+        // chat message. An empty emoji means the reaction was taken back: nothing to do.
+        const reaction = content?.reactionMessage;
+        if (reaction) {
+          const targetId = reaction.key?.id;
+          if (targetId && reaction.text) {
+            try {
+              await this.reactionHandler?.({ jid, altJid: m.key.remoteJidAlt ?? undefined, targetId, emoji: reaction.text });
+            } catch (err) {
+              console.error('[WA] Error procesando reacción:', (err as Error).message);
+            }
+          }
+          continue;
+        }
 
         // A tap on one of our polls (the Sí/No under a reminder) - not a chat message, so it never
         // reaches the normal handler/AI.

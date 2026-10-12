@@ -594,20 +594,24 @@ export function initSchema(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_reminder_responses_prompt ON reminder_responses(prompt_id);
 
-    -- Tappable options sent under one of the bot's closed questions (see agent/choices.ts): the
-    -- poll's secret to read the vote, and what each option counts as when tapped. Only the latest question's
-    -- poll(s) per person stay 'open'.
-    CREATE TABLE IF NOT EXISTS choice_polls (
+    -- A closed question the bot asked (see agent/choices.ts), tied to the message that carries it:
+    -- what each quick answer (a 👍/👎 reaction, or the option's number) counts as. Only the latest
+    -- one per person stays 'open', except 'sticky' ones, whose answers are complete commands on
+    -- their own ("confirmar cita 12") and stay valid until used.
+    CREATE TABLE IF NOT EXISTS choice_prompts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-      poll_msg_id TEXT NOT NULL,
-      poll_secret BLOB NOT NULL,
+      msg_id TEXT NOT NULL,
       options TEXT NOT NULL,
+      is_binary INTEGER NOT NULL DEFAULT 0,
+      is_sticky INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
       created_at TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_choice_polls_msg ON choice_polls(poll_msg_id);
-    CREATE INDEX IF NOT EXISTS idx_choice_polls_user ON choice_polls(user_id, status);
+    CREATE INDEX IF NOT EXISTS idx_choice_prompts_msg ON choice_prompts(msg_id);
+    CREATE INDEX IF NOT EXISTS idx_choice_prompts_user ON choice_prompts(user_id, status);
+    -- Short-lived predecessor (options as polls), replaced by choice_prompts.
+    DROP TABLE IF EXISTS choice_polls;
   `);
 
   // The daily "agenda del día" auto-push (kind 'daily_agenda') is no longer created (see

@@ -6,18 +6,22 @@ import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { nowLocal, todayLocal, time12h, parseWall, dateOnly, addMinutes } from '../util/datetime.js';
 import { plainReminderPrefix, routineStartPrefix } from '../util/motivational.js';
-import { routineStreak } from './routine-schedule.js';
+import { routineStreak, weekProgress } from './routine-schedule.js';
 import { maybeNightFarewell } from './agenda.js';
 import { env } from '../config/env.js';
 import type { WaManager } from '../whatsapp/wa-manager.js';
 import type { PromptAnswer, PromptSource, Reminder, ReminderPrompt, Todo } from '../types/index.js';
 
 /**
- * "¿Lo hiciste?" under a reminder, answered with one tap. WhatsApp only offers real buttons to
- * Business API accounts; on a normal number the native equivalent is a single-choice poll, which
- * is what goes out right below the reminder text. Every answer (and every change of answer) is
- * stored with its time and where it came from, because things often get done on time and marked
- * later - see reminder_prompts / reminder_responses in db/init.ts.
+ * "¿Lo hiciste?" for what the bot reminds people of. WhatsApp only offers real buttons to Business
+ * API accounts, so on a normal number:
+ *   - a routine's notice comes with a single-choice poll (Sí / No) whose title carries the streak
+ *     and the week's progress - it stays pinned to that notice and gets tapped hours later;
+ *   - a plain reminder is confirmed by reacting to it (👍 done, 👎 not done) - no extra message.
+ * A reaction works on a routine's notice too, and so does replying "sí"/"no" to either. Every
+ * answer (and every change of answer) is stored with its time and where it came from, because
+ * things often get done on time and marked later - see reminder_prompts / reminder_responses in
+ * db/init.ts.
  */
 export const POLL_YES = '✅ Sí, hecho';
 export const POLL_NO = '❌ No';
@@ -51,15 +55,32 @@ function bold(text: string): string {
   return !t || t.includes('\n') || t.includes('*') ? t : `*${t}*`;
 }
 
-function wantsPoll(reminder: Reminder, target: string): boolean {
+/** Routines get the poll. */
+function wantsPoll(reminder: Reminder): boolean {
   if (env.reminderConfirmPolls === 'off') return false;
-  if (reminder.kind === 'routine_reminder' || reminder.kind === 'routine_checkin') return !!reminder.todo_id;
+  return (reminder.kind === 'routine_reminder' || reminder.kind === 'routine_checkin') && !!reminder.todo_id;
+}
+
+/** The person's own plain reminders are confirmed with a reaction - one aimed at somebody else is
+ *  a message to them, not a task of theirs to confirm. */
+function wantsReaction(reminder: Reminder, target: string): boolean {
   if (env.reminderConfirmPolls !== 'all') return false;
   if (reminder.kind !== 'reminder' && reminder.kind !== 'flexible') return false;
-  // Only for the person's own reminders - one aimed at somebody else is a message to them, not a
-  // task of theirs to confirm.
   const owner = usersRepo.getById(reminder.user_id);
   return !!owner && (target === owner.jid || target === owner.lid);
+}
+
+const REACTION_HINT = '_Reacciona 👍 cuando lo hagas (👎 si no)._';
+
+/** "🔥 Racha 5 · 3 de 4 esta semana" - empty parts are left out. */
+function progressLine(routine: Todo): string {
+  const today = todayLocal();
+  const streak = routineStreak(routine, today);
+  const week = weekProgress(routine, today);
+  const parts: string[] = [];
+  if (streak > 0) parts.push(`🔥 Racha ${streak}`);
+  if (week.due > 0) parts.push(`${week.done} de ${week.due} esta semana`);
+  return parts.join(' · ');
 }
 
 /** The reminder text as it goes out: lead-in line, the thing itself in bold, then the details. */
@@ -67,8 +88,6 @@ export function formatReminderText(reminder: Reminder, routine?: Todo): string {
   if (routine) {
     const details = [`🕒 ${time12h(reminder.run_at)}`];
     if (routine.duration_minutes) details.push(`⏱️ ${routine.duration_minutes} min`);
-    const streak = routineStreak(routine, todayLocal());
-    if (streak > 0) details.push(`🔥 racha ${streak}`);
     return `${routineStartPrefix()}\n${bold(routine.title)}\n${details.join('  ·  ')}`;
   }
   if (reminder.kind === 'reminder') return `${plainReminderPrefix()}\n${bold(reminder.message)}`;
@@ -77,10 +96,10 @@ export function formatReminderText(reminder: Reminder, routine?: Todo): string {
 }
 
 /**
- * Sends a due reminder: the formatted text and, when it's something to confirm, the Sí/No poll
- * right under it. Throws only if the text itself couldn't be sent; a poll that fails just leaves
- * the reminder without one (a routine then falls back to its written check-in, see hasPollFor).
- * Returns how many WhatsApp messages actually went out, for the send governor.
+ * Sends a due reminder: the formatted text and, for a routine, the Sí/No poll right under it (its
+ * title carrying the streak). Throws only if the text itself couldn't be sent; a poll that fails
+ * just leaves the notice without one (the routine then falls back to its written check-in, see
+ * hasPollFor). Returns how many WhatsApp messages actually went out, for the send governor.
  */
 export async function sendReminderWithPrompt(wa: WaManager, reminder: Reminder, target: string): Promise<number> {
   const isRoutine = reminder.kind === 'routine_reminder' || reminder.kind === 'routine_checkin';
@@ -90,18 +109,23 @@ export async function sendReminderWithPrompt(wa: WaManager, reminder: Reminder, 
   // started, which is `duration` before this check-in.
   const isCheckin = reminder.kind === 'routine_checkin';
   const occurrenceDate = dateOnly(isCheckin && routine ? addMinutes(reminder.run_at, -(routine.duration_minutes ?? 0)) : reminder.run_at);
-  const text = isCheckin ? reminder.message : formatReminderText(reminder, routine);
-  const textMsgId = await wa.sendTextWithId(target, text);
-  if (!wantsPoll(reminder, target)) return 1;
+  const byPoll = wantsPoll(reminder) && !!routine;
+  const byReaction = !byPoll && wantsReaction(reminder, target);
+  const body = isCheckin ? reminder.message : formatReminderText(reminder, routine);
+  const textMsgId = await wa.sendTextWithId(target, byReaction ? `${body}\n\n${REACTION_HINT}` : body);
+  if (!byPoll && !byReaction) return 1;
 
   const title = routine?.title ?? reminder.message;
   const secret = randomBytes(32);
   let pollMsgId: string | null = null;
-  try {
-    const shortTitle = title.length > 90 ? `${title.slice(0, 89)}…` : title;
-    pollMsgId = await wa.sendPoll(target, `¿Ya hiciste "${shortTitle}"? Márcalo cuando termines`, POLL_OPTIONS, secret);
-  } catch (err) {
-    console.error('[PROMPT] No se pudo enviar la encuesta del recordatorio #%d:', reminder.id, (err as Error).message);
+  if (byPoll && routine) {
+    try {
+      const shortTitle = title.length > 80 ? `${title.slice(0, 79)}…` : title;
+      const progress = progressLine(routine);
+      pollMsgId = await wa.sendPoll(target, `¿Ya hiciste "${shortTitle}"?${progress ? ` — ${progress}` : ''}`, POLL_OPTIONS, secret);
+    } catch (err) {
+      console.error('[PROMPT] No se pudo enviar la encuesta del recordatorio #%d:', reminder.id, (err as Error).message);
+    }
   }
 
   reminderPromptsRepo.create({
@@ -133,9 +157,10 @@ function delayNote(prompt: ReminderPrompt, at: string): string {
 }
 
 /**
- * Applies an answer that came from WhatsApp itself (the poll or a quoted "sí"/"no"): stores it in
- * the sequence, marks the routine for that day, and returns the short acknowledgement to send
- * back. null = nothing changed (same answer tapped again), so nothing should be sent.
+ * Applies an answer that came from WhatsApp itself (the poll, a 👍/👎 reaction, or a quoted
+ * "sí"/"no"): stores it in the sequence, marks the routine for that day, and returns the
+ * acknowledgement to send back - always, for a yes and for a no alike, so the person knows it was
+ * registered. null = nothing changed (same answer given again), so nothing should be sent.
  */
 export function applyAnswer(prompt: ReminderPrompt, answer: PromptAnswer, source: PromptSource): { ack: string; celebrate: boolean } | null {
   // Any tap or reply is proof the chat is two-way - same as a normal message (see ai-agent.ts).
@@ -148,19 +173,23 @@ export function applyAnswer(prompt: ReminderPrompt, answer: PromptAnswer, source
   const routine = prompt.todo_id ? todosRepo.getById(prompt.user_id, prompt.todo_id) : undefined;
   if (!routine) {
     return {
-      ack: (answer === 'yes' ? `✅ Listo, ${bold(prompt.title)} quedó como hecho.` : `📝 Anotado: ${bold(prompt.title)} no se hizo.`) + delayNote(prompt, at),
+      ack: (answer === 'yes' ? `✅ Marcado como hecho: ${bold(prompt.title)}` : `📝 Marcado como no hecho: ${bold(prompt.title)}`) + delayNote(prompt, at),
       celebrate: false,
     };
   }
 
   habitLogsRepo.checkIn(routine.id, prompt.occurrence_date, answer === 'yes', null);
-  const streak = routineStreak(routine, todayLocal());
+  const progress = progressLine(routine);
+  const progressNote = progress ? `\n${progress}` : '';
   if (answer === 'no') {
-    return { ack: `📝 Anotado: ${bold(routine.title)} no se hizo esta vez. La próxima va con toda 💪${delayNote(prompt, at)}`, celebrate: false };
+    return {
+      ack: `📝 Marcado: ${bold(routine.title)} no se hizo esta vez. La próxima va con toda 💪${progressNote}${delayNote(prompt, at)}`,
+      celebrate: false,
+    };
   }
   const farewell = prompt.occurrence_date === todayLocal() ? maybeNightFarewell(prompt.user_id) : null;
   return {
-    ack: `✅ ${bold(routine.title)} cumplida 🎉\n🔥 Racha: ${streak}${delayNote(prompt, at)}${farewell ? `\n\n${farewell}` : ''}`,
+    ack: `✅ Marcado: ${bold(routine.title)} cumplida 🎉${progressNote}${delayNote(prompt, at)}${farewell ? `\n\n${farewell}` : ''}`,
     celebrate: true,
   };
 }

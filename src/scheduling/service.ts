@@ -1,4 +1,4 @@
-import { sendChoices } from '../agent/choices.js';
+import { registerChoices, yesNo } from '../agent/choices.js';
 import { db } from '../db/pool.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { permissionsRepo } from '../db/repositories/permissions.repo.js';
@@ -29,7 +29,7 @@ export class SchedulingError extends Error {}
 /** Anything that can send a WhatsApp text - the live WaManager, injected once at boot. */
 interface Notifier {
   sendText(jid: string, text: string): Promise<void>;
-  sendPoll?(jid: string, question: string, options: string[], secret: Uint8Array): Promise<string | null>;
+  sendTextWithId?(jid: string, text: string): Promise<string | null>;
   checkOnWhatsApp?(jid: string): Promise<boolean | null>;
   ownPhone?(): string | null;
 }
@@ -223,23 +223,18 @@ export async function requestAppointment(client: User, prof: Professional, start
   const appt = schedRepo.getAppointment(id)!;
   const who = client.name ?? client.jid.split('@')[0];
   if (status === 'pending') {
-    await notify(
-      appt.professional_jid,
+    const request =
       `📅 *Nueva solicitud de cita #${id}*\n${who} - ${formatWhen(appt.start_at)}${appt.reason ? `\nMotivo: ${appt.reason}` : ''}\n\n` +
-        `Responde "confirmar cita ${id}" o "rechazar cita ${id}" (o hazlo desde el calendario del portal).`,
-    );
-    if (notifier?.sendPoll) {
-      await sendChoices(
-        { sendPoll: notifier.sendPoll.bind(notifier) },
-        appt.professional_id,
-        appt.professional_jid,
-        [
-          { label: '✅ Confirmar', reply: `confirmar cita ${id}` },
-          { label: '❌ Rechazar', reply: `rechazar cita ${id}` },
-        ],
-        `Cita #${id}: ¿qué hacemos? 👇`,
-      );
+      `Reacciona 👍 para confirmarla o 👎 para rechazarla (también sirve responder "confirmar cita ${id}" / "rechazar cita ${id}", o el calendario del portal).`;
+    // With the message's id, a 👍/👎 on it counts as the command itself (see agent/choices.ts).
+    let requestId: string | null = null;
+    try {
+      requestId = (await notifier?.sendTextWithId?.(appt.professional_jid, request)) ?? null;
+    } catch (err) {
+      console.error('[SCHED] No se pudo notificar a %s:', appt.professional_jid, (err as Error).message);
     }
+    if (requestId) registerChoices(appt.professional_id, requestId, yesNo(`confirmar cita ${id}`, `rechazar cita ${id}`));
+    else if (!notifier?.sendTextWithId) await notify(appt.professional_jid, request);
   } else {
     await notify(appt.professional_jid, `📅 Cita #${id} agendada y confirmada automáticamente: ${who} - ${formatWhen(appt.start_at)}.`);
   }

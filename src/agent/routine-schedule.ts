@@ -186,3 +186,22 @@ export function routineStreak(todo: Todo, today: string): number {
   }
   return streak;
 }
+
+/**
+ * This week's progress (Monday to Sunday): how many times the routine is due in the whole week and
+ * how many of those are already marked done - the "3 de 4 esta semana" next to the streak.
+ */
+export function weekProgress(todo: Todo, today: string): { done: number; due: number } {
+  const monday = new Date(mondayOf(today)).toISOString().slice(0, 10);
+  const sunday = addDays(monday, 6).slice(0, 10);
+  const s = scheduleOf(todo);
+  const done = new Set(habitLogsRepo.doneDates(todo.id));
+  let due = 0;
+  let hit = 0;
+  for (let date = monday; date <= sunday; date = addDays(date, 1).slice(0, 10)) {
+    if (!occursOn(s, date)) continue;
+    due++;
+    if (done.has(date)) hit++;
+  }
+  return { done: hit, due };
+}

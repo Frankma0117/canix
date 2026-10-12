@@ -135,7 +135,7 @@ export function RemindersPage() {
         <section aria-label="Respuestas recientes" className="mt-10">
           <h2 className="font-display text-lg font-semibold text-ink dark:text-white">Respuestas recientes</h2>
           <p className="mb-3 text-sm text-gray-dark">
-            Lo que respondiste en la encuesta de Sí / No de cada recordatorio, con la hora en que lo marcaste.
+            Lo que marcaste en cada recordatorio (reaccionando 👍 o 👎 al aviso), con la hora en que lo hiciste.
           </p>
           <div className="space-y-2">
             {answers.map((p) => (

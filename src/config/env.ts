@@ -45,9 +45,9 @@ export const env = {
   // "buenas noches").
   nightSummaryAfterHour: parseInt(process.env.NIGHT_SUMMARY_AFTER_HOUR ?? '18', 10),
 
-  // Confirmación "¿lo hiciste?" con una encuesta de Sí/No debajo del aviso (ver
-  // agent/reminder-prompts.ts): 'all' = rutinas y recordatorios propios, 'routines' = solo rutinas,
-  // 'off' = sin encuesta (las rutinas vuelven a preguntar por texto al terminar su duración).
+  // Confirmación "¿lo hiciste?" (ver agent/reminder-prompts.ts): 'all' = encuesta de Sí/No en las
+  // rutinas y reacción 👍/👎 en los recordatorios propios, 'routines' = solo las rutinas, 'off' =
+  // nada (las rutinas vuelven a preguntar por texto al terminar su duración).
   reminderConfirmPolls: ((v) => (v === 'routines' || v === 'off' ? v : 'all'))(
     (process.env.REMINDER_CONFIRM_POLLS ?? 'all').trim().toLowerCase(),
   ) as 'all' | 'routines' | 'off',
