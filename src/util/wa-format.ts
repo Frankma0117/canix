@@ -4,7 +4,7 @@
  * else literally. Language models default to Markdown ("**negrilla**", "### Título", tables), which
  * lands as stray asterisks and hashes, so every AI reply goes through toWhatsApp() before sending.
  * It also gives lists the house style: numbered lists get keycap numbers, and list rows that start
- * with a time show it as a lined-up chip.
+ * with a time show it as a chip.
  */
 
 const KEYCAPS = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
@@ -25,9 +25,13 @@ export function shortTime(at: string): string {
   return `${h % 12 === 0 ? 12 : h % 12}:${String(m ?? 0).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
 }
 
-/** A time as a fixed-width monospace chip, so a column of them lines up: ` 5:05 pm`. */
+/**
+ * A time as a monospace chip: `5:05 pm`. No padding inside the backticks - WhatsApp only renders
+ * the chip when the text hugs them, so a leading space (tried, to line a column up) leaves the
+ * backticks showing.
+ */
 export function timeChip(at: string): string {
-  return `\`${shortTime(at).padStart(8, ' ')}\``;
+  return `\`${shortTime(at)}\``;
 }
 
 /** "▰▰▰▱▱▱▱▱▱▱" - a ten-step progress bar. */
@@ -36,13 +40,18 @@ export function progressBar(done: number, total: number): string {
   return '▰'.repeat(filled) + '▱'.repeat(10 - filled);
 }
 
-/** The small grey line under a message that says how to answer or what to do next. */
-export function footnote(text: string): string {
-  return `> ${text}`;
+/** The grey quote block under a message that says how to answer or what to do next (one line each). */
+export function footnote(...lines: string[]): string {
+  return lines.map((l) => `> ${l}`).join('\n');
+}
+
+/** "Reacciona a este mensaje" with what each reaction means underneath - the same everywhere. */
+export function reactionFooter(yes = 'Sí', no = 'No'): string {
+  return footnote('Reacciona a este mensaje', `👍 ${yes}  ·  👎 ${no}`);
 }
 
 // "- 12:00 Ducha", "- 5:30 pm: Cardio", "• 17:00 — Cena", "- `5:00 pm` Cena" at the start of a list row.
-const TIME_ROW_RE = /^[ \t]*(?:[-•][ \t]+)?`?(\d{1,2}):(\d{2})[ \t]*(a\.?[ \t]?m\.?|p\.?[ \t]?m\.?)?`?[ \t]*[-–—:·]?[ \t]+(\S.*)$/i;
+const TIME_ROW_RE = /^[ \t]*(?:[-•][ \t]+)?`?[ \t]*(\d{1,2}):(\d{2})[ \t]*(a\.?[ \t]?m\.?|p\.?[ \t]?m\.?)?`?[ \t]*[-–—:·]?[ \t]+(\S.*)$/i;
 
 function timeRow(line: string): string | null {
   const m = TIME_ROW_RE.exec(line);

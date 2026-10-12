@@ -6,7 +6,7 @@ import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { nowLocal, todayLocal, parseWall, dateOnly, addMinutes } from '../util/datetime.js';
 import { plainReminderPrefix, routineStartPrefix } from '../util/motivational.js';
-import { footnote, shortTime } from '../util/wa-format.js';
+import { reactionFooter, shortTime } from '../util/wa-format.js';
 import { routineStreak, weekProgress } from './routine-schedule.js';
 import { maybeNightFarewell } from './agenda.js';
 import { env } from '../config/env.js';
@@ -71,7 +71,7 @@ function wantsReaction(reminder: Reminder, target: string): boolean {
   return !!owner && (target === owner.jid || target === owner.lid);
 }
 
-const REACTION_HINT = footnote('Reacciona 👍 cuando lo hagas · 👎 si no');
+const REACTION_HINT = reactionFooter('Hecho', 'No lo hice');
 
 /** "🔥 Racha 5 · 3 de 4 esta semana" - empty parts are left out. */
 function progressLine(routine: Todo): string {
@@ -113,7 +113,8 @@ export async function sendReminderWithPrompt(wa: WaManager, reminder: Reminder, 
   const byPoll = wantsPoll(reminder) && !!routine;
   const byReaction = !byPoll && wantsReaction(reminder, target);
   const body = isCheckin ? reminder.message : formatReminderText(reminder, routine);
-  const textMsgId = await wa.sendTextWithId(target, byReaction ? `${body}\n\n${REACTION_HINT}` : body);
+  // Routine notices carry the same footer: reacting marks them too, besides the poll under them.
+  const textMsgId = await wa.sendTextWithId(target, byReaction || byPoll ? `${body}\n\n${REACTION_HINT}` : body);
   if (!byPoll && !byReaction) return 1;
 
   const title = routine?.title ?? reminder.message;

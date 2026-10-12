@@ -1,6 +1,6 @@
 import { choicePromptsRepo, type ChoiceOption } from '../db/repositories/choice-prompts.repo.js';
 import { nowLocal } from '../util/datetime.js';
-import { footnote } from '../util/wa-format.js';
+import { footnote, reactionFooter } from '../util/wa-format.js';
 
 /**
  * Quick answers to the bot's closed questions, without extra messages: a yes/no question is
@@ -53,7 +53,8 @@ export const STYLE_RULE = `
   bloques, y un título corto en negrilla con un emoji cuando haya varias partes. Si una lista pasa de
   8 elementos, muestra los más importantes y resume el resto ("y 5 más"). Las horas escríbelas
   cortas y entre comillas invertidas, así: \`5:00 pm\`. No repitas en el texto lo que ya dice una
-  lista, ni abras con frases de relleno.
+  lista, ni abras con frases de relleno. Si listas cosas de mi día, sepáralas en bloques con título
+  ("🔴 *Sin marcar*", "🟢 *Marcadas*", "🔵 *Lo que viene*") en vez de repetir un aviso en cada fila.
 - Cuando una tool te devuelva un texto ya diseñado (el menú, la agenda del día, la lista de voces),
   mándamelo TAL CUAL, sin reescribirlo, reordenarlo ni resumirlo; a lo sumo agrega UNA línea corta
   al final (por ejemplo una pregunta).`;
@@ -117,11 +118,10 @@ export function stripChoices(reply: string): string {
   return splitChoices(reply).text;
 }
 
-/** What goes under a question saying how to answer it quickly. */
+/** What goes under a question saying how to answer it quickly: the instruction, then the options. */
 export function choicesHint(choices: Choices): string {
-  if (choices.binary) return footnote('Reacciona a este mensaje: 👍 sí · 👎 no');
-  const rows = choices.options.map((o, i) => `${NUMBER_EMOJI[i] ?? `${i + 1}.`}  ${o.label}`).join('\n');
-  return `${rows}\n${footnote('Responde con el número')}`;
+  if (choices.binary) return reactionFooter();
+  return footnote('Responde con el número', ...choices.options.map((o, i) => `${NUMBER_EMOJI[i] ?? `${i + 1}.`} ${o.label}`));
 }
 
 /** The message as it goes out: the question followed by its quick-answer hint. */

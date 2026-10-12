@@ -1,3 +1,4 @@
+import { reactionFooter } from '../util/wa-format.js';
 import { registerChoices, yesNo } from '../agent/choices.js';
 import { db } from '../db/pool.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
@@ -225,7 +226,7 @@ export async function requestAppointment(client: User, prof: Professional, start
   if (status === 'pending') {
     const request =
       `📅 *Nueva solicitud de cita #${id}*\n${who} - ${formatWhen(appt.start_at)}${appt.reason ? `\nMotivo: ${appt.reason}` : ''}\n\n` +
-      `Reacciona 👍 para confirmarla o 👎 para rechazarla (también sirve responder "confirmar cita ${id}" / "rechazar cita ${id}", o el calendario del portal).`;
+      `${reactionFooter('Confirmar', 'Rechazar')}`;
     // With the message's id, a 👍/👎 on it counts as the command itself (see agent/choices.ts).
     let requestId: string | null = null;
     try {

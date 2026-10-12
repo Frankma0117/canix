@@ -110,24 +110,27 @@ const AGENDA_MAX_ROWS = 8;
 function agendaBlock(title: string, rows: { time: string; label: string }[], opts: { fromEnd?: boolean } = {}): string[] {
   if (rows.length === 0) return [];
   const shown = opts.fromEnd ? rows.slice(-AGENDA_MAX_ROWS) : rows.slice(0, AGENDA_MAX_ROWS);
-  const lines = ['', `${title} · ${rows.length}`, ...shown.map((r) => `${timeChip(r.time)} ${r.label}`)];
-  if (rows.length > shown.length) lines.push(`_… y ${rows.length - shown.length} más_`);
+  const lines = ['', `${title} · ${rows.length}`];
+  if (rows.length > shown.length && opts.fromEnd) lines.push(`_… ${rows.length - shown.length} más antes_`);
+  lines.push(...shown.map((r) => `${timeChip(r.time)} ${r.label}`));
+  if (rows.length > shown.length && !opts.fromEnd) lines.push(`_… y ${rows.length - shown.length} más_`);
   return lines;
 }
 
 /**
- * Today as the person sees it on WhatsApp (get_today_agenda): a progress bar, then what went by
- * unmarked, what's coming, and what's done - each a short block with the times lined up. Same data
- * as buildAgendaMessage above (which stays as the plain version the model reads as context).
+ * Today as the person sees it on WhatsApp: a progress bar, then three clearly separate blocks -
+ * what went by without being marked, what was marked (done, or answered "no"), and what's still
+ * coming. Same data as buildAgendaMessage above (which stays as the plain version the model reads
+ * as context). `unmarked` says how many are waiting, for whoever wants to offer rescheduling.
  */
-export function renderAgenda(userId: number): string {
+export function agendaView(userId: number): { text: string; unmarked: number } {
   const today = todayLocal();
   const now = nowLocal();
   const nowTime = now.slice(11, 16);
   const unmarked: { time: string; label: string }[] = [];
   const upcoming: { time: string; label: string }[] = [];
-  const done: { time: string; label: string }[] = [];
-  const skipped: { time: string; label: string }[] = [];
+  const marked: { time: string; label: string }[] = [];
+  let doneCount = 0;
   let routinesDue = 0;
 
   for (const r of todosRepo.list(userId, { scope: 'routine' })) {
@@ -137,11 +140,12 @@ export function renderAgenda(userId: number): string {
     if (paused) continue;
     routinesDue++;
     const log = habitLogsRepo.getForDate(r.id, today);
-    const row = { time, label: r.title };
-    if (log?.done) done.push(row);
-    else if (log) skipped.push(row);
-    else if (time <= nowTime) unmarked.push(row);
-    else upcoming.push(row);
+    if (log?.done) {
+      doneCount++;
+      marked.push({ time, label: `${r.title} — hecha ✓` });
+    } else if (log) marked.push({ time, label: `${r.title} — no se hizo` });
+    else if (time <= nowTime) unmarked.push({ time, label: r.title });
+    else upcoming.push({ time, label: r.title });
   }
 
   for (const rem of remindersRepo.listAll(userId, 'pending')) {
@@ -151,25 +155,55 @@ export function renderAgenda(userId: number): string {
   }
 
   const byTime = (a: { time: string }, b: { time: string }) => a.time.localeCompare(b.time);
-  for (const list of [unmarked, upcoming, done, skipped]) list.sort(byTime);
+  for (const list of [unmarked, upcoming, marked]) list.sort(byTime);
   const todosToday = todosRepo.list(userId, { scope: 'today', status: 'pending' });
 
   const d = new Date(`${today}T00:00:00Z`);
   const lines = [`📅 *Tu día* · ${weekdayName(today)} ${d.getUTCDate()} de ${MONTHS[d.getUTCMonth()]}`];
-  if (routinesDue > 0) lines.push(`${progressBar(done.length, routinesDue)}  ${done.length} de ${routinesDue} rutinas`);
+  if (routinesDue > 0) lines.push(`${progressBar(doneCount, routinesDue)}  ${doneCount} de ${routinesDue} rutinas hechas`);
 
-  if (unmarked.length + upcoming.length + done.length + skipped.length + todosToday.length === 0) {
+  if (unmarked.length + upcoming.length + marked.length + todosToday.length === 0) {
     lines.push('', 'No tienes nada agendado para hoy 🎉');
-    return lines.join('\n');
+    return { text: lines.join('\n'), unmarked: 0 };
   }
 
-  lines.push(...agendaBlock('⚠️ *Sin marcar*', unmarked, { fromEnd: true }));
-  lines.push(...agendaBlock('⏳ *Lo que viene*', upcoming));
-  lines.push(...agendaBlock('✅ *Hechas*', done, { fromEnd: true }));
-  lines.push(...agendaBlock('➖ *No se hicieron*', skipped, { fromEnd: true }));
+  lines.push(...agendaBlock('🔴 *Sin marcar*', unmarked, { fromEnd: true }));
+  lines.push(...agendaBlock('🟢 *Marcadas*', marked, { fromEnd: true }));
+  lines.push(...agendaBlock('🔵 *Lo que viene*', upcoming));
   if (todosToday.length > 0) {
     lines.push('', `📌 *Pendientes sin hora* · ${todosToday.length}`, ...todosToday.slice(0, AGENDA_MAX_ROWS).map((t) => `- ${t.title}`));
     if (todosToday.length > AGENDA_MAX_ROWS) lines.push(`_… y ${todosToday.length - AGENDA_MAX_ROWS} más_`);
   }
-  return lines.join('\n');
+  return { text: lines.join('\n'), unmarked: unmarked.length };
+}
+
+export function renderAgenda(userId: number): string {
+  return agendaView(userId).text;
+}
+
+const AGENDA_BLOCKERS = /\b(manana|ayer|semana|mes|lunes|martes|miercoles|jueves|viernes|sabado|domingo|crea|agrega|pon|cambia|borra|elimina|edita|marca)\b|\d/;
+const AGENDA_ASKS = [
+  /^(mi )?(agenda|dia|pendientes)( de hoy| del dia)?$/,
+  /\b(que|cual|cuales) (tengo|me queda|me falta|hay|es|son)\b.*\b(hoy|agendado|agendada|programado|pendiente|pendientes|dia|rutina|rutinas)\b/,
+  /\b(que|cual|cuales) (es|son) (mi|mis) (rutina|rutinas|agenda|pendientes)\b/,
+  /\bcomo (va|voy)\b.*\b(dia|hoy)\b/,
+  /\bque (me queda|me falta|tengo)( por hacer)?$/,
+];
+
+/**
+ * True for a plain "what do I have today?" ("qué tengo agendado", "cuál es mi rutina del día",
+ * "cómo va mi día") - answered straight with the designed agenda instead of going through the
+ * model, which tends to re-write the list its own way. Anything with a date, a number or an
+ * action in it is left to the model.
+ */
+export function asksForTodayAgenda(text: string): boolean {
+  const t = text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[¿?¡!.,]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!t || t.length > 60 || AGENDA_BLOCKERS.test(t)) return false;
+  return AGENDA_ASKS.some((re) => re.test(t));
 }

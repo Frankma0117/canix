@@ -1,9 +1,10 @@
-import { effectivePermissions, can, asBotUser, testModeOf } from '../permissions/engine.js';
+import { effectivePermissions, can, asBotUser, testModeOf, allowedToolsFor } from '../permissions/engine.js';
+import { agendaView, asksForTodayAgenda } from '../agent/agenda.js';
 import { handleTestModeCommand, testModeNotice } from '../permissions/test-mode.js';
 import { reminderPromptsRepo } from '../db/repositories/reminder-prompts.repo.js';
 import { applyAnswer, answerFromVote, answerFromText } from '../agent/reminder-prompts.js';
 import { sendAutoSticker, ROUTINE_DONE_KEYWORDS } from '../util/stickers.js';
-import { toWhatsApp } from '../util/wa-format.js';
+import { toWhatsApp, reactionFooter } from '../util/wa-format.js';
 import { choicePromptsRepo } from '../db/repositories/choice-prompts.repo.js';
 import { splitChoices, withChoices, choicesHint, registerChoices, reactionAnswer, replyForReaction, replyForNumber, YES_NO } from '../agent/choices.js';
 import type { PromptAnswer, PromptSource, ReminderPrompt } from '../types/index.js';
@@ -517,8 +518,8 @@ export class BotManager {
         const offerId = await this.wa.sendTextWithId(
           jid,
           `📇 Recibí ${shared.length} contacto${shared.length > 1 ? 's' : ''}:\n\n${list}\n\n` +
-            '¿Los guardo? Reacciona 👍 para guardar todos o 👎 para descartar (o responde "sí"/"no"; para ' +
-            'guardar solo algunos, sus números separados por coma, ej. "1,3").',
+            `¿Los guardo?${shared.length > 1 ? ' Para guardar solo algunos, escribe sus números separados por coma (ej. "1,3").' : ''}\n\n` +
+            reactionFooter(shared.length > 1 ? 'Guardar todos' : 'Guardar', 'Descartar'),
         );
         registerChoices(user.id, offerId, YES_NO);
         return;
@@ -645,6 +646,20 @@ export class BotManager {
       }
 
       if (!text.trim()) return; // bare image, not consumed by Fashion - same silent-ignore as before this feature existed
+
+      // "¿Qué tengo hoy?" gets the designed agenda directly (see agent/agenda.ts) - no AI turn. Kept
+      // in the conversation history so a "sí" to the rescheduling offer makes sense to the model.
+      const botTools = allowedToolsFor(botUser);
+      if (asksForTodayAgenda(text) && (botTools === null || botTools.includes('get_today_agenda'))) {
+        const view = agendaView(user.id);
+        const offer = view.unmarked > 0 ? '¿Quieres que te reprograme alguna de las que quedaron sin marcar?' : null;
+        const agendaText = offer ? `${view.text}\n\n${offer}` : view.text;
+        messagesRepo.add(user.id, 'user', text);
+        messagesRepo.add(user.id, 'assistant', agendaText);
+        const agendaId = await this.wa.sendTextWithId(jid, withChoices(agendaText, offer ? YES_NO : null));
+        if (offer) registerChoices(user.id, agendaId, YES_NO);
+        return;
+      }
 
       // Brief human-like pauses (see util/human-delay.ts) so replies don't land instantly on
       // every message - an obviously scripted response pattern is one of the signals that
