@@ -102,7 +102,7 @@ export function stripChoices(reply: string): string {
 
 /** The line added under a question saying how to answer it quickly. */
 export function choicesHint(choices: Choices): string {
-  if (choices.binary) return '_👍 sí  ·  👎 no_';
+  if (choices.binary) return '_Reacciona a este mensaje: 👍 sí  ·  👎 no (o escríbelo)._';
   return `${choices.options.map((o, i) => `${NUMBER_EMOJI[i]} ${o.label}`).join('\n')}\n_Responde con el número._`;
 }
 
