@@ -1,5 +1,6 @@
 import { choicePromptsRepo, type ChoiceOption } from '../db/repositories/choice-prompts.repo.js';
 import { nowLocal } from '../util/datetime.js';
+import { footnote } from '../util/wa-format.js';
 
 /**
  * Quick answers to the bot's closed questions, without extra messages: a yes/no question is
@@ -11,7 +12,7 @@ import { nowLocal } from '../util/datetime.js';
  */
 const MAX_OPTIONS = 9;
 const MAX_LABEL = 60;
-const NUMBER_EMOJI = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+const NUMBER_EMOJI = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 
 export interface Choices {
   options: ChoiceOption[];
@@ -40,6 +41,22 @@ export const CHOICES_RULE = `
   números) - tú NO las numeres ni las repitas en el texto. NO lo pongas en preguntas abiertas (una
   hora, una fecha, un nombre, un texto) ni cuando no estés preguntando nada. Nunca menciones esa
   línea ni la expliques.`;
+
+/**
+ * Told to the model in every system prompt: how a message must look on WhatsApp. toWhatsApp()
+ * (util/wa-format.ts) still cleans up whatever Markdown slips through.
+ */
+export const STYLE_RULE = `
+- FORMATO DE WHATSAPP (así se ven bien mis mensajes): negrilla con UN solo asterisco (*así*), nunca
+  con dos (**así no**); nada de "#" para títulos, ni tablas, ni líneas "---". Listas con "- " al
+  inicio de la línea. Mensajes cortos y con aire: una idea por bloque, una línea en blanco entre
+  bloques, y un título corto en negrilla con un emoji cuando haya varias partes. Si una lista pasa de
+  8 elementos, muestra los más importantes y resume el resto ("y 5 más"). Las horas escríbelas
+  cortas y entre comillas invertidas, así: \`5:00 pm\`. No repitas en el texto lo que ya dice una
+  lista, ni abras con frases de relleno.
+- Cuando una tool te devuelva un texto ya diseñado (el menú, la agenda del día, la lista de voces),
+  mándamelo TAL CUAL, sin reescribirlo, reordenarlo ni resumirlo; a lo sumo agrega UNA línea corta
+  al final (por ejemplo una pregunta).`;
 
 const MARKER_RE = /\[\[\s*opci[oó]n(?:es)?\s*:\s*([^\]]*)\]\]/gi;
 
@@ -100,10 +117,11 @@ export function stripChoices(reply: string): string {
   return splitChoices(reply).text;
 }
 
-/** The line added under a question saying how to answer it quickly. */
+/** What goes under a question saying how to answer it quickly. */
 export function choicesHint(choices: Choices): string {
-  if (choices.binary) return '_Reacciona a este mensaje: 👍 sí  ·  👎 no (o escríbelo)._';
-  return `${choices.options.map((o, i) => `${NUMBER_EMOJI[i]} ${o.label}`).join('\n')}\n_Responde con el número._`;
+  if (choices.binary) return footnote('Reacciona a este mensaje: 👍 sí · 👎 no');
+  const rows = choices.options.map((o, i) => `${NUMBER_EMOJI[i] ?? `${i + 1}.`}  ${o.label}`).join('\n');
+  return `${rows}\n${footnote('Responde con el número')}`;
 }
 
 /** The message as it goes out: the question followed by its quick-answer hint. */
@@ -147,7 +165,7 @@ export function replyForReaction(userId: number, msgId: string, answer: 'yes' | 
 
 /** "2" typed while a numbered question is waiting -> that option's text; null otherwise. */
 export function replyForNumber(userId: number, text: string): string | null {
-  const m = /^\s*([1-9])\s*[.)]?\s*$/.exec(text);
+  const m = /^\s*(\d{1,2})\s*[.)]?\s*$/.exec(text);
   if (!m) return null;
   const prompt = choicePromptsRepo.openFor(userId);
   if (!prompt || prompt.binary) return null;

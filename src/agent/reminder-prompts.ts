@@ -4,8 +4,9 @@ import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { todosRepo } from '../db/repositories/todos.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
-import { nowLocal, todayLocal, time12h, parseWall, dateOnly, addMinutes } from '../util/datetime.js';
+import { nowLocal, todayLocal, parseWall, dateOnly, addMinutes } from '../util/datetime.js';
 import { plainReminderPrefix, routineStartPrefix } from '../util/motivational.js';
+import { footnote, shortTime } from '../util/wa-format.js';
 import { routineStreak, weekProgress } from './routine-schedule.js';
 import { maybeNightFarewell } from './agenda.js';
 import { env } from '../config/env.js';
@@ -70,7 +71,7 @@ function wantsReaction(reminder: Reminder, target: string): boolean {
   return !!owner && (target === owner.jid || target === owner.lid);
 }
 
-const REACTION_HINT = '_Reacciona 👍 cuando lo hagas (👎 si no)._';
+const REACTION_HINT = footnote('Reacciona 👍 cuando lo hagas · 👎 si no');
 
 /** "🔥 Racha 5 · 3 de 4 esta semana" - empty parts are left out. */
 function progressLine(routine: Todo): string {
@@ -86,7 +87,7 @@ function progressLine(routine: Todo): string {
 /** The reminder text as it goes out: lead-in line, the thing itself in bold, then the details. */
 export function formatReminderText(reminder: Reminder, routine?: Todo): string {
   if (routine) {
-    const details = [`🕒 ${time12h(reminder.run_at)}`];
+    const details = [`🕒 ${shortTime(reminder.run_at)}`];
     if (routine.duration_minutes) details.push(`⏱️ ${routine.duration_minutes} min`);
     return `${routineStartPrefix()}\n${bold(routine.title)}\n${details.join('  ·  ')}`;
   }

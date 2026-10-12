@@ -15,7 +15,7 @@ import { isModeKey, toolsForMode, getModeCategory, type ModeKey } from './modes.
 import { sleep } from '../util/human-delay.js';
 import { allowedToolsFor, isSchedulingClientOnly, effectivePermissions, describePermissions, asBotUser } from '../permissions/engine.js';
 import { buildClientSystemPrompt, schedulingPromptSection } from '../scheduling/prompts.js';
-import { CHOICES_RULE, stripChoices } from './choices.js';
+import { CHOICES_RULE, STYLE_RULE, stripChoices } from './choices.js';
 import { env } from '../config/env.js';
 import type { WaManager } from '../whatsapp/wa-manager.js';
 
@@ -359,10 +359,13 @@ Reglas de las herramientas:
   con 👍 (hecho) o 👎 (no). En ambos casos el sistema lo registra solo, con la hora, y me confirma.
   Si en vez de eso te escribo que ya lo hice, igual márcalo tú con checkin_routine/complete_todo.
 - Si te pregunto qué tengo pendiente, cómo va mi día, cuál es mi primera tarea/rutina, o qué se me
-  quedó sin hacer hoy, usa get_today_agenda - te da todo ordenado por hora con lo que ya se cumplió
-  y lo que quedó atrasado, así puedes ofrecerme reprogramarlo el mismo día en vez de solo reportarlo.
+  quedó sin hacer hoy, usa get_today_agenda - te devuelve mi día ya diseñado (lo que quedó sin
+  marcar, lo que viene y lo hecho): mándamelo TAL CUAL, y si hay cosas sin marcar agrega solo una
+  pregunta corta al final ofreciéndome reprogramar alguna el mismo día.
   Cada mañana además te llega automáticamente esa misma agenda para que me la mandes sin que te la
   pida - no la inventes de memoria, siempre generada por esa tool/contexto.
+- (get_week_report también devuelve su resumen ya diseñado: mándalo TAL CUAL y, si acaso, una
+  línea corta al final.)
 - Si pregunto cómo me fue en la semana, cuánto he cumplido, o algo parecido, usa get_week_report -
   te da, separado en rutinas y tareas de una sola vez, cuánto cumplí de cada una en los últimos 7
   días. Además me llega automáticamente cada semana (WEEKLY_REPORT_DAY/TIME) sin que la pida.
@@ -518,7 +521,7 @@ function buildSystemPrompt(
         'el recordatorio por WhatsApp.';
 
   return [
-    BASE_PROMPT + CHOICES_RULE + (isAdmin ? ADMIN_PROMPT_ADDENDUM : '') + permsAddendum + callsAddendum + schedulingAddendum + modeAddendum,
+    BASE_PROMPT + STYLE_RULE + CHOICES_RULE + (isAdmin ? ADMIN_PROMPT_ADDENDUM : '') + permsAddendum + callsAddendum + schedulingAddendum + modeAddendum,
     '',
     currentTimeContext(),
     upcomingDaysContext(),

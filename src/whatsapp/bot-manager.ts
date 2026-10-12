@@ -3,6 +3,7 @@ import { handleTestModeCommand, testModeNotice } from '../permissions/test-mode.
 import { reminderPromptsRepo } from '../db/repositories/reminder-prompts.repo.js';
 import { applyAnswer, answerFromVote, answerFromText } from '../agent/reminder-prompts.js';
 import { sendAutoSticker, ROUTINE_DONE_KEYWORDS } from '../util/stickers.js';
+import { toWhatsApp } from '../util/wa-format.js';
 import { choicePromptsRepo } from '../db/repositories/choice-prompts.repo.js';
 import { splitChoices, withChoices, choicesHint, registerChoices, reactionAnswer, replyForReaction, replyForNumber, YES_NO } from '../agent/choices.js';
 import type { PromptAnswer, PromptSource, ReminderPrompt } from '../types/index.js';
@@ -24,7 +25,7 @@ import { ensureWeeklyReportReminder } from '../agent/weekly-report.js';
 import { ensureDailyResetReminder } from '../agent/daily-reset.js';
 import { ensureDailyDedupReminder } from '../agent/dedup.js';
 import { legacyAdminToken } from '../server/auth.js';
-import { renderMainMenu, resolveMenuCategory, renderCategoryDetail, renderUnknownCategory } from '../agent/menu.js';
+import { renderMainMenu, menuChoices, resolveMenuCategory, renderCategoryDetail, renderUnknownCategory } from '../agent/menu.js';
 import { isTwilioConfigured } from '../calls/twilio-client.js';
 import { handleModeMessage } from '../agent/modes.js';
 import { env } from '../config/env.js';
@@ -611,7 +612,8 @@ export class BotManager {
       // source of truth also used by the show_menu AI tool, so both entry points stay in sync.
       if (command === '/menu') {
         const access = { fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: botUser.role === 'admin', permissions: effectivePermissions(botUser) };
-        await this.wa.sendText(jid, renderMainMenu(access) + (testMode ? `\n\n${testModeNotice(testMode)}` : ''));
+        const menuId = await this.wa.sendTextWithId(jid, renderMainMenu(access) + (testMode ? `\n\n${testModeNotice(testMode)}` : ''));
+        registerChoices(user.id, menuId, { options: menuChoices(access), binary: false });
         return;
       }
       if (command.startsWith('/menu ')) {
@@ -667,10 +669,16 @@ export class BotManager {
       );
       // A closed question at the end of the reply can be answered with a reaction or a number
       // (see agent/choices.ts) - the hint goes in the same message, no extra one.
-      const { text: reply, choices } = splitChoices(rawReply);
+      const { text: reply, choices: asked } = splitChoices(toWhatsApp(rawReply));
+      const turnTools = takeLastTurnTools(user.id);
+      // The menu shown through the AI (show_menu) answers to its numbers like /menu does.
+      const menuShown = !asked && turnTools.some((t) => t.name === 'show_menu');
+      const menuAccess = { fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: botUser.role === 'admin', permissions: effectivePermissions(botUser) };
+      const choices = asked;
       const sendReplyText = async () => {
         const id = await this.wa.sendTextWithId(jid, withChoices(reply, choices));
         if (choices) registerChoices(user.id, id, choices);
+        else if (menuShown) registerChoices(user.id, id, { options: menuChoices(menuAccess), binary: false });
       };
       console.log('[BOT] Respuesta final a #%d: "%s"', user.id, reply.length > 200 ? `${reply.slice(0, 200)}…` : reply);
       await sleep(typingDelayMs(reply));
@@ -704,7 +712,7 @@ export class BotManager {
 
       // A sticker that fits what just happened (a successful action, or a greeting/thanks/goodbye)
       // - after the reply, so it reads as the closing touch. Same cooldown as every sticker.
-      sendTurnSticker(this.wa, jid, { userText: text, tools: takeLastTurnTools(user.id) });
+      sendTurnSticker(this.wa, jid, { userText: text, tools: turnTools });
     } catch (err) {
       console.error('[BOT] Error inesperado manejando mensaje de %s:', jid, (err as Error).message);
       await this.wa.sendText(jid, ERROR_REPLY).catch((sendErr) => {

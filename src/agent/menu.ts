@@ -25,7 +25,7 @@ export interface MenuCategory {
 
 const NUMBER_EMOJI = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 
-const NAV_FOOTER = '\n\n↩️ /menu - volver al menú principal';
+const NAV_FOOTER = '\n\n> */menu* vuelve al menú principal';
 
 /** Which categories can be entered as a special mode (see agent/modes.ts) - recordatorios stays
  *  the only one active by default, and links/panel are never gated (links always auto-detected,
@@ -346,46 +346,32 @@ function isModeCategory(key: string): boolean {
   return (MODE_KEYS as readonly string[]).includes(key);
 }
 
+/**
+ * The main menu: one line per section, numbered in the order shown. Typing the number or the name
+ * opens it (see menuChoices) - entering the mode for the sections that are one, showing the detail
+ * for the rest.
+ */
 export function renderMainMenu(access: MenuAccess): string {
-  const lines: string[] = ['📋 *Menú Canix*', '', 'Todo lo que puedo hacer por vos:', ''];
-
-  for (const cat of visibleCore(access)) {
-    const modeHint = isModeCategory(cat.key) ? ` - escribe "${cat.aliases[0]}" para entrar` : '';
-    const number = cat.number ?? 1;
-    lines.push(`${NUMBER_EMOJI[number - 1] ?? `${number}.`} ${cat.emoji} *${cat.title}*${modeHint}`);
-    lines.push(`     ${cat.short}`);
-  }
-  if (categoryAllowed('agenda', access)) {
-    lines.push(`${AGENDA_CATEGORY.emoji} *${AGENDA_CATEGORY.title}* - escribe "agenda" para entrar`);
-    lines.push(`     ${AGENDA_CATEGORY.short}`);
-  }
-  if (access.callsEnabled && categoryAllowed('llamadas', access)) {
-    lines.push(`${CALLS_CATEGORY.emoji} *${CALLS_CATEGORY.title}* → /menu llamadas`);
-    lines.push(`     ${CALLS_CATEGORY.short}`);
-  }
-  if (access.fashionEnabled && categoryAllowed('fashion', access)) {
-    lines.push(`${FASHION_CATEGORY.emoji} *${FASHION_CATEGORY.title}* → /menu fashion`);
-    lines.push(`     ${FASHION_CATEGORY.short}`);
-  }
-  if (access.isAdmin) {
-    lines.push(`${STICKERS_CATEGORY.emoji} *${STICKERS_CATEGORY.title}* → /menu stickers`);
-    lines.push(`     ${STICKERS_CATEGORY.short}`);
-    lines.push(`${ADMIN_CATEGORY.emoji} *${ADMIN_CATEGORY.title}* → /menu admin`);
-    lines.push(`     ${ADMIN_CATEGORY.short}`);
-  }
-
-  lines.push(
+  // Past 🔟 there's no single keycap: two of them ("1️⃣1️⃣") keep the column looking the same.
+  const keycap = (n: number) => NUMBER_EMOJI[n - 1] ?? String(n).split('').map((d) => (d === '0' ? '0️⃣' : NUMBER_EMOJI[Number(d) - 1])).join('');
+  const rows = visibleCategories(access).map((cat, i) => `${keycap(i + 1)}  ${cat.emoji} *${cat.title}*`);
+  return [
+    '📋 *Menú de Canix*',
+    'Escribe el *número* o el *nombre* de lo que quieras abrir.',
     '',
-    '👉 /menu <número o nombre> - ej. "/menu 1" o "/menu recordatorios", para el detalle completo con ejemplos de cada una',
-    '👉 Recordatorios y links siempre están activos - las demás son modos: escribe su nombre para ' +
-      'entrar, y "salir" para volver',
-    '👉 /reset - borra el historial de este chat',
-    '👉 /reset todo - borra TODA tu información',
+    ...rows,
     '',
-    'O simplemente pedime lo que necesites hablando normal, como ya hacés. 🙌',
-  );
+    '> También puedes pedirme las cosas hablando normal',
+    '> *salir* vuelve al inicio · */ayuda* muestra los comandos',
+  ].join('\n');
+}
 
-  return lines.join('\n');
+/** What each number of the main menu opens, in the same order renderMainMenu lists them. */
+export function menuChoices(access: MenuAccess): { label: string; reply: string }[] {
+  return visibleCategories(access).map((cat) => ({
+    label: cat.title,
+    reply: isModeCategory(cat.key) ? cat.aliases[0] : `/menu ${cat.aliases[0]}`,
+  }));
 }
 
 /** Welcome/intro message for the "we updated the bot" broadcast (see agent/tools/announce-update

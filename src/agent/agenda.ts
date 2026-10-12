@@ -4,6 +4,7 @@ import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { todayLocal, weekdayName, dateOnly, nowLocal } from '../util/datetime.js';
 import { nightFarewellMessage } from '../util/motivational.js';
 import { occursOn, scheduleOf } from './routine-schedule.js';
+import { progressBar, timeChip } from '../util/wa-format.js';
 import { env } from '../config/env.js';
 
 interface AgendaItem {
@@ -100,4 +101,75 @@ export function maybeNightFarewell(userId: number): string | null {
   if (hour < env.nightSummaryAfterHour) return null;
   if (remainingTodayCount(userId) > 0) return null;
   return nightFarewellMessage();
+}
+
+const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+/** Longest list shown in full; beyond it the rest is summarized so the message stays readable. */
+const AGENDA_MAX_ROWS = 8;
+
+function agendaBlock(title: string, rows: { time: string; label: string }[], opts: { fromEnd?: boolean } = {}): string[] {
+  if (rows.length === 0) return [];
+  const shown = opts.fromEnd ? rows.slice(-AGENDA_MAX_ROWS) : rows.slice(0, AGENDA_MAX_ROWS);
+  const lines = ['', `${title} · ${rows.length}`, ...shown.map((r) => `${timeChip(r.time)} ${r.label}`)];
+  if (rows.length > shown.length) lines.push(`_… y ${rows.length - shown.length} más_`);
+  return lines;
+}
+
+/**
+ * Today as the person sees it on WhatsApp (get_today_agenda): a progress bar, then what went by
+ * unmarked, what's coming, and what's done - each a short block with the times lined up. Same data
+ * as buildAgendaMessage above (which stays as the plain version the model reads as context).
+ */
+export function renderAgenda(userId: number): string {
+  const today = todayLocal();
+  const now = nowLocal();
+  const nowTime = now.slice(11, 16);
+  const unmarked: { time: string; label: string }[] = [];
+  const upcoming: { time: string; label: string }[] = [];
+  const done: { time: string; label: string }[] = [];
+  const skipped: { time: string; label: string }[] = [];
+  let routinesDue = 0;
+
+  for (const r of todosRepo.list(userId, { scope: 'routine' })) {
+    if (!r.reminder_time || !occursOn(scheduleOf(r), today)) continue;
+    const time = scheduleOf(r).time;
+    const paused = remindersRepo.listByTodo(r.id).some((rem) => rem.paused_until && rem.paused_until > now);
+    if (paused) continue;
+    routinesDue++;
+    const log = habitLogsRepo.getForDate(r.id, today);
+    const row = { time, label: r.title };
+    if (log?.done) done.push(row);
+    else if (log) skipped.push(row);
+    else if (time <= nowTime) unmarked.push(row);
+    else upcoming.push(row);
+  }
+
+  for (const rem of remindersRepo.listAll(userId, 'pending')) {
+    if (rem.kind !== 'reminder' && rem.kind !== 'important_date' && rem.kind !== 'flexible') continue;
+    if (dateOnly(rem.run_at) !== today) continue;
+    upcoming.push({ time: rem.run_at.slice(11, 16), label: rem.message });
+  }
+
+  const byTime = (a: { time: string }, b: { time: string }) => a.time.localeCompare(b.time);
+  for (const list of [unmarked, upcoming, done, skipped]) list.sort(byTime);
+  const todosToday = todosRepo.list(userId, { scope: 'today', status: 'pending' });
+
+  const d = new Date(`${today}T00:00:00Z`);
+  const lines = [`📅 *Tu día* · ${weekdayName(today)} ${d.getUTCDate()} de ${MONTHS[d.getUTCMonth()]}`];
+  if (routinesDue > 0) lines.push(`${progressBar(done.length, routinesDue)}  ${done.length} de ${routinesDue} rutinas`);
+
+  if (unmarked.length + upcoming.length + done.length + skipped.length + todosToday.length === 0) {
+    lines.push('', 'No tienes nada agendado para hoy 🎉');
+    return lines.join('\n');
+  }
+
+  lines.push(...agendaBlock('⚠️ *Sin marcar*', unmarked, { fromEnd: true }));
+  lines.push(...agendaBlock('⏳ *Lo que viene*', upcoming));
+  lines.push(...agendaBlock('✅ *Hechas*', done, { fromEnd: true }));
+  lines.push(...agendaBlock('➖ *No se hicieron*', skipped, { fromEnd: true }));
+  if (todosToday.length > 0) {
+    lines.push('', `📌 *Pendientes sin hora* · ${todosToday.length}`, ...todosToday.slice(0, AGENDA_MAX_ROWS).map((t) => `- ${t.title}`));
+    if (todosToday.length > AGENDA_MAX_ROWS) lines.push(`_… y ${todosToday.length - AGENDA_MAX_ROWS} más_`);
+  }
+  return lines.join('\n');
 }

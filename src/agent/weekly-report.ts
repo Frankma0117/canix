@@ -4,6 +4,11 @@ import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { todayLocal, nowLocal, addDays, parseWall, weekdayName } from '../util/datetime.js';
 import { countOccurrences, routineStreak, scheduleOf } from './routine-schedule.js';
 import { env } from '../config/env.js';
+import { progressBar } from '../util/wa-format.js';
+
+const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+/** Longest routine list shown in full - beyond it the rest is summarized. */
+const REPORT_MAX_ROWS = 12;
 
 /**
  * Builds the weekly report (routines vs one-time tasks, segmented as asked) for a user - the
@@ -14,46 +19,41 @@ import { env } from '../config/env.js';
 export function buildWeeklyReportMessage(userId: number): string {
   const today = todayLocal();
   const weekStart = addDays(today, -6).slice(0, 10);
+  const day = (d: string) => `${Number(d.slice(8, 10))} de ${MONTHS[Number(d.slice(5, 7)) - 1]}`;
 
-  const lines: string[] = [`📊 Tu resumen semanal (${weekdayName(weekStart)} ${weekStart} al ${weekdayName(today)} ${today}):`];
-
-  const routines = todosRepo.list(userId, { scope: 'routine' });
-  lines.push('', '🔁 Rutinas:');
-  if (routines.length === 0) {
-    lines.push('(No tienes rutinas activas.)');
-  } else {
-    for (const r of routines) {
-      // Out of the times it was actually due this week (a Monday-only routine is 1, not 7).
+  // Out of the times each routine was actually due this week (a Monday-only one is 1, not 7).
+  const rows = todosRepo
+    .list(userId, { scope: 'routine' })
+    .map((r) => {
       const due = countOccurrences(scheduleOf(r), weekStart, today);
-      if (due === 0) {
-        lines.push(`- ${r.title}: no tocaba esta semana`);
-        continue;
-      }
       const done = Math.min(habitLogsRepo.countDoneInRange(r.id, weekStart, today), due);
-      const streak = routineStreak(r, today);
-      const badge = done === due ? ' 🏆' : done * 2 >= due ? ' 💪' : done === 0 ? ' 😴' : '';
-      lines.push(`- ${r.title}: ${done}/${due} cumplidas${badge} (racha actual: ${streak})`);
-    }
+      return { title: r.title, due, done, streak: routineStreak(r, today) };
+    })
+    .filter((r) => r.due > 0)
+    .sort((a, b) => b.done / b.due - a.done / a.due || b.streak - a.streak || a.title.localeCompare(b.title));
+  const totalDue = rows.reduce((n, r) => n + r.due, 0);
+  const totalDone = rows.reduce((n, r) => n + r.done, 0);
+
+  const lines: string[] = [`📊 *Tu semana* · ${day(weekStart)} al ${day(today)}`];
+  if (totalDue > 0) lines.push(`${progressBar(totalDone, totalDue)}  ${totalDone} de ${totalDue} · ${Math.round((totalDone / totalDue) * 100)}%`);
+
+  lines.push('', `🔁 *Rutinas* · ${rows.length}`);
+  if (rows.length === 0) lines.push('No te tocaba ninguna esta semana.');
+  for (const r of rows.slice(0, REPORT_MAX_ROWS)) {
+    const badge = r.done === r.due ? '🏆' : r.done * 2 >= r.due ? '💪' : r.done === 0 ? '😴' : '▫️';
+    lines.push(`${badge} \`${r.done}/${r.due}\` ${r.title}${r.streak > 1 ? ` · 🔥 ${r.streak}` : ''}`);
   }
+  if (rows.length > REPORT_MAX_ROWS) lines.push(`_… y ${rows.length - REPORT_MAX_ROWS} más_`);
 
   const oneOff = todosRepo.list(userId).filter((t) => t.scope !== 'routine');
   const completedThisWeek = oneOff.filter(
     (t) => t.status === 'done' && t.completed_at && t.completed_at.slice(0, 10) >= weekStart && t.completed_at.slice(0, 10) <= today,
   );
   const stillPending = oneOff.filter((t) => t.status === 'pending');
-
-  lines.push('', '✅ Tareas de una sola vez:');
-  lines.push(`- Cumplidas esta semana: ${completedThisWeek.length}`);
-  lines.push(`- Todavía pendientes: ${stillPending.length}`);
-  if (stillPending.length > 0) {
-    for (const t of stillPending.slice(0, 10)) lines.push(`  - #${t.id} ${t.title}`);
-    if (stillPending.length > 10) lines.push(`  ...y ${stillPending.length - 10} más.`);
-  }
-
-  const totalConsidered = completedThisWeek.length + stillPending.length;
-  if (totalConsidered > 0) {
-    const rate = Math.round((completedThisWeek.length / totalConsidered) * 100);
-    lines.push('', `📈 De lo que tenías entre manos, cumpliste el ${rate}%.`);
+  if (completedThisWeek.length + stillPending.length > 0) {
+    lines.push('', `✅ *Tareas* · ${completedThisWeek.length} cumplidas, ${stillPending.length} pendientes`);
+    for (const t of stillPending.slice(0, 6)) lines.push(`- ${t.title}`);
+    if (stillPending.length > 6) lines.push(`_… y ${stillPending.length - 6} más_`);
   }
 
   return lines.join('\n');

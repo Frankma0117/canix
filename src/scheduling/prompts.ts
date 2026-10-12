@@ -1,4 +1,4 @@
-import { CHOICES_RULE } from '../agent/choices.js';
+import { CHOICES_RULE, STYLE_RULE } from '../agent/choices.js';
 import { currentTimeContext, upcomingDaysContext, nowLocal, todayLocal, addDays } from '../util/datetime.js';
 import { schedRepo } from './repo.js';
 import { bookableProfessionals, professionalLabel, appointmentLine } from './service.js';
@@ -33,7 +33,7 @@ Reglas:
 - Solo puedes ayudar con citas. Si piden otra cosa, explica con amabilidad que por este medio solo
   gestionas citas.
 - NO INVENTES NADA: ni profesionales, ni horarios, ni citas. Usa solo lo que te dan las tools y el
-  contexto de abajo.${SHARED_RULES}${CHOICES_RULE}
+  contexto de abajo.${SHARED_RULES}${STYLE_RULE}${CHOICES_RULE}
 - Usa la zona horaria y la fecha/hora actual de abajo para entender "mañana", "el viernes", etc.`,
     '',
     currentTimeContext(),

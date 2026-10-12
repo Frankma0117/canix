@@ -158,16 +158,10 @@ export function toolsForMode(key: ModeKey | null): string[] | null {
   return [...ALWAYS_ON_TOOLS, ...MODE_TOOLS[key]];
 }
 
-const ENTRY_NUMBER_EMOJI = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
-
 /**
- * Entry screen for a mode - same numbered "¿qué querés hacer?" shape as Fashion Mode's own HOME_MENU
- * (see fashion/flows/home.flow.ts), instead of just dumping the category's bullet list as prose.
- * Built from category.detail's own bullets (never a separate copy) so this can never drift from
- * `/menu <categoría>`'s answer - just re-numbered instead of dashed, plus a closing "Salir" option.
- * The numbers are illustrative, not a strict tap-to-select menu like Fashion's: this mode still runs
- * on the normal AI loop (see this file's own top comment), so typing natural language works exactly
- * the same as before - the numbering is purely to make "what can I do here" scannable at a glance.
+ * Entry screen for a mode: its title and what can be asked for there, built from category.detail's
+ * own bullets (never a separate copy) so it can't drift from what `/menu <categoría>` answers. The
+ * mode runs on the normal AI loop, so the bullets are examples to talk from, not options to pick.
  */
 export function renderModeEntryMessage(category: MenuCategory): string {
   const lines = category.detail.split('\n');
@@ -179,20 +173,16 @@ export function renderModeEntryMessage(category: MenuCategory): string {
     .filter((l) => l.trim().startsWith('- '))
     .map((l) => l.trim().slice(2))
     .filter((b) => !/\bsalir\b/i.test(b));
-  const options = bullets.map((b, i) => `${ENTRY_NUMBER_EMOJI[i] ?? `${i + 1}.`} ${b}`).join('\n');
-
   return (
-    `${header}\n\n` +
-    `¿Qué quieres hacer?\n\n` +
-    `${options}\n` +
-    `🚪 Salir\n\n` +
-    `Ya estás en modo *${category.title}* - no hace falta escribir un número, hablame normal y ya. ` +
-    `Escribe "salir" para volver a modo recordatorios, o el nombre de otro modo para cambiar directo.`
+    `${header}\n` +
+    `Ya estás aquí. Pídeme lo que necesites, por ejemplo:\n\n` +
+    `${bullets.map((b) => `- ${b}`).join('\n')}\n\n` +
+    `> *salir* vuelve al inicio · el nombre de otra sección te cambia directo`
   );
 }
 
 export function renderModeExitMessage(): string {
-  return '👋 Volviste a modo *Recordatorios* (el de siempre) - los links siguen funcionando siempre, sin importar el modo.';
+  return '👋 Listo, volviste al inicio.\n\n> Escribe */menu* para ver todo lo que puedo hacer';
 }
 
 export interface ModeRouterResult {
