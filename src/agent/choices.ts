@@ -55,9 +55,17 @@ export const STYLE_RULE = `
   cortas y entre comillas invertidas, así: \`5:00 pm\`. No repitas en el texto lo que ya dice una
   lista, ni abras con frases de relleno. Si listas cosas de mi día, sepáralas en bloques con título
   ("🔴 *Sin marcar*", "🟢 *Marcadas*", "🔵 *Lo que viene*") en vez de repetir un aviso en cada fila.
-- Cuando una tool te devuelva un texto ya diseñado (el menú, la agenda del día, la lista de voces),
-  mándamelo TAL CUAL, sin reescribirlo, reordenarlo ni resumirlo; a lo sumo agrega UNA línea corta
-  al final (por ejemplo una pregunta).`;
+- Cuando una tool te devuelva un texto ya diseñado (empieza con un título en negrilla con emoji: el
+  menú, la agenda de un día, el resumen semanal, la lista de voces y todas las listas - links,
+  contactos, notas, listas, recordatorios, pendientes, categorías, comidas, recetas), mándamelo TAL
+  CUAL, completo, sin reescribirlo, reordenarlo, resumirlo ni quitarle los "#12" (son los números
+  con los que te pido editar o borrar); a lo sumo agrega UNA línea corta al final. Si solo usaste la
+  lista para buscar un dato y responderme algo puntual, responde eso y no mandes la lista.
+- NUNCA escribas de memoria una lista con ese formato ni inventes sus filas: para mostrarme
+  recordatorios, links, contactos, notas, listas o pendientes SIEMPRE llama la tool en ese mismo
+  turno y manda lo que devuelva. Si no llamaste la tool, no tienes la lista.
+- Para "qué tengo mañana / el viernes / ayer" usa get_today_agenda con date (misma vista que hoy).
+- Un link suelto va con su título en negrilla y la dirección sola en la línea de abajo.`;
 
 const MARKER_RE = /\[\[\s*opci[oó]n(?:es)?\s*:\s*([^\]]*)\]\]/gi;
 
@@ -157,10 +165,12 @@ export function reactionAnswer(emoji: string | null | undefined): 'yes' | 'no' |
 export function replyForReaction(userId: number, msgId: string, answer: 'yes' | 'no'): string | 'stale' | null {
   const prompt = choicePromptsRepo.findByMessageId(userId, msgId);
   if (!prompt || !prompt.binary || prompt.options.length < 2) return null;
+  const reply = prompt.options[answer === 'yes' ? 0 : 1].reply;
+  if (!reply) return null; // that reaction has no meaning for this message (e.g. only 👎 undoes)
   if (prompt.status !== 'open') return 'stale';
   if (prompt.sticky) choicePromptsRepo.close(prompt.id);
   else choicePromptsRepo.closeOpenFor(userId);
-  return prompt.options[answer === 'yes' ? 0 : 1].reply;
+  return reply;
 }
 
 /** "2" typed while a numbered question is waiting -> that option's text; null otherwise. */

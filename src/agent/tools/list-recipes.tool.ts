@@ -1,10 +1,11 @@
+import { recipesView } from '../views.js';
 import type { Tool } from '../tool-registry.js';
 import { recipesRepo } from '../../db/repositories/recipes.repo.js';
 import { resolveActingUser } from './act-on-behalf.js';
 
 export const listRecipesTool: Tool = {
   name: 'list_recipes',
-  description: 'Lista las recetas guardadas.',
+  description: 'Lista las recetas guardadas. Devuelve la lista ya diseñada para WhatsApp: envíala TAL CUAL.',
   parameters: {
     type: 'object',
     properties: {
@@ -22,6 +23,6 @@ export const listRecipesTool: Tool = {
 
     const recipes = recipesRepo.listAll(acting.userId);
     if (recipes.length === 0) return 'Todavía no tienes recetas guardadas.';
-    return recipes.map((r) => `#${r.id} ${r.title} — ingredientes: ${r.ingredients}`).join('\n');
+    return recipesView(recipes);
   },
 };

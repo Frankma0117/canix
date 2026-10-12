@@ -1,10 +1,11 @@
+import { contactsView } from '../views.js';
 import type { Tool } from '../tool-registry.js';
 import { contactsRepo } from '../../db/repositories/contacts.repo.js';
 import { resolveActingUser } from './act-on-behalf.js';
 
 export const listContactsTool: Tool = {
   name: 'list_contacts',
-  description: 'Lista mis contactos guardados.',
+  description: 'Lista mis contactos guardados. Devuelve la lista ya diseñada para WhatsApp: envíala TAL CUAL.',
   parameters: {
     type: 'object',
     properties: {
@@ -22,8 +23,6 @@ export const listContactsTool: Tool = {
 
     const contacts = contactsRepo.listAll(acting.userId);
     if (contacts.length === 0) return 'Todavía no tienes contactos guardados.';
-    return contacts
-      .map((c) => `#${c.id} ${c.name}${c.username ? ` (@${c.username})` : ''}${c.notes ? ` — ${c.notes}` : ''}`)
-      .join('\n');
+    return contactsView(contacts);
   },
 };

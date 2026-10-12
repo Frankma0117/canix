@@ -1,17 +1,13 @@
+import { linksView } from '../views.js';
 import type { Tool } from '../tool-registry.js';
 import { linksRepo } from '../../db/repositories/links.repo.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
 import { resolveActingUser } from './act-on-behalf.js';
 
-function formatLink(l: { id: number; url: string; title: string | null; description: string | null }): string {
-  const label = l.title || l.description || l.url;
-  return `#${l.id} ${label}${l.title || l.description ? ` — ${l.url}` : ''}`;
-}
-
 export const listLinksTool: Tool = {
   name: 'list_links',
   description:
-    'Lista los links guardados, opcionalmente filtrando por categoría o por un texto de búsqueda.',
+    'Lista los links guardados, opcionalmente filtrando por categoría o por un texto de búsqueda. Devuelve la lista ya diseñada para WhatsApp: envíala TAL CUAL.',
   parameters: {
     type: 'object',
     properties: {
@@ -42,6 +38,6 @@ export const listLinksTool: Tool = {
       : linksRepo.listByCategory(userId, categoryId);
 
     if (links.length === 0) return 'No tienes links que coincidan.';
-    return links.map(formatLink).join('\n');
+    return linksView(links, categoriesRepo.listAll(userId), { filter: args.search ? `"${String(args.search)}"` : undefined });
   },
 };

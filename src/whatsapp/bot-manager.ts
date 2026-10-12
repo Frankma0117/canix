@@ -1,5 +1,5 @@
 import { effectivePermissions, can, asBotUser, testModeOf, allowedToolsFor } from '../permissions/engine.js';
-import { agendaView, asksForTodayAgenda } from '../agent/agenda.js';
+import { agendaView, agendaDateAsked } from '../agent/agenda.js';
 import { handleTestModeCommand, testModeNotice } from '../permissions/test-mode.js';
 import { reminderPromptsRepo } from '../db/repositories/reminder-prompts.repo.js';
 import { applyAnswer, answerFromVote, answerFromText } from '../agent/reminder-prompts.js';
@@ -14,10 +14,12 @@ import { handleFashionMessage } from '../fashion/router.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { messagesRepo } from '../db/repositories/messages.repo.js';
 import { stickersRepo, normalizeStickerLabel, isWebp } from '../db/repositories/stickers.repo.js';
-import { pendingContactsRepo } from '../db/repositories/pending-contacts.repo.js';
 import { contactsRepo } from '../db/repositories/contacts.repo.js';
 import { extractSharedContacts } from '../util/vcard.js';
-import { phoneToJid } from '../util/jid.js';
+import { saveSharedContacts, undoSharedContacts, UNDO_CONTACTS_COMMAND } from '../agent/shared-contacts.js';
+import { preferDesigned, listToolAsked } from '../agent/views.js';
+import { registry } from '../agent/tool-registry.js';
+import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { resetAllUserData, resetFashionData } from '../db/reset-user.js';
 import { spacesStorageService } from '../fashion/storage/spaces-storage.service.js';
 import { processMessage, takeLastTurnTools } from '../agent/ai-agent.js';
@@ -28,7 +30,7 @@ import { ensureDailyDedupReminder } from '../agent/dedup.js';
 import { legacyAdminToken } from '../server/auth.js';
 import { renderMainMenu, menuChoices, resolveMenuCategory, renderCategoryDetail, renderUnknownCategory } from '../agent/menu.js';
 import { isTwilioConfigured } from '../calls/twilio-client.js';
-import { handleModeMessage } from '../agent/modes.js';
+import { handleModeMessage, toolsForMode, isModeKey } from '../agent/modes.js';
 import { env } from '../config/env.js';
 import { sleep, typingDelayMs, readingPauseMs, withWorkingUpdates } from '../util/human-delay.js';
 import { workingUpdateMessage } from '../util/motivational.js';
@@ -507,54 +509,35 @@ export class BotManager {
       // yet: only offered, and only actually written to `contacts` once the person replies "sí"
       // (see the pending-batch reply handler right below).
       if (contactMessage) {
-        const shared = extractSharedContacts(contactMessage);
-        if (shared.length === 0) {
-          await this.wa.sendText(jid, '⚠️ No pude leer ese contacto, ¿me lo compartes de nuevo?').catch(() => {});
+        if (!can(botUser, 'contacts.manage')) {
+          await this.wa.sendText(jid, '🔒 Guardar contactos no está habilitado para ti. Si lo necesitas, pídeselo al administrador.');
           return;
         }
-        pendingContactsRepo.replaceForUser(user.id, shared);
-        console.log('[CONTACTS] Usuario #%d compartió %d contacto(s), pendiente de confirmación.', user.id, shared.length);
-        const list = shared.map((c, i) => `${i + 1}. ${c.name} - ${c.phone}`).join('\n');
-        const offerId = await this.wa.sendTextWithId(
-          jid,
-          `📇 Recibí ${shared.length} contacto${shared.length > 1 ? 's' : ''}:\n\n${list}\n\n` +
-            `¿Los guardo?${shared.length > 1 ? ' Para guardar solo algunos, escribe sus números separados por coma (ej. "1,3").' : ''}\n\n` +
-            reactionFooter(shared.length > 1 ? 'Guardar todos' : 'Guardar', 'Descartar'),
-        );
-        registerChoices(user.id, offerId, YES_NO);
+        const shared = extractSharedContacts(contactMessage);
+        if (shared.length === 0) {
+          await this.wa
+            .sendText(jid, '⚠️ Esa tarjeta de contacto no trae número, así que no pude guardarla. Escríbeme el nombre y el número y lo guardo.')
+            .catch(() => {});
+          return;
+        }
+        // Sharing the card is the request to save it - saved right away, with a 👎 to undo.
+        const { text: savedText, newIds } = await saveSharedContacts(this.wa, user.id, shared);
+        console.log('[CONTACTS] Usuario #%d compartió %d contacto(s): %d nuevo(s).', user.id, shared.length, newIds.length);
+        messagesRepo.add(user.id, 'assistant', savedText);
+        const savedId = await this.wa.sendTextWithId(jid, savedText);
+        if (newIds.length > 0) {
+          registerChoices(user.id, savedId, { options: [{ label: '', reply: '' }, { label: 'Quitar', reply: `${UNDO_CONTACTS_COMMAND} ${newIds.join(',')}` }], binary: true, sticky: true });
+        }
         return;
       }
 
-      // Answer to the "¿los guardo?" offer above - only "sí"/"no"/a list of numbers is consumed
-      // here; anything else falls through untouched and the offer just stays pending (a new shared
-      // batch, or an explicit answer later, is how it gets resolved).
-      const pendingContacts = pendingContactsRepo.listForUser(user.id);
-      if (pendingContacts.length > 0 && command) {
-        if (/^(si|sí|guardar( todos)?)$/.test(command)) {
-          for (const c of pendingContacts) contactsRepo.upsert(user.id, c.name, phoneToJid(c.phone), null);
-          pendingContactsRepo.clearForUser(user.id);
-          console.log('[CONTACTS] Usuario #%d guardó %d contacto(s) compartido(s).', user.id, pendingContacts.length);
-          await this.wa.sendText(jid, `✅ Guardé ${pendingContacts.length} contacto(s). Ya puedes escribirles por nombre.`);
-          return;
-        }
-        if (/^(no|cancelar|descartar)$/.test(command)) {
-          pendingContactsRepo.clearForUser(user.id);
-          console.log('[CONTACTS] Usuario #%d descartó %d contacto(s) compartido(s).', user.id, pendingContacts.length);
-          await this.wa.sendText(jid, '👍 Descartado, no guardé nada.');
-          return;
-        }
-        const indices = command
-          .split(',')
-          .map((s) => Number(s.trim()))
-          .filter((n) => Number.isInteger(n) && n >= 1 && n <= pendingContacts.length);
-        if (indices.length > 0) {
-          const chosen = indices.map((i) => pendingContacts[i - 1]);
-          for (const c of chosen) contactsRepo.upsert(user.id, c.name, phoneToJid(c.phone), null);
-          pendingContactsRepo.clearForUser(user.id);
-          console.log('[CONTACTS] Usuario #%d guardó %d de %d contacto(s) compartido(s).', user.id, chosen.length, pendingContacts.length);
-          await this.wa.sendText(jid, `✅ Guardé ${chosen.length} de los ${pendingContacts.length} contactos.`);
-          return;
-        }
+      // The 👎 on that confirmation (see agent/shared-contacts.ts).
+      if (command.startsWith(`${UNDO_CONTACTS_COMMAND} `)) {
+        const ids = command.slice(UNDO_CONTACTS_COMMAND.length).split(',').map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0);
+        const undone = undoSharedContacts(user.id, ids);
+        messagesRepo.add(user.id, 'assistant', undone);
+        await this.wa.sendText(jid, undone);
+        return;
       }
 
       if (command === '/reset') {
@@ -647,15 +630,30 @@ export class BotManager {
 
       if (!text.trim()) return; // bare image, not consumed by Fashion - same silent-ignore as before this feature existed
 
-      // "¿Qué tengo hoy?" gets the designed agenda directly (see agent/agenda.ts) - no AI turn. Kept
-      // in the conversation history so a "sí" to the rescheduling offer makes sense to the model.
+      // "Mis links", "qué recordatorios tengo"...: the designed list straight from the data (see
+      // agent/views.ts) - no AI turn. Kept in the history so "borra el #3" right after makes sense.
       const botTools = allowedToolsFor(botUser);
-      if (asksForTodayAgenda(text) && (botTools === null || botTools.includes('get_today_agenda'))) {
-        const view = agendaView(user.id);
+      const modeTools = toolsForMode(isModeKey(botUser.active_mode) ? botUser.active_mode : null);
+      const listTool = listToolAsked(text);
+      if (listTool && (botTools === null || botTools.includes(listTool)) && (modeTools === null || modeTools.includes(listTool))) {
+        const listText = await registry.get(listTool)!.execute({}, { ownerJid: user.jid, userId: user.id, isAdmin: botUser.role === 'admin', wa: this.wa });
+        messagesRepo.add(user.id, 'user', text);
+        messagesRepo.add(user.id, 'assistant', listText);
+        remindersRepo.confirmForUser(user.id);
+        await this.wa.sendText(jid, listText);
+        return;
+      }
+
+      // "¿Qué tengo hoy / mañana / el viernes?" gets the designed agenda directly (see agent/agenda.ts) - no AI turn. Kept
+      // in the conversation history so a "sí" to the rescheduling offer makes sense to the model.
+      const agendaDate = agendaDateAsked(text);
+      if (agendaDate && (botTools === null || botTools.includes('get_today_agenda'))) {
+        const view = agendaView(user.id, agendaDate);
         const offer = view.unmarked > 0 ? '¿Quieres que te reprograme alguna de las que quedaron sin marcar?' : null;
         const agendaText = offer ? `${view.text}\n\n${offer}` : view.text;
         messagesRepo.add(user.id, 'user', text);
         messagesRepo.add(user.id, 'assistant', agendaText);
+        remindersRepo.confirmForUser(user.id);
         const agendaId = await this.wa.sendTextWithId(jid, withChoices(agendaText, offer ? YES_NO : null));
         if (offer) registerChoices(user.id, agendaId, YES_NO);
         return;
@@ -684,8 +682,11 @@ export class BotManager {
       );
       // A closed question at the end of the reply can be answered with a reaction or a number
       // (see agent/choices.ts) - the hint goes in the same message, no extra one.
-      const { text: reply, choices: asked } = splitChoices(toWhatsApp(rawReply));
       const turnTools = takeLastTurnTools(user.id);
+      const split = splitChoices(toWhatsApp(rawReply));
+      const asked = split.choices;
+      // A list the model re-typed its own way goes out in its designed form (see agent/views.ts).
+      const reply = preferDesigned(split.text, turnTools);
       // The menu shown through the AI (show_menu) answers to its numbers like /menu does.
       const menuShown = !asked && turnTools.some((t) => t.name === 'show_menu');
       const menuAccess = { fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: botUser.role === 'admin', permissions: effectivePermissions(botUser) };

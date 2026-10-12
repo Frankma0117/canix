@@ -1,3 +1,4 @@
+import { remindersView } from '../views.js';
 import type { Tool } from '../tool-registry.js';
 import { remindersRepo } from '../../db/repositories/reminders.repo.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
@@ -7,7 +8,7 @@ import type { ReminderStatus } from '../../types/index.js';
 
 export const listRemindersTool: Tool = {
   name: 'list_reminders',
-  description: 'Lista mis recordatorios, opcionalmente filtrando por categoría o estado.',
+  description: 'Lista mis recordatorios, opcionalmente filtrando por categoría o estado. Devuelve la lista ya diseñada para WhatsApp: envíala TAL CUAL.',
   parameters: {
     type: 'object',
     properties: {
@@ -47,14 +48,10 @@ export const listRemindersTool: Tool = {
       : remindersRepo.listAll(userId, status);
 
     if (reminders.length === 0) return 'No tienes recordatorios que coincidan.';
-    return reminders
-      .map((r) => {
-        const link = r.link_id ? linksRepo.getById(userId, r.link_id) : undefined;
-        const pausedNote = r.paused_until ? ` ⏸️ pausado hasta ${r.paused_until.slice(0, 10)}` : '';
-        const suspendedNote = r.status === 'suspended' ? ' ⏸️ suspendido por falta de confirmación (se reactiva solo)' : '';
-        const missedNote = r.status === 'missed' ? ' ⚠️ no se envió (el bot estuvo caído)' : '';
-        return `#${r.id} ${r.run_at} — ${r.message}${link ? ` 🔗${link.url}` : ''}${pausedNote}${suspendedNote}${missedNote}`;
-      })
-      .join('\n');
+    const titles: Partial<Record<ReminderStatus, string>> = { executed: 'Recordatorios enviados', cancelled: 'Recordatorios cancelados', suspended: 'Recordatorios suspendidos', missed: 'Recordatorios no enviados', failed: 'Recordatorios fallidos' };
+    // Routines' own notice/check-in rows and the silent housekeeping ones aren't "reminders" to the person.
+    const visible = reminders.filter((r) => r.kind === 'reminder' || r.kind === 'important_date' || r.kind === 'flexible' || r.kind === 'interval');
+    if (visible.length === 0) return 'No tienes recordatorios que coincidan.';
+    return remindersView(visible, (id) => linksRepo.getById(userId, id)?.url, { title: titles[status] });
   },
 };

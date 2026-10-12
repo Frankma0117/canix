@@ -1,3 +1,4 @@
+import { linkCard } from '../views.js';
 import type { Tool } from '../tool-registry.js';
 import { linksRepo } from '../../db/repositories/links.repo.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
@@ -5,7 +6,7 @@ import { categoriesRepo } from '../../db/repositories/categories.repo.js';
 export const pickLinkTool: Tool = {
   name: 'pick_link',
   description:
-    'Sugiere un link al azar de una categoría (ej. "dame algo de comidas para hoy"). Prioriza links usados menos recientemente.',
+    'Sugiere un link al azar de una categoría (ej. "dame algo de comidas para hoy"). Prioriza links usados menos recientemente. Devuelve el link ya diseñado: envíalo TAL CUAL.',
   parameters: {
     type: 'object',
     properties: {
@@ -23,7 +24,6 @@ export const pickLinkTool: Tool = {
     if (!link) return `Todavía no tienes links guardados en "${category.name}".`;
 
     linksRepo.markUsed(ctx.userId, link.id);
-    const label = link.title || link.description || '';
-    return `De "${category.name}": ${label ? `${label} — ` : ''}${link.url} (#${link.id})`;
+    return linkCard(link, category.name);
   },
 };

@@ -1,10 +1,11 @@
+import { categoriesView } from '../views.js';
 import type { Tool } from '../tool-registry.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
 import { resolveActingUser } from './act-on-behalf.js';
 
 export const listCategoriesTool: Tool = {
   name: 'list_categories',
-  description: 'Lista todas las categorías existentes (para links, tareas y recordatorios).',
+  description: 'Lista todas las categorías existentes (para links, tareas y recordatorios). Devuelve la lista ya diseñada para WhatsApp: envíala TAL CUAL.',
   parameters: {
     type: 'object',
     properties: {
@@ -22,8 +23,6 @@ export const listCategoriesTool: Tool = {
 
     const categories = categoriesRepo.listAll(acting.userId);
     if (categories.length === 0) return 'Todavía no tienes categorías creadas.';
-    return categories
-      .map((c) => `#${c.id} ${c.name}${c.description ? ` - ${c.description}` : ''}`)
-      .join('\n');
+    return categoriesView(categories);
   },
 };

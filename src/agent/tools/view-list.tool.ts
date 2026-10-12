@@ -1,3 +1,4 @@
+import { listView } from '../views.js';
 import type { Tool } from '../tool-registry.js';
 import { checklistItemsRepo } from '../../db/repositories/checklists.repo.js';
 import { resolveActingUser } from './act-on-behalf.js';
@@ -5,7 +6,7 @@ import { resolveChecklist } from './resolve-checklist.js';
 
 export const viewListTool: Tool = {
   name: 'view_list',
-  description: 'Muestra los ítems de una lista, marcando cuáles ya están marcados (✅) y cuáles no (⬜).',
+  description: 'Muestra los ítems de una lista, marcando cuáles ya están marcados (✅) y cuáles no (⬜). Devuelve la lista ya diseñada para WhatsApp: envíala TAL CUAL.',
   parameters: {
     type: 'object',
     properties: {
@@ -30,8 +31,6 @@ export const viewListTool: Tool = {
     const items = checklistItemsRepo.list(list.id);
     if (items.length === 0) return `"${list.name}" todavía no tiene ítems - usa add_list_item para agregarle.`;
 
-    const checked = items.filter((i) => i.checked).length;
-    const lines = items.map((i) => `${i.checked ? '✅' : '⬜'} #${i.id} ${i.title}`);
-    return `📋 *${list.name}* (${checked}/${items.length})\n\n${lines.join('\n')}`;
+    return listView(list, items);
   },
 };

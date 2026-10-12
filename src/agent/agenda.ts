@@ -1,7 +1,9 @@
 import { todosRepo } from '../db/repositories/todos.repo.js';
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
-import { todayLocal, weekdayName, dateOnly, nowLocal } from '../util/datetime.js';
+import { todayLocal, weekdayName, dateOnly, nowLocal, addDays, addMonths, parseWall } from '../util/datetime.js';
+import { dayLabel } from './views.js';
+import type { Reminder } from '../types/index.js';
 import { nightFarewellMessage } from '../util/motivational.js';
 import { occursOn, scheduleOf } from './routine-schedule.js';
 import { progressBar, timeChip } from '../util/wa-format.js';
@@ -103,11 +105,12 @@ export function maybeNightFarewell(userId: number): string | null {
   return nightFarewellMessage();
 }
 
-const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-/** Longest list shown in full; beyond it the rest is summarized so the message stays readable. */
-const AGENDA_MAX_ROWS = 8;
+/** Longest block shown in full; beyond it the rest is counted so the message stays readable. */
+const AGENDA_MAX_ROWS = 15;
 
-function agendaBlock(title: string, rows: { time: string; label: string }[], opts: { fromEnd?: boolean } = {}): string[] {
+type Row = { time: string; label: string };
+
+function agendaBlock(title: string, rows: Row[], opts: { fromEnd?: boolean } = {}): string[] {
   if (rows.length === 0) return [];
   const shown = opts.fromEnd ? rows.slice(-AGENDA_MAX_ROWS) : rows.slice(0, AGENDA_MAX_ROWS);
   const lines = ['', `${title} · ${rows.length}`];
@@ -117,93 +120,130 @@ function agendaBlock(title: string, rows: { time: string; label: string }[], opt
   return lines;
 }
 
+/** The time ('HH:mm') at which a pending reminder falls on `date`, following its recurrence - null if it doesn't. */
+function reminderTimeOn(rem: Reminder, date: string): string | null {
+  let at = rem.run_at;
+  if (dateOnly(at) === date) return at.slice(11, 16);
+  if (dateOnly(at) > date || rem.recurrence_freq === 'none' || rem.kind === 'interval') return null;
+  const step = Math.max(1, rem.recurrence_interval || 1);
+  for (let i = 0; i < 800 && dateOnly(at) < date; i++) {
+    at =
+      rem.recurrence_freq === 'daily'
+        ? addDays(at, step)
+        : rem.recurrence_freq === 'weekly'
+          ? addDays(at, 7 * step)
+          : addMonths(at, rem.recurrence_freq === 'yearly' ? 12 * step : step);
+  }
+  return dateOnly(at) === date ? at.slice(11, 16) : null;
+}
+
 /**
- * Today as the person sees it on WhatsApp: a progress bar, then three clearly separate blocks -
- * what went by without being marked, what was marked (done, or answered "no"), and what's still
- * coming. Same data as buildAgendaMessage above (which stays as the plain version the model reads
- * as context). `unmarked` says how many are waiting, for whoever wants to offer rescheduling.
+ * One day as the person sees it on WhatsApp - today by default, or any other date with the same
+ * look. Three clearly separate blocks: what went by without being marked, what was marked (done,
+ * or answered "no"), and what's coming / scheduled. Same data as buildAgendaMessage above (which
+ * stays as the plain version the model reads as context). `unmarked` says how many are waiting,
+ * for whoever wants to offer rescheduling.
  */
-export function agendaView(userId: number): { text: string; unmarked: number } {
+export function agendaView(userId: number, date: string = todayLocal()): { text: string; unmarked: number } {
   const today = todayLocal();
   const now = nowLocal();
+  const isToday = date === today;
+  const isPast = date < today;
   const nowTime = now.slice(11, 16);
-  const unmarked: { time: string; label: string }[] = [];
-  const upcoming: { time: string; label: string }[] = [];
-  const marked: { time: string; label: string }[] = [];
+  const unmarked: Row[] = [];
+  const upcoming: Row[] = [];
+  const marked: Row[] = [];
   let doneCount = 0;
   let routinesDue = 0;
 
   for (const r of todosRepo.list(userId, { scope: 'routine' })) {
-    if (!r.reminder_time || !occursOn(scheduleOf(r), today)) continue;
+    if (!r.reminder_time || !occursOn(scheduleOf(r), date)) continue;
     const time = scheduleOf(r).time;
-    const paused = remindersRepo.listByTodo(r.id).some((rem) => rem.paused_until && rem.paused_until > now);
-    if (paused) continue;
+    const pauseFrom = isToday ? now : `${date} ${time}:00`;
+    if (!isPast && remindersRepo.listByTodo(r.id).some((rem) => rem.paused_until && rem.paused_until > pauseFrom)) continue;
     routinesDue++;
-    const log = habitLogsRepo.getForDate(r.id, today);
+    const log = habitLogsRepo.getForDate(r.id, date);
     if (log?.done) {
       doneCount++;
       marked.push({ time, label: `${r.title} — hecha ✓` });
     } else if (log) marked.push({ time, label: `${r.title} — no se hizo` });
-    else if (time <= nowTime) unmarked.push({ time, label: r.title });
+    else if (isPast || (isToday && time <= nowTime)) unmarked.push({ time, label: r.title });
     else upcoming.push({ time, label: r.title });
   }
 
-  for (const rem of remindersRepo.listAll(userId, 'pending')) {
-    if (rem.kind !== 'reminder' && rem.kind !== 'important_date' && rem.kind !== 'flexible') continue;
-    if (dateOnly(rem.run_at) !== today) continue;
-    upcoming.push({ time: rem.run_at.slice(11, 16), label: rem.message });
+  if (!isPast) {
+    for (const rem of remindersRepo.listAll(userId, 'pending')) {
+      if (rem.kind !== 'reminder' && rem.kind !== 'important_date' && rem.kind !== 'flexible') continue;
+      const time = reminderTimeOn(rem, date);
+      if (time) upcoming.push({ time, label: rem.message });
+    }
   }
 
-  const byTime = (a: { time: string }, b: { time: string }) => a.time.localeCompare(b.time);
+  const byTime = (a: Row, b: Row) => a.time.localeCompare(b.time);
   for (const list of [unmarked, upcoming, marked]) list.sort(byTime);
-  const todosToday = todosRepo.list(userId, { scope: 'today', status: 'pending' });
+  const todos = isToday
+    ? todosRepo.list(userId, { scope: 'today', status: 'pending' })
+    : todosRepo.list(userId, { status: 'pending' }).filter((t) => t.scope !== 'routine' && t.due_date === date);
 
-  const d = new Date(`${today}T00:00:00Z`);
-  const lines = [`📅 *Tu día* · ${weekdayName(today)} ${d.getUTCDate()} de ${MONTHS[d.getUTCMonth()]}`];
-  if (routinesDue > 0) lines.push(`${progressBar(doneCount, routinesDue)}  ${doneCount} de ${routinesDue} rutinas hechas`);
+  const lines = [isToday ? `📅 *Tu día* · ${dayLabel(date).replace(/^Hoy · /, '')}` : `📅 *${dayLabel(date)}*`];
+  if (routinesDue > 0 && !(date > today)) lines.push(`${progressBar(doneCount, routinesDue)}  ${doneCount} de ${routinesDue} rutinas hechas`);
 
-  if (unmarked.length + upcoming.length + marked.length + todosToday.length === 0) {
-    lines.push('', 'No tienes nada agendado para hoy 🎉');
+  if (unmarked.length + upcoming.length + marked.length + todos.length === 0) {
+    lines.push('', isPast ? 'No hay nada registrado ese día.' : 'No tienes nada agendado 🎉');
     return { text: lines.join('\n'), unmarked: 0 };
   }
 
   lines.push(...agendaBlock('🔴 *Sin marcar*', unmarked, { fromEnd: true }));
   lines.push(...agendaBlock('🟢 *Marcadas*', marked, { fromEnd: true }));
-  lines.push(...agendaBlock('🔵 *Lo que viene*', upcoming));
-  if (todosToday.length > 0) {
-    lines.push('', `📌 *Pendientes sin hora* · ${todosToday.length}`, ...todosToday.slice(0, AGENDA_MAX_ROWS).map((t) => `- ${t.title}`));
-    if (todosToday.length > AGENDA_MAX_ROWS) lines.push(`_… y ${todosToday.length - AGENDA_MAX_ROWS} más_`);
+  lines.push(...agendaBlock(isToday ? '🔵 *Lo que viene*' : '🔵 *Programado*', upcoming));
+  if (todos.length > 0) {
+    lines.push('', `📌 *Pendientes sin hora* · ${todos.length}`, ...todos.slice(0, AGENDA_MAX_ROWS).map((t) => `⬜ ${t.title}`));
+    if (todos.length > AGENDA_MAX_ROWS) lines.push(`_… y ${todos.length - AGENDA_MAX_ROWS} más_`);
   }
-  return { text: lines.join('\n'), unmarked: unmarked.length };
+  return { text: lines.join('\n'), unmarked: isToday ? unmarked.length : 0 };
 }
 
-export function renderAgenda(userId: number): string {
-  return agendaView(userId).text;
+export function renderAgenda(userId: number, date?: string): string {
+  return agendaView(userId, date).text;
 }
 
-const AGENDA_BLOCKERS = /\b(manana|ayer|semana|mes|lunes|martes|miercoles|jueves|viernes|sabado|domingo|crea|agrega|pon|cambia|borra|elimina|edita|marca)\b|\d/;
+const WEEKDAY_WORDS = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+const DAY = `(?:hoy|pasado manana|manana|ayer|${WEEKDAY_WORDS.join('|')})`;
+const AGENDA_BLOCKERS = /\b(semana|mes|ano|crea|agrega|pon|ponme|cambia|borra|elimina|edita|marca|mueve|reprograma|recuerdame|agenda una|agendame)\b|\d/;
 const AGENDA_ASKS = [
-  /^(mi )?(agenda|dia|pendientes)( de hoy| del dia)?$/,
-  /\b(que|cual|cuales) (tengo|me queda|me falta|hay|es|son)\b.*\b(hoy|agendado|agendada|programado|pendiente|pendientes|dia|rutina|rutinas)\b/,
-  /\b(que|cual|cuales) (es|son) (mi|mis) (rutina|rutinas|agenda|pendientes)\b/,
-  /\bcomo (va|voy)\b.*\b(dia|hoy)\b/,
-  /\bque (me queda|me falta|tengo)( por hacer)?$/,
+  new RegExp(`^(?:mi |la )?(?:agenda|dia|pendientes|rutina|rutinas)(?: de| del| para)?(?: el)?(?: dia)?(?: de)?(?: ${DAY})?$`),
+  new RegExp(`\\b(?:que|cual|cuales) (?:tengo|tenia|tuve|me queda|me falta|hay|es|son)\\b.*\\b(?:${DAY}|agendado|agendada|programado|pendiente|pendientes|dia|rutina|rutinas)\\b`),
+  /\bcomo (?:va|voy|me fue)\b.*\b(?:dia|hoy|ayer)\b/,
+  /\bque (?:me queda|me falta|tengo)(?: por hacer)?$/,
 ];
 
 /**
- * True for a plain "what do I have today?" ("qué tengo agendado", "cuál es mi rutina del día",
- * "cómo va mi día") - answered straight with the designed agenda instead of going through the
- * model, which tends to re-write the list its own way. Anything with a date, a number or an
- * action in it is left to the model.
+ * The day a plain "what do I have ...?" asks about ("qué tengo agendado", "cuál es mi rutina del
+ * día", "qué tengo mañana", "qué hay el viernes", "cómo me fue ayer"), as 'YYYY-MM-DD' - or null
+ * when the message isn't that. Those get the designed agenda straight away instead of going
+ * through the model, which tends to re-write the list its own way. Anything with a number, a
+ * week/month range or an action in it is left to the model.
  */
-export function asksForTodayAgenda(text: string): boolean {
+export function agendaDateAsked(text: string): string | null {
   const t = text
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .replace(/[¿?¡!.,]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-  if (!t || t.length > 60 || AGENDA_BLOCKERS.test(t)) return false;
-  return AGENDA_ASKS.some((re) => re.test(t));
+  if (!t || t.length > 60 || AGENDA_BLOCKERS.test(t)) return null;
+  if (!AGENDA_ASKS.some((re) => re.test(t))) return null;
+
+  const today = todayLocal();
+  if (/\bpasado manana\b/.test(t)) return addDays(today, 2).slice(0, 10);
+  if (/\bmanana\b/.test(t) && !/\b(esta|la|por la|en la) manana\b/.test(t)) return addDays(today, 1).slice(0, 10);
+  if (/\bayer\b/.test(t)) return addDays(today, -1).slice(0, 10);
+  const weekday = WEEKDAY_WORDS.findIndex((w) => new RegExp(`\\b${w}\\b`).test(t));
+  if (weekday >= 0 && !/\bhoy\b/.test(t)) {
+    // "el viernes" = the next one coming (a week from now if today is that day).
+    const ahead = (weekday - parseWall(today).getUTCDay() + 7) % 7 || 7;
+    return addDays(today, ahead).slice(0, 10);
+  }
+  return today;
 }

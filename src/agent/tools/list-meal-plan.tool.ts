@@ -1,3 +1,4 @@
+import { mealPlanView } from '../views.js';
 import type { Tool } from '../tool-registry.js';
 import { mealPlansRepo } from '../../db/repositories/meal-plans.repo.js';
 import { todayLocal, normalizeDate } from '../../util/datetime.js';
@@ -5,7 +6,7 @@ import { resolveActingUser } from './act-on-behalf.js';
 
 export const listMealPlanTool: Tool = {
   name: 'list_meal_plan',
-  description: 'Lista el plan de comidas programado en un rango de fechas (default: hoy).',
+  description: 'Lista el plan de comidas programado en un rango de fechas (default: hoy). Devuelve la lista ya diseñada para WhatsApp: envíala TAL CUAL.',
   parameters: {
     type: 'object',
     properties: {
@@ -29,6 +30,6 @@ export const listMealPlanTool: Tool = {
 
     const plans = mealPlansRepo.listRange(userId, from, to);
     if (plans.length === 0) return `No tienes nada planeado entre ${from} y ${to}.`;
-    return plans.map((p) => `#${p.id} ${p.plan_date} ${p.meal_slot}: ${p.title}${p.notes ? ` (${p.notes})` : ''}`).join('\n');
+    return mealPlanView(plans);
   },
 };

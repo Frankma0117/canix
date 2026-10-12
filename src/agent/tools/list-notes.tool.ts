@@ -1,17 +1,12 @@
+import { notesView } from '../views.js';
 import type { Tool } from '../tool-registry.js';
 import { notesRepo } from '../../db/repositories/notes.repo.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
 import { resolveActingUser } from './act-on-behalf.js';
-import type { Note } from '../../types/index.js';
-
-function formatNote(n: Note): string {
-  const preview = n.content.length > 80 ? `${n.content.slice(0, 80)}…` : n.content;
-  return `#${n.id}${n.title ? ` ${n.title}` : ''} — ${preview}`;
-}
 
 export const listNotesTool: Tool = {
   name: 'list_notes',
-  description: 'Lista mis notas importantes guardadas, opcionalmente filtrando por categoría o por un texto de búsqueda.',
+  description: 'Lista mis notas importantes guardadas, opcionalmente filtrando por categoría o por un texto de búsqueda. Devuelve la lista ya diseñada para WhatsApp: envíala TAL CUAL.',
   parameters: {
     type: 'object',
     properties: {
@@ -39,6 +34,6 @@ export const listNotesTool: Tool = {
 
     const notes = args.search ? notesRepo.search(userId, String(args.search), categoryId) : notesRepo.listByCategory(userId, categoryId);
     if (notes.length === 0) return 'No tienes notas que coincidan.';
-    return notes.map(formatNote).join('\n');
+    return notesView(notes, categoriesRepo.listAll(userId), { filter: args.search ? `"${String(args.search)}"` : undefined });
   },
 };
