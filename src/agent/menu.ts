@@ -7,6 +7,8 @@
  * drift out of sync.
  */
 
+import { keycap } from '../util/wa-format.js';
+
 export interface MenuCategory {
   key: string;
   /** Fixed 1-9 for the always-visible categories; undefined for gated ones (fashion/admin) shown
@@ -23,7 +25,6 @@ export interface MenuCategory {
   detail: string;
 }
 
-const NUMBER_EMOJI = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 
 const NAV_FOOTER = '\n\n> */menu* vuelve al menú principal';
 
@@ -352,8 +353,6 @@ function isModeCategory(key: string): boolean {
  * for the rest.
  */
 export function renderMainMenu(access: MenuAccess): string {
-  // Past 🔟 there's no single keycap: two of them ("1️⃣1️⃣") keep the column looking the same.
-  const keycap = (n: number) => NUMBER_EMOJI[n - 1] ?? String(n).split('').map((d) => (d === '0' ? '0️⃣' : NUMBER_EMOJI[Number(d) - 1])).join('');
   const rows = visibleCategories(access).map((cat, i) => `${keycap(i + 1)}  ${cat.emoji} *${cat.title}*`);
   return [
     '📋 *Menú de Canix*',
