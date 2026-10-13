@@ -9,8 +9,8 @@ export const editRoutineTool: Tool = {
   name: 'edit_routine',
   description:
     'Edita una rutina/hábito existente (título, categoría, frecuencia/días, hora de aviso y/o duración) sin borrarla y ' +
-    'recrearla - conserva su historial y racha. Útil también para "reprogramar" una rutina a otro horario el mismo ' +
-    'día (ej. la hizo tarde, o quiere moverla a la tarde). Solo cambia los campos que mandes.',
+    'recrearla - conserva su historial y racha. Cambiar reminder_time aquí cambia la hora de la rutina PARA SIEMPRE: ' +
+    'para moverla solo por hoy usa move_routine_today. Solo cambia los campos que mandes.',
   parameters: {
     type: 'object',
     properties: {

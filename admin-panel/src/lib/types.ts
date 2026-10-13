@@ -339,6 +339,8 @@ export interface Routine {
   streak: number;
   next_run_at: string | null;
   suspended: boolean;
+  /** false = its notices were cancelled or are missing: it's listed but never says anything. */
+  notifying: boolean;
   paused_until: string | null;
 }
 

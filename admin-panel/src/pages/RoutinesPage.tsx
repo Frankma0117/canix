@@ -142,6 +142,15 @@ function RoutineCard({
     }
   }
 
+  async function reactivate() {
+    try {
+      await api.post(`/api/todos/${routine.id}/reactivate`);
+      await onChanged();
+    } catch (e) {
+      onError(errMsg(e));
+    }
+  }
+
   async function handleDelete() {
     if (!confirm(`¿Eliminar la rutina "${routine.title}"? Se borra también su historial y su racha.`)) return;
     try {
@@ -189,10 +198,13 @@ function RoutineCard({
               </Badge>
             )}
             {routine.suspended && <Badge tone="error">Suspendida por falta de respuesta</Badge>}
+            {!routine.notifying && <Badge tone="error">Sin avisos</Badge>}
           </div>
           <p className="mt-2 flex items-center gap-1.5 text-sm text-gray-dark">
             <Clock size={14} className="shrink-0" />
-            {routine.suspended
+            {!routine.notifying
+              ? 'Esta rutina no está avisando por WhatsApp.'
+              : routine.suspended
               ? 'Escríbele cualquier cosa a Canix por WhatsApp y se reactiva sola.'
               : routine.next_run_at
                 ? `Próximo aviso: ${formatWhen(routine.next_run_at)}`
@@ -226,6 +238,11 @@ function RoutineCard({
             </div>
           ) : (
             <p className="text-sm text-gray-dark sm:text-right">Hoy no toca</p>
+          )}
+          {!routine.notifying && (
+            <Button variant="soft" size="sm" onClick={reactivate}>
+              Activar avisos
+            </Button>
           )}
           {routine.occurs_today && routine.today_answered_at && (
             <p className="text-xs text-gray-dark sm:text-right">

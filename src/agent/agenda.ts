@@ -40,7 +40,7 @@ export function buildAgendaMessage(userId: number): string {
     let note = '';
     if (paused) note = ' — ⏸️ pausada';
     else if (log?.done) note = ' — ✅ ya cumplida hoy';
-    else if (runAt < now) note = ' — ⚠️ ya pasó la hora y no está marcada (puedo reprogramarla con edit_routine si quieres)';
+    else if (runAt < now) note = ' — ⚠️ ya pasó la hora y no está marcada (puedo moverla a otra hora de hoy con move_routine_today si quieres)';
     items.push({ time: r.reminder_time, label: `${r.title} (rutina)${note}` });
   }
 

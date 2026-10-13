@@ -1,11 +1,13 @@
 import { todosRepo } from '../db/repositories/todos.repo.js';
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { db } from '../db/pool.js';
+import { usersRepo } from '../db/repositories/users.repo.js';
 import { addMinutes, nowLocal } from '../util/datetime.js';
 import { routineStartMessage, routineCheckinMessage } from '../util/motivational.js';
 import {
   anchorDate,
   nextOccurrence,
+  occursOn,
   normalizeWeekdays,
   scheduleOf,
   type RoutineFreq,
@@ -253,7 +255,13 @@ export function nextRoutineRunAt(reminder: Pick<Reminder, 'kind' | 'todo_id' | '
   if (!todo || todo.scope !== 'routine' || !todo.reminder_time) return undefined;
   const schedule = scheduleOf(todo);
   const offset = reminder.kind === 'routine_checkin' ? (todo.duration_minutes ?? 0) : 0;
-  const next = nextOccurrence(schedule, addMinutes(reminder.run_at, -offset));
+  // The occurrence just handled may have been moved for the day (see moveRoutineToday): when it went
+  // out EARLIER than the routine's own hour, that day's regular hour is the same occurrence, not a
+  // new one - the next is the following day's.
+  const handled = addMinutes(reminder.run_at, -offset);
+  const regular = `${handled.slice(0, 10)} ${schedule.time}:00`;
+  const after = regular > handled && occursOn(schedule, handled.slice(0, 10)) ? regular : handled;
+  const next = nextOccurrence(schedule, after);
   return next ? addMinutes(next, offset) : undefined;
 }
 
@@ -270,4 +278,69 @@ export function setRoutinePaused(userId: number, id: number, until: string | nul
   const linked = remindersRepo.listByTodo(id).filter((r) => r.user_id === userId);
   for (const r of linked) remindersRepo.setPausedUntil(userId, r.id, until);
   return true;
+}
+
+/**
+ * Moves ONLY the next notice of a routine to another hour today ("hoy no alcancé, pásala a las 6"),
+ * leaving the routine's own hour alone: after that notice goes out, the next one is computed from
+ * the routine's schedule again (see nextRoutineRunAt), so tomorrow it's back at its usual time.
+ * Before this existed, "reprogramar" changed the routine's hour for good - and a few of those left
+ * a morning routine living at midday. Returns the new notice time, or an error text.
+ */
+export function moveRoutineToday(userId: number, id: number, time: string): { runAt: string } | { error: string } {
+  const todo = todosRepo.getById(userId, id);
+  if (!todo || todo.scope !== 'routine') return { error: `No encontré la rutina #${id}.` };
+  if (!isValidTime(time)) return { error: "La hora tiene que ir en formato 'HH:mm'." };
+  const [h, m] = time.split(':').map(Number);
+  const runAt = `${nowLocal().slice(0, 10)} ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+  if (runAt <= nowLocal()) return { error: `Las ${time} de hoy ya pasaron (ahora son ${nowLocal().slice(11, 16)}). Pregúntale a qué hora de hoy la quiere.` };
+
+  ensureRoutineReminders(userId, id);
+  const linked = remindersRepo.listByTodo(id).filter((r) => r.user_id === userId);
+  const notice = linked.find((r) => r.kind === 'routine_reminder');
+  const checkin = linked.find((r) => r.kind === 'routine_checkin');
+  if (notice) remindersRepo.update(userId, notice.id, { runAt });
+  if (checkin) remindersRepo.update(userId, checkin.id, { runAt: addMinutes(runAt, todo.duration_minutes ?? 0) });
+  return { runAt };
+}
+
+/** True when the routine has a live notice (pending or just suspended for lack of answers). */
+export function routineNotifies(todoId: number): boolean {
+  return remindersRepo.listByTodo(todoId).some((r) => r.kind === 'routine_reminder' && (r.status === 'pending' || r.status === 'suspended'));
+}
+
+/**
+ * Makes sure a routine has its notice + check-in pair alive: creates the rows if they're gone and
+ * puts them back to pending at the routine's next occurrence if they were left cancelled/finished.
+ * A routine without them shows up everywhere as a routine but never says a word - which happened
+ * to several (their rows were cancelled or deleted by tools that didn't guard routine rows yet).
+ * Returns true if anything had to be repaired.
+ */
+export function ensureRoutineReminders(userId: number, id: number): boolean {
+  const todo = todosRepo.getById(userId, id);
+  const owner = usersRepo.getById(userId);
+  if (!todo || todo.scope !== 'routine' || !todo.reminder_time || !owner) return false;
+  const schedule = scheduleOf(todo);
+  const next = nextOccurrence(schedule, nowLocal());
+  if (!next) return false;
+
+  const linked = remindersRepo.listByTodo(id).filter((r) => r.user_id === userId);
+  const alive = (status: string) => status === 'pending' || status === 'suspended';
+  let repaired = false;
+  const pair: [Reminder['kind'], string, string][] = [
+    ['routine_reminder', routineStartMessage(todo.title), next],
+    ['routine_checkin', routineCheckinMessage(todo.title), addMinutes(next, todo.duration_minutes ?? 0)],
+  ];
+  for (const [kind, message, runAt] of pair) {
+    const row = linked.find((r) => r.kind === kind);
+    if (row && alive(row.status)) continue;
+    repaired = true;
+    if (row) {
+      remindersRepo.update(userId, row.id, { message, runAt, recurrenceFreq: schedule.freq, recurrenceInterval: schedule.interval });
+      remindersRepo.setConfirmationState(row.id, false, 0);
+    } else {
+      remindersRepo.create(userId, { message, runAt, targetJid: owner.jid, categoryId: todo.category_id, recurrenceFreq: schedule.freq, recurrenceInterval: schedule.interval, kind, todoId: id });
+    }
+  }
+  return repaired;
 }

@@ -269,12 +269,13 @@ Reglas de las herramientas:
   add_todo o schedule_reminder - así queda la referencia al link, no repitas la URL de memoria.
 - Para editar una tarea, rutina o recordatorio que ya existe (cambiar título, categoría, hora,
   duración, fecha, etc.), usa edit_todo / edit_routine / edit_reminder según corresponda - NUNCA me
-  digas que hay que borrarlo y crearlo de nuevo, eso pierde el historial/racha de una rutina. Esto
-  también sirve para "reprogramar" algo al mismo día pero a otra hora (ej. si una rutina ya pasó de
-  hora sin marcarse y quiero moverla a la tarde, usa edit_routine con el nuevo reminder_time). Lo
-  mismo aplica a TODO lo demás que guardamos: un link ya guardado se edita con edit_link (nunca
-  borrar y crear de nuevo), una categoría con edit_category, un contacto con edit_contact, un plan
-  de comida con edit_meal_plan, una receta con edit_recipe, una nota con edit_note.
+  digas que hay que borrarlo y crearlo de nuevo, eso pierde el historial/racha de una rutina.
+- REPROGRAMAR UNA RUTINA: si una rutina se me pasó hoy o quiero hacerla hoy a otra hora ("pásala
+  a las 6", "reprográmala", "hoy la hago más tarde"), usa move_routine_today - mueve SOLO el aviso
+  de hoy y mañana vuelve a su hora normal. edit_routine con reminder_time cambia la hora de la
+  rutina PARA SIEMPRE: úsalo solo si digo claramente que es de ahora en adelante ("cámbiala
+  siempre a las 7", "quiero que sea a las 8 todos los días"). Si no queda claro cuál de las dos
+  quiero, pregúntame: "¿solo por hoy o de ahora en adelante?".
 - Una NOTA (add_note) no es una tarea ni un recordatorio - no tiene fecha ni hora ni se marca como
   cumplida, es solo información que quiero poder recuperar después (una idea, un dato, algo que me
   dijeron, instrucciones). Si lo que te pido tiene una fecha/hora en la que debo hacer algo o que

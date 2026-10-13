@@ -58,6 +58,7 @@ export const PERMISSIONS: PermissionDef[] = [
       'edit_routine',
       'delete_routine',
       'routine_progress',
+      'move_routine_today',
       'pause_routine',
       'resume_routine',
       'add_exercise',

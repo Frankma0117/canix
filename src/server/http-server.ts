@@ -15,7 +15,7 @@ import { callRemindersRepo } from '../db/repositories/call-reminders.repo.js';
 import { createCallReminder, updateCallReminder, testCallNow } from '../calls/call-reminders.service.js';
 import { registerCallAudioRoute } from '../calls/call-audio.js';
 import { registerTwilioWebhook } from './twilio-webhook.js';
-import { createRoutineWithReminders, updateRoutineWithReminders, parseScheduleInput, isValidTime } from '../agent/routine-setup.js';
+import { createRoutineWithReminders, updateRoutineWithReminders, parseScheduleInput, isValidTime, ensureRoutineReminders } from '../agent/routine-setup.js';
 import { describeSchedule, occursOn, routineStreak, scheduleOf } from '../agent/routine-schedule.js';
 import { logRoutineAnswer } from '../agent/reminder-prompts.js';
 import { reminderPromptsRepo } from '../db/repositories/reminder-prompts.repo.js';
@@ -547,6 +547,17 @@ export function createServer(bot: BotManager): Express {
       res.json({ ok: true });
     }),
   );
+  // Brings a routine's notices back (see ensureRoutineReminders) when they were left cancelled or missing.
+  app.post(
+    '/api/todos/:id/reactivate',
+    h((req, res) => {
+      const id = Number(req.params.id);
+      const todo = todosRepo.getById(userId(req), id);
+      if (!todo || todo.scope !== 'routine') return res.status(404).json({ error: 'No existe esa rutina' });
+      ensureRoutineReminders(userId(req), id);
+      res.json({ ok: true });
+    }),
+  );
   // Every "¿lo hiciste?" of a routine with its answers in order (see agent/reminder-prompts.ts).
   app.get(
     '/api/todos/:id/responses',
@@ -599,6 +610,7 @@ export function createServer(bot: BotManager): Express {
             streak: routineStreak(t, today),
             next_run_at: notice && notice.status === 'pending' ? notice.run_at : null,
             suspended: notice?.status === 'suspended',
+            notifying: !!notice && (notice.status === 'pending' || notice.status === 'suspended'),
             paused_until: pausedUntil,
           };
         }),
