@@ -200,7 +200,7 @@ export function applyAnswer(prompt: ReminderPrompt, answer: PromptAnswer, source
   const progressNote = progress ? `\n${progress}` : '';
   if (answer === 'no') {
     return {
-      ack: `📝 Marcado: ${titled(routine.title)} no se hizo esta vez. La próxima va con toda 💪${progressNote}${delayNote(prompt, at)}`,
+      ack: `📝 Marcado: ${titled(routine.title)} no se hizo esta vez.${progressNote}${delayNote(prompt, at)}`,
       celebrate: false,
     };
   }
