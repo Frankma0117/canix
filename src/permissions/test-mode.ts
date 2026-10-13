@@ -65,21 +65,27 @@ function findPackages(query: string) {
   return packages.filter((p) => p.permissions.some((k) => norm(PERMISSIONS.find((d) => d.key === k)?.module ?? '').startsWith(q)));
 }
 
-const ENTER_RE = /^(?:\/pruebas?|modo pruebas?)(?:\s+(.+))?$/i;
-const EXIT_RE =
-  /^(?:\/pruebas?\s+(?:salir|off|fin|terminar|apagar)|\/?(?:salir|terminar|quitar|apagar)\s+(?:de\s+|del\s+)?(?:modo\s+)?pruebas?)$/i;
+const VERB_IN = '(?:entra|entrar|entrame|activa|activar|activame|pon|ponme|poner|inicia|iniciar|empieza|empezar|abre|abrir|quiero)';
+const VERB_OUT = '(?:sal|salte|salir|salgamos|salgo|sacame|termina|terminar|quita|quitar|quitame|apaga|apagar|desactiva|desactivar|cierra|cerrar|finaliza|finalizar|deja|dejar)';
+// "/prueba agenda", "modo prueba agenda", "entra en modo prueba de agenda", "activa el modo prueba"
+const ENTER_RE = new RegExp(`^(?:\\/pruebas?|(?:${VERB_IN}\\s+)?(?:en\\s+|el\\s+|al\\s+|a\\s+)?modo\\s+(?:de\\s+)?pruebas?)(?:\\s+(?:de\\s+|del\\s+|con\\s+|para\\s+)?(?:el\\s+|la\\s+)?(?:paquete\\s+)?(.+))?$`, 'i');
+// "/prueba salir", "sal del modo prueba", "quita el modo prueba", "ya no quiero modo prueba", "modo normal"
+const EXIT_RE = new RegExp(
+  `^(?:\\/pruebas?\\s+(?:salir|off|fin|terminar|apagar)|\\/?(?:ya\\s+)?${VERB_OUT}\\s+(?:de\\s+|del\\s+|el\\s+|la\\s+)?(?:modo\\s+)?(?:de\\s+)?pruebas?|ya no quiero (?:el\\s+)?modo (?:de\\s+)?pruebas?|modo pruebas? (?:off|salir|fin|no)|(?:vuelve|volver|regresa|regresar)\\s+a(?:l)?\\s+(?:modo\\s+)?(?:normal|completo|administrador|admin)|modo (?:normal|administrador|admin))$`,
+  'i',
+);
 
 function packageList(): string {
   return permissionsRepo
     .listPackages()
     .filter((p) => p.permissions.length > 0)
-    .map((p) => `• *${p.name}* — ${describePermissions(p.permissions)}`)
+    .map((p) => `- *${p.name}*: ${describePermissions(p.permissions)}`)
     .join('\n');
 }
 
 /** Line added to the menu while the mode is on, so it's never forgotten. */
 export function testModeNotice(testMode: TestMode): string {
-  return `🧪 *Modo prueba activo:* ${testMode.label}. Escribe */prueba salir* para volver a tu acceso completo.`;
+  return `🧪 *Modo prueba activo* · ${testMode.label}\n> Para volver a tu acceso completo escribe "sal del modo prueba"`;
 }
 
 /**
@@ -92,12 +98,13 @@ export function testModeNotice(testMode: TestMode): string {
  */
 export function handleTestModeCommand(admin: User, text: string): string | null {
   if (admin.role !== 'admin') return null;
-  const trimmed = text.trim();
+  // Said however it comes out: no accents, no closing punctuation, "por favor" or not.
+  const trimmed = norm(text).replace(/[¿?¡!.,]/g, ' ').replace(/\b(por favor|porfa|canix)\b/g, ' ').replace(/\s+/g, ' ').trim();
   const current = testModeOf(admin);
 
   if (EXIT_RE.test(trimmed)) {
-    if (!exitTestMode(admin)) return 'No estás en modo prueba: tienes tu acceso completo de administrador. 👍';
-    return '✅ Saliste del *modo prueba*. Ya tienes de nuevo todas tus funciones y el control de administrador.';
+    if (!exitTestMode(admin)) return '🧪 *Modo prueba*\nNo está activo: tienes tu acceso completo de administrador.\n\n> Para probar un paquete escribe "modo prueba" y su nombre';
+    return '✅ *Saliste del modo prueba*\nYa tienes de nuevo todas tus funciones y el control de administrador.';
   }
 
   const match = ENTER_RE.exec(trimmed);
@@ -106,23 +113,23 @@ export function handleTestModeCommand(admin: User, text: string): string | null 
   const query = match[1]?.trim();
   if (!query) {
     const status = current
-      ? `🧪 Estás en *modo prueba*: ${current.label} (${describePermissions(current.permissions)}).\nEscribe */prueba salir* para volver a tu acceso completo.`
-      : '🧪 *Modo prueba*: usa el asistente como lo vería alguien con un paquete, sin perder tu acceso (el portal web sigue completo).';
-    return `${status}\n\nPara probar uno escribe */prueba <nombre>*:\n${packageList()}`;
+      ? `🧪 *Modo prueba activo* · ${current.label}\nAhora mismo solo tienes: ${describePermissions(current.permissions)}.\n\n> Para volver a tu acceso completo escribe "sal del modo prueba"`
+      : '🧪 *Modo prueba*\nUsas a Canix como lo vería alguien con un paquete, sin perder tu acceso. El portal web sigue completo.';
+    return `${status}\n\n📦 *Paquetes que puedes probar*\n${packageList()}\n\n> Escribe "modo prueba" y el nombre del paquete`;
   }
 
   const matches = findPackages(query);
   if (matches.length === 0) {
-    return `No encontré un paquete llamado "${query}". Estos son los que hay:\n${packageList()}\n\nTambién puedes armar una combinación a tu medida desde el portal web (Administración → Modo prueba).`;
+    return `🧪 *Modo prueba*\nNo encontré un paquete llamado "${query}".\n\n📦 *Los que hay*\n${packageList()}\n\n> También puedes armar una combinación a tu medida en el portal: Administración → Modo prueba`;
   }
   if (matches.length > 1) {
-    return `Hay varios paquetes que coinciden con "${query}". ¿Cuál quieres probar?\n${matches.map((p) => `• */prueba ${p.name}*`).join('\n')}`;
+    return `🧪 *Modo prueba*\nVarios paquetes coinciden con "${query}". ¿Cuál quieres probar?\n\n${matches.map((p) => `- *${p.name}*`).join('\n')}\n\n> Escribe "modo prueba" y el nombre completo`;
   }
   const pkg = matches[0];
   const testMode = enterTestMode(admin, { label: pkg.name, permissions: pkg.permissions });
   return (
-    `🧪 *Modo prueba activado:* ${testMode.label}\n` +
-    `Ahora me comporto contigo como con alguien que solo tiene: ${describePermissions(testMode.permissions)}.\n\n` +
-    'Tu portal web sigue con acceso total. Cuando termines escribe */prueba salir* (o sal desde el portal) y vuelves a tener todo.'
+    `🧪 *Modo prueba activado* · ${testMode.label}\n` +
+    `Desde ya me comporto contigo como con alguien que solo tiene: ${describePermissions(testMode.permissions)}.\n\n` +
+    '> Tu portal web sigue con acceso total\n> Para volver a tener todo escribe "sal del modo prueba"'
   );
 }

@@ -8,6 +8,7 @@ import { dayLabel } from './views.js';
 import type { Reminder } from '../types/index.js';
 import { nightFarewellMessage } from '../util/motivational.js';
 import { occursOn, scheduleOf } from './routine-schedule.js';
+import { dayAppointmentsBlock } from '../scheduling/views.js';
 import { progressBar, shortTime, timeChip } from '../util/wa-format.js';
 import { env } from '../config/env.js';
 
@@ -40,7 +41,7 @@ export function buildAgendaMessage(userId: number): string {
     let note = '';
     if (paused) note = ' — ⏸️ pausada';
     else if (log?.done) note = ' — ✅ ya cumplida hoy';
-    else if (runAt < now) note = ' — ⚠️ ya pasó la hora y no está marcada (puedo moverla a otra hora de hoy con move_routine_today si quieres)';
+    else if (runAt < now) note = ' — ⚠️ ya pasó la hora y no está marcada';
     items.push({ time: r.reminder_time, label: `${r.title} (rutina)${note}` });
   }
 
@@ -158,7 +159,9 @@ function reminderTimeOn(rem: Reminder, date: string): string | null {
  * stays as the plain version the model reads as context). `unmarked` says how many are waiting,
  * for whoever wants to offer rescheduling.
  */
-export function agendaView(userId: number, date: string = todayLocal()): { text: string; unmarked: number } {
+export function agendaView(userId: number, date: string = todayLocal(), opts: { personal?: boolean; reminders?: boolean } = {}): { text: string; unmarked: number } {
+  // personal=false: someone who only has the appointments module - their day is their appointments.
+  const personal = opts.personal !== false;
   const today = todayLocal();
   const now = nowLocal();
   const isToday = date === today;
@@ -172,7 +175,7 @@ export function agendaView(userId: number, date: string = todayLocal()): { text:
   let doneCount = 0;
   let routinesDue = 0;
 
-  for (const r of todosRepo.list(userId, { scope: 'routine' })) {
+  for (const r of personal ? todosRepo.list(userId, { scope: 'routine' }) : []) {
     if (!r.reminder_time || !occursOn(scheduleOf(r), date)) continue;
     const time = scheduleOf(r).time;
     const pauseFrom = isToday ? now : `${date} ${time}:00`;
@@ -187,7 +190,7 @@ export function agendaView(userId: number, date: string = todayLocal()): { text:
     else upcoming.push({ time, label: withIcon(r.title) });
   }
 
-  if (!isPast) {
+  if (!isPast && (personal || opts.reminders)) {
     for (const rem of remindersRepo.listAll(userId, 'pending')) {
       if (rem.kind !== 'reminder' && rem.kind !== 'important_date' && rem.kind !== 'flexible') continue;
       const time = reminderTimeOn(rem, date);
@@ -197,15 +200,18 @@ export function agendaView(userId: number, date: string = todayLocal()): { text:
 
   const byTime = (a: Row, b: Row) => a.time.localeCompare(b.time);
   for (const list of [unmarked, upcoming, marked, reminders]) list.sort(byTime);
-  const todos = isToday
+  const appointments = dayAppointmentsBlock(userId, date);
+  const todos = !personal
+    ? []
+    : isToday
     ? todosRepo.list(userId, { scope: 'today', status: 'pending' })
     : todosRepo.list(userId, { status: 'pending' }).filter((t) => t.scope !== 'routine' && t.due_date === date);
 
   const lines = [isToday ? `📅 *Tu día* · ${dayLabel(date).replace(/^Hoy · /, '')}` : `📅 *${dayLabel(date)}*`];
   if (routinesDue > 0 && !(date > today)) lines.push(`${progressBar(doneCount, routinesDue)}  ${doneCount} de ${routinesDue} rutinas hechas`);
 
-  if (unmarked.length + upcoming.length + marked.length + reminders.length + todos.length === 0) {
-    lines.push('', isPast ? 'No hay nada registrado ese día.' : 'No tienes nada agendado 🎉');
+  if (unmarked.length + upcoming.length + marked.length + reminders.length + todos.length + appointments.length === 0) {
+    lines.push('', isPast ? 'No hay nada registrado ese día.' : personal ? 'No tienes nada agendado 🎉' : 'No tienes citas ese día 🎉');
     return { text: lines.join('\n'), unmarked: 0 };
   }
 
@@ -218,6 +224,7 @@ export function agendaView(userId: number, date: string = todayLocal()): { text:
     ];
     lines.push(...blocks.slice(1)); // the section title already gives the gap
   }
+  lines.push(...appointments);
   lines.push(...agendaBlock('⏰ *RECORDATORIOS*', collapseRepeats(reminders)));
   if (todos.length > 0) {
     lines.push('', `📌 *Pendientes sin hora* · ${todos.length}`, ...todos.slice(0, AGENDA_MAX_ROWS).map((t) => `⬜ ${withIcon(t.title, '')}`.replace('⬜  ', '⬜ ')));

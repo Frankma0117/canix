@@ -18,6 +18,7 @@ import { contactsRepo } from '../db/repositories/contacts.repo.js';
 import { extractSharedContacts } from '../util/vcard.js';
 import { saveSharedContacts, undoSharedContacts, UNDO_CONTACTS_COMMAND } from '../agent/shared-contacts.js';
 import { preferDesigned, listToolAsked } from '../agent/views.js';
+import { handleAppointmentCommand, schedulingAsked } from '../scheduling/commands.js';
 import { registry } from '../agent/tool-registry.js';
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { resetAllUserData, resetFashionData } from '../db/reset-user.js';
@@ -640,7 +641,15 @@ export class BotManager {
       // agent/views.ts) - no AI turn. Kept in the history so "borra el #3" right after makes sense.
       const botTools = allowedToolsFor(botUser);
       const modeTools = toolsForMode(isModeKey(botUser.active_mode) ? botUser.active_mode : null);
-      const listAsk = listToolAsked(text);
+      // "confirmar cita 12" (typed, or a 👍 on the request) is done on the spot - see scheduling/commands.ts.
+      const appointmentReply = await handleAppointmentCommand(user, text, botTools);
+      if (appointmentReply) {
+        messagesRepo.add(user.id, 'user', text);
+        messagesRepo.add(user.id, 'assistant', appointmentReply);
+        await this.wa.sendText(jid, appointmentReply);
+        return;
+      }
+      const listAsk = listToolAsked(text) ?? schedulingAsked(text, user.id, botTools);
       const listTool = listAsk?.tool;
       if (listAsk && listTool && (botTools === null || botTools.includes(listTool)) && (modeTools === null || modeTools.includes(listTool))) {
         const listText = await registry.get(listTool)!.execute(listAsk.args, { ownerJid: user.jid, userId: user.id, isAdmin: botUser.role === 'admin', wa: this.wa });
@@ -654,8 +663,10 @@ export class BotManager {
       // "¿Qué tengo hoy / mañana / el viernes?" gets the designed agenda directly (see agent/agenda.ts) - no AI turn. Kept
       // in the conversation history so a "sí" to the rescheduling offer makes sense to the model.
       const agendaDate = agendaDateAsked(text);
-      if (agendaDate && (botTools === null || botTools.includes('get_today_agenda'))) {
-        const view = agendaView(user.id, agendaDate);
+      const fullAgenda = botTools === null || botTools.includes('get_today_agenda');
+      const onlyAppointments = !fullAgenda && !!botTools && (botTools.includes('list_appointments') || botTools.includes('list_my_appointments'));
+      if (agendaDate && (fullAgenda || onlyAppointments)) {
+        const view = agendaView(user.id, agendaDate, { personal: fullAgenda, reminders: !!botTools?.includes('list_reminders') });
         const offer = view.unmarked > 0 ? '¿Quieres que te reprograme alguna de las que quedaron sin marcar?' : null;
         const agendaText = offer ? `${view.text}\n\n${offer}` : view.text;
         messagesRepo.add(user.id, 'user', text);

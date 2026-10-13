@@ -262,6 +262,7 @@ export function exercisesBlock(exercises: Exercise[], opts: { title?: string; wi
 const DESIGNED_TOOLS = new Set([
   'get_today_agenda', 'get_week_report', 'list_links', 'list_contacts', 'list_notes', 'list_lists', 'view_list',
   'list_reminders', 'list_todos', 'list_categories', 'list_meal_plan', 'list_recipes', 'list_exercises',
+  'list_appointments', 'list_my_appointments', 'list_available_slots', 'list_scheduling_clients', 'list_my_professionals', 'view_availability',
 ]);
 const LIST_ROW_RE = /^(?:[-•]\s|`|\d+[.)]\s|[0-9]\uFE0F?\u20E3|#\d|[⬜☑✅🔗👤📝📋])/u;
 

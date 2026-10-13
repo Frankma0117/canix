@@ -15,7 +15,7 @@
  * text, so `/menu <categoría>` and typing the mode's name directly never drift apart.
  */
 import { usersRepo } from '../db/repositories/users.repo.js';
-import { CORE_CATEGORIES, STICKERS_CATEGORY, AGENDA_CATEGORY, MODE_KEYS, categoryAllowed, type MenuCategory } from './menu.js';
+import { CORE_CATEGORIES, STICKERS_CATEGORY, AGENDA_CATEGORY, MODE_KEYS, categoryAllowed, type MenuCategory, styledBullets } from './menu.js';
 import { PERMISSIONS } from '../permissions/catalog.js';
 import { effectivePermissions, asBotUser } from '../permissions/engine.js';
 
@@ -174,16 +174,8 @@ export function renderModeEntryMessage(category: MenuCategory): string {
   // Drops any bullet that's itself just the "escribe salir para..." instruction (see
   // STICKERS_CATEGORY) - this menu already appends its own "🚪 Salir" option + footer sentence for
   // every category, so keeping that bullet too would just repeat the same instruction twice.
-  const bullets = lines
-    .filter((l) => l.trim().startsWith('- '))
-    .map((l) => l.trim().slice(2))
-    .filter((b) => !/\bsalir\b/i.test(b));
-  return (
-    `${header}\n` +
-    `Ya estás aquí. Pídeme lo que necesites, por ejemplo:\n\n` +
-    `${bullets.map((b) => `- ${b}`).join('\n')}\n\n` +
-    `> Puedes pedirme cualquier otra cosa desde aquí, sin salir`
-  );
+  const usable = lines.filter((l) => l.trim().startsWith('- ') && !/\bsalir\b/i.test(l)).join('\n');
+  return [header, 'Ya estás aquí. Pídeme lo que necesites, por ejemplo:', '', ...styledBullets(usable), '', '> Puedes pedirme cualquier otra cosa desde aquí, sin salir'].join('\n');
 }
 
 export function renderModeExitMessage(): string {

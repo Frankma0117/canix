@@ -515,6 +515,7 @@ function buildSystemPrompt(
       'Si te pido algo fuera de esa lista, dime con naturalidad que esa función no la tengo habilitada y que ' +
       'se la pida al administrador - nunca finjas hacerlo ni sugieras un atajo.';
   const schedulingAddendum = schedulingPromptSection(userId, perms);
+  const hasPersonalAgenda = isAdmin || ['summaries.view', 'routines.manage', 'todos.manage'].some((k) => perms.has(k));
   // Phone calls are a paid extra: whoever doesn't have them must never be offered one - neither when
   // they ask nor on the bot's own initiative (the "¿quieres que además te llame?" rule above).
   const callsAddendum =
@@ -543,10 +544,8 @@ function buildSystemPrompt(
     'Categorías existentes (la única fuente válida de nombres de categoría, no inventes otras):',
     categoryList,
     '',
-    buildAgendaMessage(userId),
-    '',
-    'Pendientes "para después" (sin fecha fija):',
-    laterList,
+    // Someone trying (or holding) only the appointments module has no routines/reminders to be told about.
+    ...(hasPersonalAgenda ? [buildAgendaMessage(userId), '', 'Pendientes "para después" (sin fecha fija):', laterList] : []),
     stickerLine,
   ].join('\n');
 }

@@ -13,6 +13,7 @@ import {
 } from '../service.js';
 import { formatDay, formatWhen } from '../slots.js';
 import { schedTool, strOrNull } from './common.js';
+import { appointmentsView, professionalsView, slotsView } from '../views.js';
 import { time12h } from '../../util/datetime.js';
 
 const listMyProfessionalsTool = schedTool({
@@ -21,7 +22,7 @@ const listMyProfessionalsTool = schedTool({
   parameters: { type: 'object', properties: {}, additionalProperties: false },
   async run(_args, me) {
     const list = bookableProfessionals(me.id);
-    return list.length ? list.map((p) => `- ${professionalLabel(p)}`).join('\n') : 'Todavía ningún profesional te ha dado acceso para agendar.';
+    return professionalsView(list);
   },
 });
 
@@ -42,14 +43,7 @@ const listSlotsTool = schedTool({
   async run(args, me) {
     const prof = resolveBookableProfessional(me.id, strOrNull(args.professional) ?? undefined);
     const slots = slotsFor(prof, strOrNull(args.from_date) ?? undefined, Number(args.days) || 7);
-    if (!slots.length) return `${prof.display_name} no tiene espacios disponibles en esos días. Prueba con otras fechas.`;
-    const byDay = new Map<string, string[]>();
-    for (const s of slots) {
-      const d = s.start_at.slice(0, 10);
-      byDay.set(d, [...(byDay.get(d) ?? []), time12h(s.start_at)]);
-    }
-    const lines = [...byDay].slice(0, 10).map(([d, times]) => `${formatDay(d)} (${d}): ${times.join(', ')}`);
-    return `Espacios de ${professionalLabel(prof)} (citas de ${prof.slot_minutes} min):\n${lines.join('\n')}\n(Para pedir una, usa request_appointment con la fecha 'YYYY-MM-DD HH:mm' exacta.)`;
+    return slotsView(prof, slots);
   },
 });
 
@@ -83,7 +77,7 @@ const listMyAppointmentsTool = schedTool({
   parameters: { type: 'object', properties: {}, additionalProperties: false },
   async run(_args, me) {
     const list = schedRepo.listForClient(me.id, nowLocal()).filter((a) => ['pending', 'confirmed'].includes(a.status));
-    return list.length ? list.map((a) => `- ${appointmentLine(a, 'client')}`).join('\n') : 'No tienes citas próximas.';
+    return appointmentsView(list, 'client');
   },
 });
 

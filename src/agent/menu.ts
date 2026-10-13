@@ -91,7 +91,7 @@ export const CORE_CATEGORIES: MenuCategory[] = [
     number: 2,
     emoji: '🔁',
     title: 'Rutinas y hábitos',
-    short: 'Hábitos con hora fija, racha e historial - marcalos cumplidos o no cada día.',
+    short: 'Hábitos con hora fija, racha e historial - márcalos cumplidos o no cada día.',
     aliases: ['rutina', 'rutinas', 'habito', 'habitos', 'hábito', 'hábitos', 'ejercicio', 'ejercicios'],
     detail:
       `🔁 *Rutinas y hábitos*\n\n` +
@@ -135,7 +135,7 @@ export const CORE_CATEGORIES: MenuCategory[] = [
     number: 5,
     emoji: '🔗',
     title: 'Links',
-    short: 'Guardá enlaces por categoría y pedí uno al azar cuando quieras.',
+    short: 'Guarda enlaces por categoría y pedí uno al azar cuando quieras.',
     aliases: ['link', 'links', 'enlace', 'enlaces'],
     detail:
       `🔗 *Links*\n\n` +
@@ -149,20 +149,20 @@ export const CORE_CATEGORIES: MenuCategory[] = [
     number: 6,
     emoji: '👤',
     title: 'Contactos',
-    short: 'Guardá nombre + número y pedime que mande mensajes por vos.',
+    short: 'Guarda nombre + número y pídeme que mande mensajes por vos.',
     aliases: ['contacto', 'contactos'],
     detail:
       `👤 *Contactos*\n\n` +
       `- Guardar nombre + número (y @usuario de WhatsApp como referencia)\n` +
       `- Editar o eliminar\n` +
-      `- Mandar mensajes por vos a quien pidas: "dile a Juan que ya voy"`,
+      `- Mandar mensajes por ti a quien pidas: "dile a Juan que ya voy"`,
   },
   {
     key: 'comidas',
     number: 7,
     emoji: '🍽️',
     title: 'Comidas',
-    short: 'Planeá qué comer por fecha y tipo de comida (desayuno/almuerzo/cena).',
+    short: 'Planea qué comer por fecha y tipo de comida (desayuno/almuerzo/cena).',
     aliases: ['comida', 'comidas'],
     detail:
       `🍽️ *Comidas*\n\n` +
@@ -178,7 +178,7 @@ export const CORE_CATEGORIES: MenuCategory[] = [
     number: 8,
     emoji: '📖',
     title: 'Recetas',
-    short: 'Guardá tus recetas y pedí sugerencias según los ingredientes que tengas.',
+    short: 'Guarda tus recetas y pedí sugerencias según los ingredientes que tengas.',
     aliases: ['receta', 'recetas'],
     detail:
       `📖 *Recetas*\n\n` +
@@ -191,7 +191,7 @@ export const CORE_CATEGORIES: MenuCategory[] = [
     number: 9,
     emoji: '🏆',
     title: 'Premios y castigos',
-    short: 'Registrá los que te pongas, ligados a tus hábitos y rutinas.',
+    short: 'Registra los que te pongas, ligados a tus hábitos y rutinas.',
     aliases: ['premio', 'premios', 'castigo', 'castigos'],
     detail:
       `🏆 *Premios y castigos*\n\n` +
@@ -221,8 +221,8 @@ export const CORE_CATEGORIES: MenuCategory[] = [
     detail:
       `🌐 *Portal web*\n\n` +
       `- Entrás con tu número de WhatsApp y tu contraseña\n` +
-      `- Ves y gestionás solo tus datos y los módulos que tenés habilitados\n` +
-      `- ¿Primera vez u olvidaste la contraseña? Pedime "cambia mi contraseña del portal" y te mando una temporal`,
+      `- Ves y gestionas solo tus datos y los módulos que tienes habilitados\n` +
+      `- ¿Primera vez u olvidaste la contraseña? Pídeme "cambia mi contraseña del portal" y te mando una temporal`,
   },
 ];
 
@@ -230,7 +230,7 @@ export const AGENDA_CATEGORY: MenuCategory = {
   key: 'agenda',
   emoji: '📅',
   title: 'Agenda y citas',
-  short: 'Agendá citas con profesionales, o manejá tu propia agenda si sos profesional.',
+  short: 'Agenda citas con profesionales, o maneja tu propia agenda si eres profesional.',
   aliases: ['agenda', 'agendamiento', 'cita', 'citas', 'agendar'],
   detail:
     `📅 *Agenda y citas*\n\n` +
@@ -253,7 +253,7 @@ const CALLS_CATEGORY: MenuCategory = {
     `- Para lo realmente importante: te llama de verdad al teléfono en vez de solo mandar un WhatsApp\n` +
     `- "llámame a las 8am para recordarme la reunión" - te llama y te DICE el mensaje en voz\n` +
     `- "despiértame a las 6am con una llamada" (alarma) - solo timbra y cuelga al contestar, sin decir nada\n` +
-    `- Si marcás un recordatorio o fecha normal como importante/urgente (o suena así), te pregunto si además querés que te llame - nunca llamo sin que lo confirmes\n` +
+    `- Si marcás un recordatorio o fecha normal como importante/urgente (o suena así), te pregunto si además quieres que te llame - nunca llamo sin que lo confirmes\n` +
     `- Puede repetirse (diario/semanal/mensual/anual), igual que un recordatorio normal\n` +
     `- Editar, cancelar o eliminar cualquiera\n` +
     `- Administrador: puede pedir que llame a otra persona con acceso`,
@@ -268,13 +268,13 @@ const FASHION_CATEGORY: MenuCategory = {
   detail:
     `👔 *Fashion Mode (armario y outfits)*\n\n` +
     `- Escribe "fashion", "moda", "outfit" o "armario" para entrar\n` +
-    `- Agregá prendas mandando una foto - detecta tipo, categoría, color (principal y secundario), ` +
+    `- Agrega prendas mandando una foto - detecta tipo, categoría, color (principal y secundario), ` +
     `patrón, material, ajuste, estilo, formalidad y más, automáticamente\n` +
-    `- Mandá un PDF con varias fotos para agregarlas todas de una\n` +
+    `- Manda un PDF con varias fotos para agregarlas todas de una\n` +
     `- Consultá tu armario con filtros: "armario camisas", "armario favoritos"\n` +
     `- Editá, marcá favorito o eliminá cualquier prenda\n` +
     `- "actualizar ropa" vuelve a analizar TODAS tus prendas guardadas con el detector más reciente\n` +
-    `- Contame tu talla/contextura/altura y colores/estilos que preferís, para que el outfit se ` +
+    `- Cuéntame tu talla/contextura/altura y colores/estilos que preferís, para que el outfit se ` +
     `ajuste mejor a vos\n` +
     `- Pedí un outfit por ocasión: "outfit boda", "outfit oficina"\n` +
     `- Escribe "salir" para volver al chat normal`,
@@ -308,7 +308,7 @@ const ADMIN_CATEGORY: MenuCategory = {
   key: 'admin',
   emoji: '🛠️',
   title: 'Solo administrador',
-  short: 'Gestioná el acceso y los datos de otras personas.',
+  short: 'Gestiona el acceso y los datos de otras personas.',
   aliases: ['admin', 'administrador', 'administracion', 'administración'],
   detail:
     `🛠️ *Solo administrador*\n\n` +
@@ -379,7 +379,7 @@ export function menuChoices(access: MenuAccess): { label: string; reply: string 
 export function renderUpdateAnnouncementIntro(): string {
   return (
     '🚀 *¡Canix tiene novedades!*\n\n' +
-    'Actualizamos el bot - te cuento con detalle todo lo que puedo hacer por vos ahora, para que quede ' +
+    'Actualizamos el bot - te cuento con detalle todo lo que puedo hacer por ti ahora, para que quede ' +
     'súper claro. Te mando la guía completa en el siguiente mensaje 👇'
   );
 }
@@ -388,7 +388,7 @@ export function renderUpdateAnnouncementIntro(): string {
  *  one-liner from renderMainMenu) back to back - reuses each category's own `detail` text (the SAME
  *  one /menu <categoría> shows) so this can never drift from what's actually true. */
 export function renderFullGuide(access: MenuAccess): string {
-  const sections = visibleCategories(access).map((c) => c.detail);
+  const sections = visibleCategories(access).map((c) => [c.detail.split('\n')[0], '', ...styledBullets(c.detail)].join('\n'));
   sections.push(
     '👉 En cualquier momento escribe /menu para ver este resumen de nuevo, o /menu <categoría> para ' +
       'volver a leer el detalle de una sola.',
@@ -411,8 +411,31 @@ export function resolveMenuCategory(input: string, access: MenuAccess): MenuCate
   return visibleCategories(access).find((c) => c.aliases.includes(text)) ?? null;
 }
 
+/**
+ * A section's help the way it's shown: each thing it does in bold, with its example quoted
+ * underneath - instead of one long line per item where the example gets lost.
+ *   🔹 *Crear con hora de aviso + duración*
+ *   > "crea rutina de ejercicio a las 7am, 30 minutos"
+ */
+export function styledBullets(detail: string): string[] {
+  const out: string[] = [];
+  for (const line of detail.split('\n')) {
+    const bullet = line.trim();
+    if (!bullet.startsWith('- ')) continue;
+    const text = bullet.slice(2).trim();
+    const withExample = /^([^"]{3,90}?)\s*[:(]\s*("[^]*)$/.exec(text);
+    if (withExample) {
+      out.push(`🔹 *${withExample[1].trim()}*`, `> ${withExample[2].replace(/\)\s*$/, '').trim()}`);
+    } else {
+      out.push(text.length <= 70 ? `🔹 *${text}*` : `🔹 ${text}`);
+    }
+  }
+  return out;
+}
+
 export function renderCategoryDetail(category: MenuCategory): string {
-  return category.detail + NAV_FOOTER;
+  const header = category.detail.split('\n')[0];
+  return [header, 'Pídemelo hablando normal. Esto es lo que puedo hacer aquí:', '', ...styledBullets(category.detail)].join('\n') + NAV_FOOTER;
 }
 
 export function renderUnknownCategory(access: MenuAccess): string {

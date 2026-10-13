@@ -19,6 +19,7 @@ import {
 } from '../service.js';
 import { formatWhen } from '../slots.js';
 import { schedTool, parseWeekday, resolveClientOf, strOrNull } from './common.js';
+import { appointmentsView, availabilityView, clientsView, scheduleLines } from '../views.js';
 
 const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 
@@ -62,7 +63,7 @@ const setAvailabilityTool = schedTool({
     }
     setAvailability(prof, rules);
     if (!rules.length) return 'Listo, quedaste sin horario de atención: nadie podrá pedirte citas hasta que lo definas.';
-    return `Listo, tu horario de atención quedó: ${rules.map((r) => `${WEEKDAYS[r.weekday]} ${r.start}-${r.end}`).join(', ')}. Citas de ${prof.slot_minutes} min.`;
+    return `Listo, tu horario de atención quedó así (citas de ${prof.slot_minutes} min):\n${scheduleLines(rules.map((r) => ({ weekday: r.weekday, start_time: r.start, end_time: r.end }))).join('\n')}`;
   },
 });
 
@@ -72,15 +73,7 @@ const viewAvailabilityTool = schedTool({
   parameters: { type: 'object', properties: {}, additionalProperties: false },
   async run(_args, me) {
     const prof = ensureProfessional(me);
-    const rules = schedRepo.availability(prof.user_id);
-    const blocks = schedRepo.timeOff(prof.user_id, nowLocal(), addDays(nowLocal(), 120));
-    return [
-      `Perfil: ${professionalLabel(prof)}`,
-      `Horario: ${rules.length ? rules.map((r) => `${WEEKDAYS[r.weekday]} ${r.start_time}-${r.end_time}`).join(', ') : '(sin definir)'}`,
-      `Citas de ${prof.slot_minutes} min, ${prof.buffer_minutes} min entre citas, anticipación mínima ${prof.min_notice_minutes} min, hasta ${prof.max_days_ahead} días adelante.`,
-      `Recordatorios: ${prof.reminder_morning_time ? `día de la cita a las ${prof.reminder_morning_time}` : 'mañana apagado'}${prof.reminder_hours_before ? `, y ${prof.reminder_hours_before}h antes` : ''}. Auto-confirmar: ${prof.auto_confirm ? 'sí' : 'no'}.`,
-      `Bloqueos próximos: ${blocks.length ? blocks.map((b) => `#${b.id} ${b.start_at.slice(0, 16)} → ${b.end_at.slice(0, 16)}${b.reason ? ` (${b.reason})` : ''}`).join('; ') : 'ninguno'}`,
-    ].join('\n');
+    return availabilityView(prof);
   },
 });
 
@@ -142,7 +135,8 @@ const listAppointmentsTool = schedTool({
     const days = Math.min(Math.max(Number(args.days) || 7, 1), 62);
     const statuses = STATUS_FILTER[String(args.status ?? 'activas')] ?? STATUS_FILTER.activas;
     const list = schedRepo.listForProfessional(prof.user_id, `${from} 00:00:00`, `${addDays(from, days).slice(0, 10)} 00:00:00`, statuses);
-    return list.length ? list.map((a) => `- ${appointmentLine(a, 'professional')}`).join('\n') : 'No tienes citas en ese rango.';
+    const title = String(args.status ?? '') === 'pendientes' ? 'Solicitudes por confirmar' : days === 1 && from === todayLocal() ? 'Tus citas de hoy' : 'Tu agenda de citas';
+    return appointmentsView(list, 'professional', { title, empty: String(args.status ?? '') === 'pendientes' ? 'No tienes solicitudes por confirmar. 🎉' : undefined });
   },
 });
 
@@ -239,11 +233,7 @@ const listClientsTool = schedTool({
   parameters: { type: 'object', properties: {}, additionalProperties: false },
   async run(_args, me) {
     const prof = ensureProfessional(me);
-    const clients = schedRepo.clientsOfProfessional(prof.user_id);
-    if (!clients.length) return 'Todavía nadie puede agendar contigo. Usa share_scheduling_access con su número.';
-    return clients
-      .map((c) => `- ${c.client_name ?? '(sin nombre)'} (${c.client_jid.split('@')[0]})${c.group_name ? ` - vía grupo ${c.group_name}` : ''}`)
-      .join('\n');
+    return clientsView(schedRepo.clientsOfProfessional(prof.user_id));
   },
 });
 

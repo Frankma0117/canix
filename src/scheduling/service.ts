@@ -1,4 +1,5 @@
-import { reactionFooter } from '../util/wa-format.js';
+import { reactionFooter, footnote } from '../util/wa-format.js';
+import { appointmentCard } from './views.js';
 import { registerChoices, yesNo } from '../agent/choices.js';
 import { db } from '../db/pool.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
@@ -224,9 +225,7 @@ export async function requestAppointment(client: User, prof: Professional, start
   const appt = schedRepo.getAppointment(id)!;
   const who = client.name ?? client.jid.split('@')[0];
   if (status === 'pending') {
-    const request =
-      `📅 *Nueva solicitud de cita #${id}*\n${who} - ${formatWhen(appt.start_at)}${appt.reason ? `\nMotivo: ${appt.reason}` : ''}\n\n` +
-      `${reactionFooter('Confirmar', 'Rechazar')}`;
+    const request = appointmentCard('📅 *Nueva solicitud de cita*', appt, 'professional', { note: reactionFooter('Confirmar', 'Rechazar') });
     // With the message's id, a 👍/👎 on it counts as the command itself (see agent/choices.ts).
     let requestId: string | null = null;
     try {
@@ -237,7 +236,7 @@ export async function requestAppointment(client: User, prof: Professional, start
     if (requestId) registerChoices(appt.professional_id, requestId, yesNo(`confirmar cita ${id}`, `rechazar cita ${id}`));
     else if (!notifier?.sendTextWithId) await notify(appt.professional_jid, request);
   } else {
-    await notify(appt.professional_jid, `📅 Cita #${id} agendada y confirmada automáticamente: ${who} - ${formatWhen(appt.start_at)}.`);
+    await notify(appt.professional_jid, appointmentCard('📅 *Nueva cita agendada*', appt, 'professional', { note: footnote('Quedó confirmada sola: tienes la confirmación automática activa') }));
   }
   return appt;
 }
@@ -270,7 +269,7 @@ export async function confirmAppointment(actor: User, id: number): Promise<Appoi
   const updated = schedRepo.getAppointment(id)!;
   await notify(
     updated.client_jid,
-    `✅ *Tu cita quedó confirmada*\n${prof.display_name} - ${formatWhen(updated.start_at)}.\nTe aviso ese día para que no se te olvide.`,
+    appointmentCard('✅ *Tu cita quedó confirmada*', updated, 'client', { note: footnote('Te la recuerdo ese día', `Si no puedes ir: "cancelar cita ${updated.id}"`) }),
   );
   return updated;
 }
@@ -284,8 +283,9 @@ export async function rejectAppointment(actor: User, id: number, reason: string 
   })();
   await notify(
     appt.client_jid,
-    `❌ Tu solicitud de cita con ${appt.professional_name} para el ${formatWhen(appt.start_at)} no pudo ser aceptada.` +
-      `${reason ? `\nMotivo: ${reason}` : ''}\nPuedes pedir otro horario cuando quieras.`,
+    appointmentCard('❌ *No se pudo aceptar tu cita*', appt, 'client', {
+      note: `${reason ? `💬 ${reason}\n\n` : ''}${footnote('Puedes pedir otro horario cuando quieras: escribe "quiero una cita"')}`,
+    }),
   );
   return schedRepo.getAppointment(id)!;
 }
@@ -304,11 +304,13 @@ export async function cancelAppointment(actor: User, id: number, reason: string 
   const actorName = byClient ? (appt.client_name ?? 'El cliente') : appt.professional_name;
   await notify(
     otherJid,
-    `🚫 *Cita cancelada*\n${actorName} canceló la cita del ${formatWhen(appt.start_at)}.${reason ? `\nMotivo: ${reason}` : ''}`,
+    appointmentCard('🚫 *Cita cancelada*', appt, byClient ? 'professional' : 'client', {
+      note: `${reason ? `💬 ${reason}\n\n` : ''}${footnote(`La canceló ${actorName}`)}`,
+    }),
   );
   // If an admin cancelled on someone's behalf, tell the professional too.
   if (!byClient && actor.id !== appt.professional_id) {
-    await notify(appt.professional_jid, `🚫 El administrador canceló la cita #${id} (${appt.client_name ?? ''}, ${formatWhen(appt.start_at)}).`);
+    await notify(appt.professional_jid, appointmentCard('🚫 *Cita cancelada*', appt, 'professional', { note: footnote('La canceló el administrador') }));
   }
   return schedRepo.getAppointment(id)!;
 }
@@ -349,8 +351,7 @@ export async function scheduleByProfessional(
   const appt = schedRepo.getAppointment(id)!;
   await notify(
     appt.client_jid,
-    `📅 *${prof.display_name} te agendó una cita*\n${formatWhen(appt.start_at)}${appt.reason ? ` - ${appt.reason}` : ''}.\n` +
-      'Te aviso ese día. Si no puedes asistir, escríbeme para cancelarla.',
+    appointmentCard('📅 *Te agendaron una cita*', appt, 'client', { note: footnote('Ya quedó confirmada y te la recuerdo ese día', `Si no puedes ir: "cancelar cita ${appt.id}"`) }),
   );
   return appt;
 }
@@ -429,10 +430,9 @@ export async function processSchedulingTick(): Promise<void> {
     }
     schedRepo.markReminder(r.id, 'sent');
     const toClient = r.user_id === appt.client_user_id;
-    const when = formatWhen(appt.start_at);
     const text = toClient
-      ? `⏰ *Recordatorio de tu cita*\nCon ${appt.professional_name} - ${when}${appt.reason ? ` (${appt.reason})` : ''}.\n¡No la olvides! Si no puedes asistir, avísame para cancelarla.`
-      : `⏰ *Recordatorio de cita*\n${appt.client_name ?? 'Cliente'} - ${when}${appt.reason ? ` (${appt.reason})` : ''}.`;
+      ? appointmentCard('⏰ *Recordatorio de tu cita*', appt, 'client', { note: footnote(`Si no puedes ir: "cancelar cita ${appt.id}"`) })
+      : appointmentCard('⏰ *Recordatorio de cita*', appt, 'professional');
     const jid = toClient ? appt.client_jid : appt.professional_jid;
     if (await notify(jid, text)) recordSend('proactive', jid);
     else schedRepo.markReminder(r.id, 'failed');
@@ -445,8 +445,7 @@ export async function processSchedulingTick(): Promise<void> {
     })();
     await notify(
       appt.client_jid,
-      `⌛ Tu solicitud de cita con ${appt.professional_name} para el ${formatWhen(appt.start_at)} no alcanzó a ser confirmada. ` +
-        'Si aún la necesitas, pide otro horario.',
+      appointmentCard('⌛ *Tu solicitud no alcanzó a confirmarse*', appt, 'client', { note: footnote('Si aún la necesitas, escribe "quiero una cita" y pide otro horario') }),
     );
   }
 
@@ -503,10 +502,16 @@ export async function shareAccess(actor: User, target: { professionalId?: number
   const group = target.groupId ? schedRepo.getGroup(target.groupId) : undefined;
   const withWhom = prof ? professionalLabel(prof) : (group?.name ?? 'tu profesional');
   const botNumber = notifier?.ownPhone?.() ?? null;
-  const greeting =
-    `👋 Hola${client.name ? ` ${client.name}` : ''}! Soy el asistente de agenda de *${withWhom}*. ` +
-    'Desde ahora puedes agendar tus citas conmigo por aquí: escríbeme "quiero una cita" y te muestro los horarios disponibles. ' +
-    'Tus citas quedan confirmadas cuando el profesional las aprueba, y te recuerdo el día de la cita.';
+  const greeting = [
+    `👋 *Hola${client.name ? `, ${client.name}` : ''}*`,
+    `Soy Canix, el asistente de agenda de *${withWhom}*. Desde ahora puedes pedir tus citas por aquí.`,
+    '',
+    '🗓️ *Pedir una cita:* escribe "quiero una cita" y te muestro los horarios libres',
+    '📋 *Ver tus citas:* escribe "mis citas"',
+    '🚫 *Cancelar:* "cancelar cita" y su número',
+    '',
+    footnote('Cada cita queda confirmada cuando el profesional la aprueba', 'Te la recuerdo el día de la cita'),
+  ].join('\n');
   const forwardText =
     `Hola${client.name ? ` ${client.name}` : ''}! Para agendar tus citas conmigo escríbele "quiero una cita" a mi asistente` +
     `${botNumber ? ` al WhatsApp +${botNumber}` : ''}.`;
