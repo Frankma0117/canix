@@ -193,6 +193,13 @@ export async function handleOutfitResult(ctx: FashionRouterContext): Promise<Fas
     return handleHome(ctx);
   }
 
+  // Not about clothes: Fashion Mode steps aside and the message is handled like any other.
+  const { isAboutClothes } = await import('./home.flow.js');
+  if (!isAboutClothes(text)) {
+    fashionSessionsRepo.clear(ctx.userId);
+    return { consumed: false };
+  }
+
   // Anything else adjusts the request being worked on: "sin chaqueta", "con tenis blancos", "más
   // formal", "mejor para clima frío" - merged onto it (see outfit/request.ts) and recommended again.
   const change = await parseOutfitIntent(ctx.userId, text);
@@ -249,5 +256,10 @@ export async function handleMyOutfitsList(ctx: FashionRouterContext): Promise<Fa
     return { consumed: true, reply: lines.join('\n') };
   }
 
-  return { consumed: true, reply: enterMyOutfits(ctx.userId) };
+  if (/^(mis outfits|outfits)$/.test(text)) return { consumed: true, reply: enterMyOutfits(ctx.userId) };
+  // Anything else isn't a choice from this list: back to Fashion's home, which either takes it as
+  // an outfit request or steps aside for a normal message.
+  fashionSessionsRepo.setState(ctx.userId, 'FASHION_HOME', {});
+  const { handleHome } = await import('./home.flow.js');
+  return handleHome(ctx);
 }

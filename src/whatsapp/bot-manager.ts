@@ -615,7 +615,12 @@ export class BotManager {
       if (env.fashion.enabled && can(botUser, 'fashion.use')) {
         const result = await handleFashionMessage({ userId: user.id, jid, text, imageMessage, documentMessage, wa: this.wa });
         if (result.consumed) {
-          if (result.reply) await this.wa.sendText(jid, result.reply);
+          if (result.reply) {
+            // Part of the same conversation: the model sees what was asked and shown here.
+            if (text.trim()) messagesRepo.add(user.id, 'user', text);
+            messagesRepo.add(user.id, 'assistant', result.reply.length > 900 ? `${result.reply.slice(0, 900)}…` : result.reply);
+            await this.wa.sendText(jid, result.reply);
+          }
           return;
         }
       }

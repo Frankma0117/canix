@@ -15,7 +15,6 @@
  * text, so `/menu <categoría>` and typing the mode's name directly never drift apart.
  */
 import { usersRepo } from '../db/repositories/users.repo.js';
-import { messagesRepo } from '../db/repositories/messages.repo.js';
 import { CORE_CATEGORIES, STICKERS_CATEGORY, AGENDA_CATEGORY, MODE_KEYS, categoryAllowed, type MenuCategory } from './menu.js';
 import { PERMISSIONS } from '../permissions/catalog.js';
 import { effectivePermissions, asBotUser } from '../permissions/engine.js';
@@ -151,11 +150,15 @@ function resolveModeEntry(textLower: string): MenuCategory | null {
   return MODE_CATEGORIES.find((c) => isModeKey(c.key) && c.aliases.includes(withoutPrefix)) ?? null;
 }
 
-/** Tool names the AI agent may call this turn - null means "no extra restriction" (only the
- *  existing per-user allowed_tools permission, if any, still applies). */
-export function toolsForMode(key: ModeKey | null): string[] | null {
-  if (!key) return null;
-  return [...ALWAYS_ON_TOOLS, ...MODE_TOOLS[key]];
+/**
+ * Tool names the AI agent may call this turn: no longer narrowed by the section that's open. A
+ * mode used to lock the conversation to its own tools, so asking for anything else got "eso es de
+ * otra categoría, escribe salir" - friction the user asked to remove. Opening a section now only
+ * shows what can be done there; everything the person is allowed to use works from anywhere.
+ * (Kept as a function so callers don't change if a narrowing is ever wanted again.)
+ */
+export function toolsForMode(_key: ModeKey | null): string[] | null {
+  return null;
 }
 
 /**
@@ -177,7 +180,7 @@ export function renderModeEntryMessage(category: MenuCategory): string {
     `${header}\n` +
     `Ya estás aquí. Pídeme lo que necesites, por ejemplo:\n\n` +
     `${bullets.map((b) => `- ${b}`).join('\n')}\n\n` +
-    `> *salir* vuelve al inicio · el nombre de otra sección te cambia directo`
+    `> Puedes pedirme cualquier otra cosa desde aquí, sin salir`
   );
 }
 
@@ -207,14 +210,9 @@ export function handleModeMessage(userId: number, text: string): ModeRouterResul
 
   if (EXIT_KEYWORDS.includes(textLower)) {
     if (!currentMode) return { consumed: false }; // already default - let the AI handle a bare "salir"
+    // Leaving a section is just closing its screen - the conversation carries on as it was.
     usersRepo.setActiveMode(userId, null);
-    // Wipes the chat history along with the mode switch - without this, the AI's next reply (back
-    // in normal mode) still carried the whole conversation from inside the mode just left (or from
-    // whatever was being discussed right before entering it), and kept answering as if that were
-    // still the topic ("me empieza a responder con otras cosas" - see the user's own report). A
-    // mode switch is a hard context boundary, so the chat history resets with it, same as /reset.
-    messagesRepo.clear(userId);
-    console.log('[MODE] Usuario #%d volvió a modo recordatorios (historial reiniciado).', userId);
+    console.log('[MODE] Usuario #%d cerró la sección %s.', userId, currentMode);
     return { consumed: true, reply: renderModeExitMessage() };
   }
 
@@ -231,8 +229,7 @@ export function handleModeMessage(userId: number, text: string): ModeRouterResul
 
   if (category.key !== currentMode) {
     usersRepo.setActiveMode(userId, category.key as ModeKey);
-    messagesRepo.clear(userId); // see the exit branch above for why
-    console.log('[MODE] Usuario #%d entró a modo %s (historial reiniciado).', userId, category.key);
+    console.log('[MODE] Usuario #%d abrió la sección %s.', userId, category.key);
   }
   return { consumed: true, reply: renderModeEntryMessage(category) };
 }

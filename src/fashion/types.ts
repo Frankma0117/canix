@@ -100,6 +100,8 @@ export interface FashionSessionData {
     missingRoles: string[];
     reason: string;
   };
+  /** Home just asked "¿para qué lo quieres?" (option 3) - the next message is that answer, whatever it says. */
+  awaitingOutfit?: boolean;
   /** Ids of saved outfits last rendered by "mis outfits" (same 1-based-index pattern as lastListedIds). */
   lastListedOutfitIds?: number[];
 }

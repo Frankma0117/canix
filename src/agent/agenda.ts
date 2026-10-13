@@ -8,7 +8,7 @@ import { dayLabel } from './views.js';
 import type { Reminder } from '../types/index.js';
 import { nightFarewellMessage } from '../util/motivational.js';
 import { occursOn, scheduleOf } from './routine-schedule.js';
-import { progressBar, timeChip } from '../util/wa-format.js';
+import { progressBar, shortTime, timeChip } from '../util/wa-format.js';
 import { env } from '../config/env.js';
 
 interface AgendaItem {
@@ -122,6 +122,18 @@ function agendaBlock(title: string, rows: Row[], opts: { fromEnd?: boolean } = {
   return lines;
 }
 
+/**
+ * "Tomar agua" at 6, 8, 10... is one thing said eight times: shown once, at its first hour, with
+ * how many times and until when - so the day's real reminders aren't buried under it.
+ */
+function collapseRepeats(rows: Row[]): Row[] {
+  const groups = new Map<string, Row[]>();
+  for (const row of rows) groups.set(row.label, [...(groups.get(row.label) ?? []), row]);
+  return [...groups.values()]
+    .map((same) => (same.length === 1 ? same[0] : { time: same[0].time, label: `${same[0].label} · ${same.length} veces, hasta las ${shortTime(same[same.length - 1].time)}` }))
+    .sort((a, b) => a.time.localeCompare(b.time));
+}
+
 /** The time ('HH:mm') at which a pending reminder falls on `date`, following its recurrence - null if it doesn't. */
 function reminderTimeOn(rem: Reminder, date: string): string | null {
   let at = rem.run_at;
@@ -206,7 +218,7 @@ export function agendaView(userId: number, date: string = todayLocal()): { text:
     ];
     lines.push(...blocks.slice(1)); // the section title already gives the gap
   }
-  lines.push(...agendaBlock('⏰ *RECORDATORIOS*', reminders));
+  lines.push(...agendaBlock('⏰ *RECORDATORIOS*', collapseRepeats(reminders)));
   if (todos.length > 0) {
     lines.push('', `📌 *Pendientes sin hora* · ${todos.length}`, ...todos.slice(0, AGENDA_MAX_ROWS).map((t) => `⬜ ${withIcon(t.title, '')}`.replace('⬜  ', '⬜ ')));
     if (todos.length > AGENDA_MAX_ROWS) lines.push(`_… y ${todos.length - AGENDA_MAX_ROWS} más_`);

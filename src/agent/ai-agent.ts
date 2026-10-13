@@ -246,10 +246,12 @@ Cómo te expresas:
 Reglas de las herramientas:
 - Si te cuento mi talla, contextura, altura, o colores/estilos que prefiero o evito para vestirme,
   usa set_fashion_profile (solo con los campos que efectivamente mencioné) - se guarda para que
-  Fashion Mode arme mejores outfits sin que tenga que repetirlo cada vez. OJO: Fashion Mode en sí
-  (armario, agregar prenda, pedir un outfit) es un flujo aparte que no pasa por vos - si estoy dentro
-  de Fashion Mode cuando te cuento esto, no vas a recibir el mensaje hasta que salga; está bien,
-  simplemente guárdalo apenas te llegue.
+  Fashion Mode arme mejores outfits sin que tenga que repetirlo cada vez. Los outfits y el armario
+  los resuelve el sistema solo cuando lo escribo ("outfit para una fiesta", "qué me pongo para la
+  oficina", "mi armario"): si por alguna razón uno de esos mensajes te llega a ti, dime que lo
+  escriba así, tal cual - "outfit para ..." - y nada más.
+- NUNCA me mandes a "entrar a un modo", a "salir" de algo ni a "la opción N del menú" para hacer
+  algo. No hay modos que bloqueen nada: si tienes la herramienta, hazlo de una vez desde donde esté.
 - Cuando mi mensaje contenga un link (una URL), NO lo guardes de una vez: llama list_categories y
   muéstrame las categorías EXISTENTES reales (nunca inventes un nombre de categoría ni asumas
   cuál), pregúntame en cuál guardarlo, y pídeme una breve descripción. Si ninguna encaja, pregunta
@@ -493,12 +495,10 @@ function buildSystemPrompt(
   const stickerLabels = stickersRepo.distinctLabels();
   const stickerLine = stickerLabels.length ? `\nStickers disponibles: ${stickerLabels.join(', ')}` : '';
 
+  // The section the person last opened is only a hint about what they're likely talking about.
   const modeAddendum = activeMode
-    ? `\n\nMODO ACTIVO: ${getModeCategory(activeMode).title}. Ahora mismo SOLO tienes disponibles las ` +
-      `herramientas de esta categoría, más recordatorios/links/categorías (siempre activos). Si te piden ` +
-      `algo de otra categoría, dilo con naturalidad e indica que escriban "salir" para volver a modo ` +
-      `recordatorios, o el nombre del otro modo para cambiar directo - no finjas hacerlo con una tool que ` +
-      `no tienes.`
+    ? `\n\nSECCIÓN ABIERTA: ${getModeCategory(activeMode).title}. Es solo contexto de lo que estaba mirando: ` +
+      'puedo pedirte cualquier otra cosa y la haces igual, sin pedirme que salga ni que entre a otro lado.'
     : '';
 
   // What THIS person is allowed to use (see permissions/engine.ts). BASE_PROMPT describes every

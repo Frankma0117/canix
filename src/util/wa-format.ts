@@ -72,18 +72,28 @@ function timeRow(line: string): string | null {
  * text and sit on a word boundary, and shows every other asterisk as a literal "*".
  */
 function fixBold(line: string): string {
-  let out = line
-    .replace(/\*{2,}/g, '*') // "**x**", "***x***" -> "*x*"
-    .replace(/\*[ \t]+([^*\n]+?)[ \t]*\*/g, '*$1*') // "* x *" -> "*x*"
-    .replace(/\*([^*\n]+?)[ \t]+\*/g, '*$1*') // "*x *" -> "*x*"
-    .replace(/\*\*/g, ''); // an empty pair left behind
-  // An unpaired marker can't be bold - it would show as a stray asterisk.
-  if ((out.match(/\*/g) ?? []).length % 2 === 1) {
-    const last = out.lastIndexOf('*');
-    out = out.slice(0, last) + out.slice(last + 1);
+  // Markers are paired in order (1st with 2nd, 3rd with 4th...) and each pair is tidied on its own.
+  // (An earlier version used patterns over the whole line, and on "*negro* y *blanco*" took the
+  // closing marker of one bold and the opening of the next as a badly spaced pair.)
+  const parts = line.replace(/\*{2,}/g, '*').split('*');
+  // An unpaired marker can't be bold - it would show as a stray asterisk: its text is kept, plain.
+  if (parts.length % 2 === 0) {
+    const last = parts.pop()!;
+    parts.push(parts.pop()! + last);
   }
-  // Markers glued to letters/digits on the outside don't render: give them room.
-  return out.replace(/([\p{L}\p{N}])(\*[^*\n]+\*)/gu, '$1 $2').replace(/(\*[^*\n]+\*)([\p{L}\p{N}])/gu, '$1 $2');
+  let out = parts[0];
+  for (let i = 1; i < parts.length; i += 2) {
+    const inner = parts[i].trim();
+    const after = parts[i + 1] ?? '';
+    if (inner) {
+      // markers glued to letters/digits on the outside don't render: give them room
+      if (/[\p{L}\p{N}]$/u.test(out)) out += ' ';
+      out += `*${inner}*`;
+      if (/^[\p{L}\p{N}]/u.test(after)) out += ' ';
+    }
+    out += after;
+  }
+  return out;
 }
 
 /** Model-written Markdown -> WhatsApp markup in the house style. Text that's already right is left alone. */

@@ -1,5 +1,4 @@
 import { fashionSessionsRepo } from '../db/repositories/fashion-sessions.repo.js';
-import { messagesRepo } from '../db/repositories/messages.repo.js';
 import { enterHome, handleHome, HOME_MENU } from './flows/home.flow.js';
 import { enterAddGarment, handleWaitingImage, handleManualType, handleManualCategory, handleManualColor, handleConfirmation } from './flows/add-garment.flow.js';
 import { enterWardrobeList, handleWardrobeList, parseFilterText } from './flows/list-garments.flow.js';
@@ -14,6 +13,10 @@ import type { FashionRouterContext, FashionRouterResult } from './router-types.j
 import type { FashionState } from './types.js';
 
 const ENTRY_KEYWORDS = ['fashion', 'moda', 'outfit'];
+/** An outfit being asked for in plain words, wherever it falls in the sentence. */
+const OUTFIT_ASK_RE = /\b(outfit|outfits|una pinta|la pinta|que me pongo|que ponerme|que me puedo poner|como me visto|vestirme|que ropa (uso|me pongo|llevo)|armame (un|una) (look|conjunto)|un look para)\b/;
+/** How long a Fashion screen keeps waiting for its next step before the chat is just the chat again. */
+const SESSION_IDLE_MINUTES = 20;
 const WARDROBE_KEYWORDS = ['armario'];
 const EXIT_KEYWORDS = ['salir', 'salir fashion', 'exit fashion', 'cancelar'];
 
@@ -31,6 +34,15 @@ function matchFashionEntry(text: string): { matched: boolean; wardrobe: boolean;
   if (WARDROBE_KEYWORDS.includes(firstWord)) return { matched: true, wardrobe: true, myOutfits: false, trailing: rest };
   if (ENTRY_KEYWORDS.includes(firstWord)) return { matched: true, wardrobe: false, myOutfits: false, trailing: rest };
 
+  // Said in the middle of a normal sentence, from anywhere: "ármame un outfit para la discoteca",
+  // "qué me pongo para la oficina", "muéstrame mi armario" - no need to "enter" anything first.
+  const plain = trimmed.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/\b(mi armario|mis prendas|mi closet|mi ropa guardada)\b/.test(plain)) {
+    return { matched: true, wardrobe: true, myOutfits: false, trailing: plain.replace(/^.*\b(mi armario|mis prendas|mi closet|mi ropa guardada)\b/, '').trim() };
+  }
+  if (/\b(mis outfits|outfits guardados)\b/.test(plain)) return { matched: true, wardrobe: false, myOutfits: true, trailing: '' };
+  if (OUTFIT_ASK_RE.test(plain)) return { matched: true, wardrobe: false, myOutfits: false, trailing: trimmed };
+
   return { matched: false, wardrobe: false, myOutfits: false, trailing: '' };
 }
 
@@ -44,8 +56,17 @@ function matchFashionEntry(text: string): { matched: boolean; wardrobe: boolean;
  * bot-manager.ts fall through to the normal AI loop unchanged.
  */
 export async function handleFashionMessage(ctx: FashionRouterContext): Promise<FashionRouterResult> {
-  const session = fashionSessionsRepo.getOrIdle(ctx.userId);
+  let session = fashionSessionsRepo.getOrIdle(ctx.userId);
   const textLower = ctx.text.trim().toLowerCase();
+
+  // A screen left open a while ago shouldn't swallow today's "1" or "sí" meant for something else.
+  if (session.state !== 'FASHION_IDLE' && session.updated_at) {
+    const idleMs = Date.now() - new Date(`${session.updated_at.replace(' ', 'T')}Z`).getTime();
+    if (idleMs > SESSION_IDLE_MINUTES * 60_000 && !ctx.imageMessage && !ctx.documentMessage) {
+      fashionSessionsRepo.clear(ctx.userId);
+      session = fashionSessionsRepo.getOrIdle(ctx.userId);
+    }
+  }
 
   if (session.state !== 'FASHION_IDLE' && EXIT_KEYWORDS.includes(textLower)) {
     fashionSessionsRepo.clear(ctx.userId);
@@ -54,8 +75,7 @@ export async function handleFashionMessage(ctx: FashionRouterContext): Promise<F
     // much read on the very next normal-chat turn) resets along with it - otherwise the first reply
     // back in normal mode kept answering as if whatever was being discussed before Fashion Mode (or
     // nothing at all, if the history was empty) were still the topic.
-    messagesRepo.clear(ctx.userId);
-    console.log('[FASHION] Usuario #%d salió de Fashion Mode (historial reiniciado).', ctx.userId);
+    console.log('[FASHION] Usuario #%d salió de Fashion Mode.', ctx.userId);
     return { consumed: true, reply: '👋 Saliste de Fashion Mode.' };
   }
 
@@ -71,14 +91,12 @@ export async function handleFashionMessage(ctx: FashionRouterContext): Promise<F
   // Saving a reference photo (see profile-photo.flow.ts) - same "works anytime" reasoning as
   // revalidate above, and enters Fashion Mode from idle if it wasn't already active.
   if (PROFILE_PHOTO_KEYWORDS.includes(textLower)) {
-    if (session.state === 'FASHION_IDLE') messagesRepo.clear(ctx.userId); // entering fresh - see the idle-entry block below for why
     return { consumed: true, reply: enterProfilePhoto(ctx.userId) };
   }
 
   // Wiping the whole wardrobe (see delete-garment.flow.ts) - same "works anytime" reasoning, enters
   // Fashion Mode from idle if needed so the confirmation step below has a session to live in.
   if (DELETE_ALL_KEYWORDS.includes(textLower)) {
-    if (session.state === 'FASHION_IDLE') messagesRepo.clear(ctx.userId);
     return { consumed: true, reply: enterDeleteAllConfirm(ctx.userId) };
   }
 
@@ -94,8 +112,7 @@ export async function handleFashionMessage(ctx: FashionRouterContext): Promise<F
     const entry = matchFashionEntry(ctx.text);
     if (!entry.matched) return { consumed: false };
 
-    console.log('[FASHION] Usuario #%d entró a Fashion Mode (historial reiniciado).', ctx.userId);
-    messagesRepo.clear(ctx.userId); // see the exit branch above for why
+    console.log('[FASHION] Usuario #%d entró a Fashion Mode.', ctx.userId);
     if (entry.wardrobe) {
       return { consumed: true, reply: enterWardrobeList(ctx.userId, parseFilterText(entry.trailing)) };
     }

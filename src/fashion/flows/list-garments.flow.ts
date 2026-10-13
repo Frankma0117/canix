@@ -113,7 +113,16 @@ export async function handleWardrobeList(ctx: FashionRouterContext): Promise<Fas
     return { consumed: true, reply: showGarmentDetail(ctx.userId, ids[choice - 1]) };
   }
 
-  // Any other text is treated as a new filter, resetting to page 1 - lets "armario" stay active
-  // while the user refines ("blancos" after seeing a mixed list, etc.).
-  return { consumed: true, reply: renderList(ctx.userId, parseFilterText(text), 0) };
+  // Any other text is a new filter, resetting to page 1 - lets "armario" stay active while the user
+  // refines ("blancos" after seeing a mixed list, etc.). Text that names no garment, color or group
+  // and matches nothing in the wardrobe isn't a filter at all: back to Fashion's home, which takes
+  // it as an outfit request or steps aside for a normal message.
+  const next = parseFilterText(text);
+  const named = next.category || next.color || next.type || next.favorite;
+  if (!named && garmentsRepo.list(ctx.userId, next, { limit: 1, offset: 0 }).total === 0) {
+    fashionSessionsRepo.setState(ctx.userId, 'FASHION_HOME', {});
+    const { handleHome } = await import('./home.flow.js');
+    return handleHome(ctx);
+  }
+  return { consumed: true, reply: renderList(ctx.userId, next, 0) };
 }
