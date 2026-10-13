@@ -1,3 +1,4 @@
+import { stripKnownPrefix } from '../util/motivational.js';
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
@@ -454,7 +455,8 @@ export class TaskScheduler {
       }
     }
 
-    const label = isRoutine ? `tu rutina "${reminder.message}"` : `"${reminder.message}"`;
+    const routineTitle = isRoutine && reminder.todo_id ? todosRepo.getById(reminder.user_id, reminder.todo_id)?.title : undefined;
+    const label = isRoutine ? `tu rutina "${routineTitle ?? stripKnownPrefix(reminder.message)}"` : `"${stripKnownPrefix(reminder.message)}"`;
     const notice =
       `⏸️ Voy a dejar en pausa ${label} porque no he tenido respuesta tuya desde los últimos avisos. ` +
       'Escríbeme cualquier cosa cuando quieras y se reactiva sola.';

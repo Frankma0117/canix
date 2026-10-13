@@ -7,37 +7,14 @@ function pick<T>(pool: readonly T[]): T {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-const PLAIN_REMINDER_PREFIXES = [
-  'Recuerda:',
-  'Dale, no se te olvide:',
-  'Ojo, toca:',
-  'Vamos, es hora de:',
-  'No lo dejes pasar:',
-  'Métele:',
-  'Aviso importante:',
-  'Ojo con esto:',
-  'Para que no se te pase:',
-  'Un empujoncito:',
-  'Va rapidito, pero toca:',
-  'Enfócate un momento en esto:',
-] as const;
-
-const ROUTINE_START_PREFIXES = [
-  'Vamos, es hora de:',
-  'Dale, arranca con:',
-  'A darle:',
-  'Hora de:',
-  'Toca:',
-  'Arrancamos con:',
-  'Metámosle a:',
-] as const;
-
-const ROUTINE_CHECKIN_TEMPLATES = [
-  (title: string) => `✅ ¿Cómo te fue con "${title}"? Cuéntame para sumarlo a tu racha 🔥`,
-  (title: string) => `🙌 ¿Lograste "${title}"? Avísame y lo dejamos registrado.`,
-  (title: string) => `💪 ¿Cumpliste con "${title}"? Cuéntame, así seguimos sumando racha.`,
-  (title: string) => `📝 Cuéntame de "${title}" - ¿quedó hecho o lo movemos para otro rato?`,
-  (title: string) => `🔥 No dejes fría la racha - ¿"${title}" quedó listo?`,
+// The rotating lead-ins that used to open every reminder ("Ojo con esto:", "Métele:", "Dale,
+// arranca con:") were dropped at the user's request - they read as odd. A notice now opens with a
+// fixed, plain label (see agent/reminder-prompts.ts). These lists stay ONLY so messages stored
+// with one of them baked in can still be cleaned up (stripKnownPrefix).
+const RETIRED_FLEXIBLE_PREFIXES = ['🎲 Aprovecha y dale a:', '🌿 Un espacio para:', '🧘 Pausa para:', '✨ Cuando puedas hoy:', '🍃 Métele un rato a:'] as const;
+const RETIRED_ROUTINE_PREFIXES = [
+  '💪 Vamos, es hora de:', '🔥 Dale, arranca con:', '👊 A darle:', '⏰ Hora de:', '🌟 Toca:', '🏁 Arrancamos con:', '💥 Metámosle a:',
+  'Vamos, es hora de:', 'Dale, arranca con:', 'A darle:', 'Hora de:', 'Toca:', 'Arrancamos con:', 'Metámosle a:',
 ] as const;
 
 const IMPORTANT_DATE_PREFIXES = ['🎉', '🎊', '🥳', '📌', '🎈'] as const;
@@ -49,13 +26,6 @@ const IMPORTANT_DATE_NOTICE_PREFIXES = [
   '📣 En camino:',
 ] as const;
 
-const FLEXIBLE_PREFIXES = [
-  '🎲 Aprovecha y dale a:',
-  '🌿 Un espacio para:',
-  '🧘 Pausa para:',
-  '✨ Cuando puedas hoy:',
-  '🍃 Métele un rato a:',
-] as const;
 
 // Mirrors the (now-removed) automatic morning agenda's greeting, for the other end of the day -
 // see agent/agenda.ts's maybeNightFarewell(),
@@ -76,20 +46,14 @@ const WORKING_UPDATES = [
   '🙏 Un poco más de paciencia, ya casi termino...',
 ] as const;
 
-export function plainReminderPrefix(): string {
-  return pick(PLAIN_REMINDER_PREFIXES);
-}
-
-export function routineStartPrefix(): string {
-  return pick(ROUTINE_START_PREFIXES);
-}
-
+/** What a routine's notice row stores: just its title (the notice itself is built at send time). */
 export function routineStartMessage(title: string): string {
-  return `${pick(ROUTINE_START_PREFIXES)} ${title}`;
+  return title;
 }
 
+/** The written check-in, sent only when the notice went out without its poll. */
 export function routineCheckinMessage(title: string): string {
-  return pick(ROUTINE_CHECKIN_TEMPLATES)(title);
+  return `¿Ya hiciste "${title}"?`;
 }
 
 export function importantDateMessage(title: string): string {
@@ -97,11 +61,12 @@ export function importantDateMessage(title: string): string {
 }
 
 export function importantDateNoticeMessage(title: string, advanceDays: number): string {
-  return `${pick(IMPORTANT_DATE_NOTICE_PREFIXES)} en ${advanceDays} día(s), ${title}`;
+  return `📅 ${advanceDays === 1 ? 'Falta 1 día' : `Faltan ${advanceDays} días`}: ${title}`;
 }
 
+/** What a flexible reminder stores: the message as given. */
 export function flexibleReminderMessage(message: string): string {
-  return `${pick(FLEXIBLE_PREFIXES)} ${message}`;
+  return message;
 }
 
 export function nightFarewellMessage(): string {
@@ -122,7 +87,7 @@ export function workingUpdateMessage(): string {
  * each got a different random emoji prefix.
  */
 export function stripKnownPrefix(text: string): string {
-  const pools: readonly (readonly string[])[] = [IMPORTANT_DATE_PREFIXES, IMPORTANT_DATE_NOTICE_PREFIXES, FLEXIBLE_PREFIXES];
+  const pools: readonly (readonly string[])[] = [IMPORTANT_DATE_PREFIXES, IMPORTANT_DATE_NOTICE_PREFIXES, RETIRED_FLEXIBLE_PREFIXES, RETIRED_ROUTINE_PREFIXES];
   for (const pool of pools) {
     for (const prefix of pool) {
       if (text.startsWith(prefix)) return text.slice(prefix.length).trim();

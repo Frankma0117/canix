@@ -8,7 +8,7 @@ import { todosRepo } from '../db/repositories/todos.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
 import { nowLocal, todayLocal, parseWall, dateOnly, addMinutes } from '../util/datetime.js';
-import { plainReminderPrefix, routineStartPrefix } from '../util/motivational.js';
+import { stripKnownPrefix } from '../util/motivational.js';
 import { reactionFooter, shortTime } from '../util/wa-format.js';
 import { routineStreak, weekProgress } from './routine-schedule.js';
 import { maybeNightFarewell } from './agenda.js';
@@ -61,7 +61,8 @@ function bold(text: string): string {
 
 /** Routines get the poll. */
 /** "🏃 *Cardio*" - the title in bold with the emoji that fits it (see util/icons.ts). */
-function titled(title: string, fallback = '🔹'): string {
+function titled(rawTitle: string, fallback = '🔹'): string {
+  const title = rawTitle.trim().replace(/^\p{Ll}/u, (c) => c.toUpperCase());
   const icon = /\p{Extended_Pictographic}/u.test(title) ? '' : `${iconFor(title, fallback)} `;
   return `${icon}${bold(title)}`;
 }
@@ -101,10 +102,12 @@ export function formatReminderText(reminder: Reminder, routine?: Todo): string {
     // What to do, right in the notice, when the routine has its exercises broken down.
     const exercises = exercisesRepo.listByRoutine(routine.user_id, routine.id);
     const plan = exercises.length ? `\n\n${exercisesBlock(exercises)}` : '';
-    return `${routineStartPrefix()}\n${titled(routine.title)}\n${details.join('  ·  ')}${plan}`;
+    return `⏰ Es hora de tu rutina\n${titled(routine.title)}\n${details.join('  ·  ')}${plan}`;
   }
-  if (reminder.kind === 'reminder') return `${plainReminderPrefix()}\n${titled(reminder.message, '🔔')}`;
-  // Every other kind already carries its own emoji/wording from creation time.
+  // A plain label, then the thing itself - no chatty lead-in. Flexible ones created earlier still
+  // carry an old lead-in in their text, removed here.
+  if (reminder.kind === 'reminder' || reminder.kind === 'flexible') return `⏰ Recordatorio\n${titled(stripKnownPrefix(reminder.message), '🔔')}`;
+  // Important dates carry their own emoji/wording from creation time.
   return reminder.message;
 }
 
@@ -124,7 +127,7 @@ export async function sendReminderWithPrompt(wa: WaManager, reminder: Reminder, 
   const occurrenceDate = dateOnly(isCheckin && routine ? addMinutes(reminder.run_at, -(routine.duration_minutes ?? 0)) : reminder.run_at);
   const byPoll = wantsPoll(reminder) && !!routine;
   const byReaction = !byPoll && wantsReaction(reminder, target);
-  const body = isCheckin ? reminder.message : formatReminderText(reminder, routine);
+  const body = isCheckin && routine ? `⏰ ¿Ya hiciste tu rutina?\n${titled(routine.title)}` : formatReminderText(reminder, routine);
   // Routine notices carry the same footer: reacting marks them too, besides the poll under them.
   const textMsgId = await wa.sendTextWithId(target, byReaction || byPoll ? `${body}\n\n${REACTION_HINT}` : body);
   if (!byPoll && !byReaction) return 1;
