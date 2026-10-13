@@ -97,7 +97,7 @@ export const CORE_CATEGORIES: MenuCategory[] = [
       `🔁 *Rutinas y hábitos*\n\n` +
       `- Crear con hora de aviso + duración: "crea rutina de ejercicio a las 7am, 30 minutos"\n` +
       `- Elegir cada cuánto: todos los días, "lunes y jueves", "cada 15 días", "cada mes el 5"\n` +
-      `- Marcar cumplida o no con un toque en la encuesta de Sí/No del aviso (o reaccionando 👍/👎); ver racha e historial\n` +
+      `- Marcar cumplida o no reaccionando 👍/👎 al aviso; ver racha e historial\n` +
       `- Editar horario/frecuencia sin perder la racha\n` +
       `- Pausar unos días (vacaciones, lesión) sin borrarla\n` +
       `- Desglosar una rutina en ejercicios concretos (series/repeticiones/peso)`,

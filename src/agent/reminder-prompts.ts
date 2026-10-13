@@ -102,7 +102,8 @@ export function formatReminderText(reminder: Reminder, routine?: Todo): string {
     // What to do, right in the notice, when the routine has its exercises broken down.
     const exercises = exercisesRepo.listByRoutine(routine.user_id, routine.id);
     const plan = exercises.length ? `\n\n${exercisesBlock(exercises)}` : '';
-    return `⏰ Es hora de tu rutina\n${titled(routine.title)}\n${details.join('  ·  ')}${plan}`;
+    const progress = progressLine(routine);
+    return `⏰ Es hora de tu rutina\n${titled(routine.title)}\n${details.join('  ·  ')}${progress ? `\n${progress}` : ''}${plan}`;
   }
   // A plain label, then the thing itself - no chatty lead-in. Flexible ones created earlier still
   // carry an old lead-in in their text, removed here.
@@ -125,8 +126,10 @@ export async function sendReminderWithPrompt(wa: WaManager, reminder: Reminder, 
   // started, which is `duration` before this check-in.
   const isCheckin = reminder.kind === 'routine_checkin';
   const occurrenceDate = dateOnly(isCheckin && routine ? addMinutes(reminder.run_at, -(routine.duration_minutes ?? 0)) : reminder.run_at);
-  const byPoll = wantsPoll(reminder) && !!routine;
-  const byReaction = !byPoll && wantsReaction(reminder, target);
+  // No poll under routine notices any more: it asked the same thing twice (the notice already says
+  // "reacciona"), and the count it carried now goes in the notice itself (see formatReminderText).
+  const byPoll = false;
+  const byReaction = (wantsPoll(reminder) && !!routine) || wantsReaction(reminder, target);
   const body = isCheckin && routine ? `⏰ ¿Ya hiciste tu rutina?\n${titled(routine.title)}` : formatReminderText(reminder, routine);
   // Routine notices carry the same footer: reacting marks them too, besides the poll under them.
   const textMsgId = await wa.sendTextWithId(target, byReaction || byPoll ? `${body}\n\n${REACTION_HINT}` : body);
@@ -163,6 +166,11 @@ export async function sendReminderWithPrompt(wa: WaManager, reminder: Reminder, 
  *  is then redundant and stays silent. */
 export function hasPollFor(todoId: number, occurrenceDate: string): boolean {
   return !!reminderPromptsRepo.findForRoutineDate(todoId, occurrenceDate)?.poll_msg_id;
+}
+
+/** True when that day's notice was already answered (yes or no): nothing left to ask about it. */
+export function answeredFor(todoId: number, occurrenceDate: string): boolean {
+  return !!reminderPromptsRepo.findForRoutineDate(todoId, occurrenceDate)?.answer;
 }
 
 function delayNote(prompt: ReminderPrompt, at: string): string {

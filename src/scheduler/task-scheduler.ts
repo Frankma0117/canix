@@ -9,7 +9,7 @@ import { nowLocal, addMinutes, addMonths, addDays, addSeconds, dateOnly, randomT
 import { buildWeeklyReportMessage } from '../agent/weekly-report.js';
 import { dedupeUser, summaryTotal, summaryLine } from '../agent/dedup.js';
 import { nextRoutineRunAt } from '../agent/routine-setup.js';
-import { sendReminderWithPrompt, hasPollFor } from '../agent/reminder-prompts.js';
+import { sendReminderWithPrompt, hasPollFor, answeredFor } from '../agent/reminder-prompts.js';
 import { todosRepo } from '../db/repositories/todos.repo.js';
 import { checkBudget, recordSend } from '../whatsapp/send-guard.js';
 import { env } from '../config/env.js';
@@ -290,7 +290,7 @@ export class TaskScheduler {
           const duration = todosRepo.getById(reminder.user_id, reminder.todo_id)?.duration_minutes ?? 0;
           const occurrenceDate = dateOnly(addMinutes(reminder.run_at, -duration));
           const log = habitLogsRepo.getForDate(reminder.todo_id, occurrenceDate);
-          if (log?.done || hasPollFor(reminder.todo_id, occurrenceDate)) {
+          if (log || answeredFor(reminder.todo_id, occurrenceDate) || hasPollFor(reminder.todo_id, occurrenceDate)) {
             const next = nextRunAt(reminder);
             if (next) remindersRepo.reschedule(reminder.id, next);
             else remindersRepo.markStatus(reminder.id, 'executed');
