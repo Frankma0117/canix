@@ -222,6 +222,8 @@ export interface Checklist {
   id: number;
   user_id: number;
   name: string;
+  // What it's a list of - see util/list-kinds.ts.
+  kind: string | null;
   created_at: string;
 }
 

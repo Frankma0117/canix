@@ -1,3 +1,4 @@
+import { inferListKind, type ListKind } from '../../util/list-kinds.js';
 import { db } from '../pool.js';
 import type { Checklist, ChecklistItem } from '../../types/index.js';
 
@@ -18,9 +19,14 @@ export const checklistsRepo = {
       .all(userId, `%${name}%`) as Checklist[];
   },
 
-  create(userId: number, name: string): number {
-    const info = db.prepare('INSERT INTO checklists (user_id, name) VALUES (?, ?)').run(userId, name);
+  /** `kind` defaults to whatever the name points at (see util/list-kinds.ts). */
+  create(userId: number, name: string, kind?: ListKind | null): number {
+    const info = db.prepare('INSERT INTO checklists (user_id, name, kind) VALUES (?, ?, ?)').run(userId, name, kind ?? inferListKind(name));
     return Number(info.lastInsertRowid);
+  },
+
+  setKind(userId: number, id: number, kind: ListKind): void {
+    db.prepare('UPDATE checklists SET kind = ? WHERE id = ? AND user_id = ?').run(kind, id, userId);
   },
 
   rename(userId: number, id: number, name: string): void {

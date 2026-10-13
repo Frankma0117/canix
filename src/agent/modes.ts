@@ -53,6 +53,7 @@ const MODE_TOOLS: Record<ModeKey, string[]> = {
     // Listas para ir marcando de a poco (juegos, películas, libros, compras) - viven en modo
     // "tareas" pero son su propia entidad, no un todo (ver checklists.repo.ts).
     'create_list',
+    'edit_list',
     'add_list_item',
     'list_lists',
     'view_list',

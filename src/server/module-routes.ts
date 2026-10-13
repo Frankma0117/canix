@@ -1,3 +1,4 @@
+import { listKindOf, normalizeListKind } from '../util/list-kinds.js';
 import type { Express } from 'express';
 import { notesRepo } from '../db/repositories/notes.repo.js';
 import { mealPlansRepo } from '../db/repositories/meal-plans.repo.js';
@@ -110,14 +111,27 @@ export function registerModuleRoutes(app: Express): void {
   app.use('/api/lists', requirePermission('todos.manage'));
   app.get(
     '/api/lists',
-    h((req, res) => res.json(checklistsRepo.list(userId(req)).map((l) => ({ ...l, items: checklistItemsRepo.list(l.id) })))),
+    h((req, res) => res.json(checklistsRepo.list(userId(req)).map((l) => ({ ...l, kind: listKindOf(l), items: checklistItemsRepo.list(l.id) })))),
   );
   app.post(
     '/api/lists',
     h((req, res) => {
       const name = str(req.body?.name, 120);
       if (!name) return void res.status(400).json({ error: 'La lista necesita un nombre.' });
-      res.status(201).json({ id: checklistsRepo.create(userId(req), name) });
+      res.status(201).json({ id: checklistsRepo.create(userId(req), name, normalizeListKind(req.body?.kind)) });
+    }),
+  );
+  app.put(
+    '/api/lists/:id',
+    h((req, res) => {
+      const list = checklistsRepo.getById(userId(req), Number(req.params.id));
+      if (!list) return void res.status(404).json({ error: 'No existe esa lista.' });
+      const name = str(req.body?.name, 120);
+      const kind = normalizeListKind(req.body?.kind);
+      if (req.body?.kind !== undefined && !kind) return void res.status(400).json({ error: 'Ese tipo de lista no existe.' });
+      if (name) checklistsRepo.rename(userId(req), list.id, name);
+      if (kind) checklistsRepo.setKind(userId(req), list.id, kind);
+      res.json({ ok: true });
     }),
   );
   app.delete(

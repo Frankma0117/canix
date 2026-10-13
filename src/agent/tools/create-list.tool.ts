@@ -1,3 +1,4 @@
+import { LIST_KIND_INFO, inferListKind, normalizeListKind } from '../../util/list-kinds.js';
 import type { Tool } from '../tool-registry.js';
 import { checklistsRepo } from '../../db/repositories/checklists.repo.js';
 import { resolveActingUser } from './act-on-behalf.js';
@@ -7,11 +8,17 @@ export const createListTool: Tool = {
   description:
     'Crea una lista nueva para ir marcando cosas de a poco - ej. "juegos de Mario que quiero", "películas por ver", ' +
     '"libros pendientes", "cosas para comprar". Distinta de una tarea suelta (add_todo): es una colección a la que ' +
-    'luego se le agregan ítems (add_list_item) y se van marcando uno por uno (check_list_item), sin fecha ni hora.',
+    'luego se le agregan ítems (add_list_item) y se van marcando uno por uno (check_list_item), sin fecha ni hora. ' +
+    'Las de música, películas, series, libros y juegos quedan clasificadas como tales.',
   parameters: {
     type: 'object',
     properties: {
       name: { type: 'string', description: 'Nombre de la lista, ej. "Juegos de Mario".' },
+      kind: {
+        type: 'string',
+        enum: ['musica', 'peliculas', 'series', 'libros', 'juegos', 'compras', 'general'],
+        description: 'De qué es la lista. Si no lo pasas se deduce del nombre ("Películas por ver" -> peliculas).',
+      },
       target_user: {
         type: 'string',
         description: 'Solo administrador: nombre o número de otra persona con acceso, para crearle la lista a ella en vez de a ti.',
@@ -32,7 +39,9 @@ export const createListTool: Tool = {
     const existing = checklistsRepo.findByName(userId, name).find((l) => l.name.toLowerCase() === name.toLowerCase());
     if (existing) return `Ya tienes una lista llamada "${existing.name}" (#${existing.id}) - usa add_list_item para agregarle cosas.`;
 
-    const id = checklistsRepo.create(userId, name);
-    return `Listo, creé la lista "${name}" (#${id}) 📋 - decime qué agregar y lo hago con add_list_item.`;
+    const kind = normalizeListKind(args.kind) ?? inferListKind(name);
+    const id = checklistsRepo.create(userId, name, kind);
+    const info = LIST_KIND_INFO[kind];
+    return `Listo, creé la lista "${name}" (#${id}) ${info.emoji}${kind === 'general' ? '' : ` como lista de ${info.label.toLowerCase()}`} - dime qué agregar y lo hago con add_list_item.`;
   },
 };

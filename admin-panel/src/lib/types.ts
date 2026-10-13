@@ -280,9 +280,13 @@ export interface Recipe {
   created_at: string;
 }
 
+export type ListKind = 'musica' | 'peliculas' | 'series' | 'libros' | 'juegos' | 'compras' | 'general';
+
 export interface Checklist {
   id: number;
   name: string;
+  /** What it's a list of. */
+  kind: ListKind;
   items: { id: number; title: string; checked: number }[];
 }
 

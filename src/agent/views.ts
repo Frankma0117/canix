@@ -1,7 +1,8 @@
 import { withIcon } from '../util/icons.js';
 import { todayLocal, addDays, weekdayName } from '../util/datetime.js';
 import { jidToPhone } from '../util/jid.js';
-import { keycap, progressBar, timeChip } from '../util/wa-format.js';
+import { footnote, keycap, progressBar, timeChip } from '../util/wa-format.js';
+import { LIST_KINDS, LIST_KIND_INFO, listKindOf, type ListKind } from '../util/list-kinds.js';
 import { describeSchedule, scheduleOf } from './routine-schedule.js';
 import type { Category, Checklist, ChecklistItem, Contact, Exercise, Link, MealPlan, Note, Reminder, Todo } from '../types/index.js';
 
@@ -60,12 +61,32 @@ function host(url: string): string {
 
 // ---------------------------------------------------------------------------------------------
 
+// Checked in order: music first, so music.youtube.com is music and not just another video site.
+const HOST_ICONS: [RegExp, string][] = [
+  [/(^|\.)(spotify\.com|music\.apple\.com|deezer\.com|soundcloud\.com|music\.youtube\.com|tidal\.com)$/, '🎵'],
+  [/(^|\.)(youtube\.com|youtu\.be|vimeo\.com|twitch\.tv)$/, '▶️'],
+  [/(^|\.)(netflix\.com|primevideo\.com|hbomax\.com|max\.com|disneyplus\.com|imdb\.com|letterboxd\.com|justwatch\.com|crunchyroll\.com)$/, '🎬'],
+  [/(^|\.)(goodreads\.com|books\.google\.com|wattpad\.com|audible\.com|buscalibre\.com\.co)$/, '📚'],
+  [/(^|\.)(steampowered\.com|nintendo\.com|playstation\.com|xbox\.com|epicgames\.com|itch\.io)$/, '🎮'],
+  [/(^|\.)(instagram\.com|tiktok\.com|facebook\.com|x\.com|twitter\.com|threads\.net|pinterest\.com)$/, '📱'],
+  [/(^|\.)(maps\.google\.com|maps\.app\.goo\.gl|waze\.com)$/, '📍'],
+  [/(^|\.)(docs\.google\.com|drive\.google\.com|notion\.so|dropbox\.com)$/, '📄'],
+  [/(^|\.)(github\.com|gitlab\.com|stackoverflow\.com)$/, '💻'],
+  [/(^|\.)(mercadolibre\.com\.co|amazon\.com|falabella\.com\.co|exito\.com)$/, '🛒'],
+];
+
+/** 🎵 for a music site, ▶️ video, 🎬 movies/series, 📚 books, 🎮 games... 🔗 for anything else. */
+export function linkIcon(url: string): string {
+  const h = host(url);
+  return HOST_ICONS.find(([re]) => re.test(h))?.[1] ?? '🔗';
+}
+
 export function linksView(links: Link[], categories: Category[], opts: { filter?: string } = {}): string {
   const { shown, more } = capped(links, 'búscalos por categoría o por texto');
   const nameOf = (id: number | null) => categories.find((c) => c.id === id)?.name ?? 'Sin categoría';
   const line = (l: Link) => {
     const title = l.title || l.description || host(l.url);
-    return `🔗 *${title.replace(/\*/g, '')}* ${idChip(l.id)}\n${l.url}`;
+    return `${linkIcon(l.url)} *${title.replace(/\*/g, '')}* ${idChip(l.id)}\n${l.url}`;
   };
   return [
     `🔗 *Tus links*${opts.filter ? ` · ${opts.filter}` : ''} · ${links.length}`,
@@ -77,7 +98,7 @@ export function linksView(links: Link[], categories: Category[], opts: { filter?
 /** One link on its own (pick_link): the title, where it's from, and the address on its own line. */
 export function linkCard(link: Link, categoryName: string): string {
   const title = link.title || link.description || host(link.url);
-  return `🔗 *${title.replace(/\*/g, '')}* ${idChip(link.id)}\n📁 ${categoryName}\n${link.url}`;
+  return `${linkIcon(link.url)} *${title.replace(/\*/g, '')}* ${idChip(link.id)}\n📁 ${categoryName}\n${link.url}`;
 }
 
 export function contactsView(contacts: Contact[]): string {
@@ -109,16 +130,25 @@ export function listsView(lists: { list: Checklist; items: ChecklistItem[] }[]):
   const line = ({ list, items }: { list: Checklist; items: ChecklistItem[] }) => {
     const checked = items.filter((i) => i.checked).length;
     const state = items.length === 0 ? 'vacía' : checked === items.length ? 'completa ✓' : `${checked} de ${items.length}`;
-    return `📋 *${list.name.replace(/\*/g, '')}* · ${state} ${idChip(list.id)}`;
+    return `${LIST_KIND_INFO[listKindOf(list)].emoji} *${list.name.replace(/\*/g, '')}* · ${state} ${idChip(list.id)}`;
   };
-  return [`📋 *Tus listas* · ${lists.length}`, '', ...lists.map(line)].join('\n');
+  // Music, movies, series, books and games first, each under its own heading.
+  const sorted = [...lists].sort((a, b) => LIST_KINDS.indexOf(listKindOf(a.list)) - LIST_KINDS.indexOf(listKindOf(b.list)));
+  return [
+    `📋 *Tus listas* · ${lists.length}`,
+    ...grouped(sorted, (l) => listKindOf(l.list), (kind, n) => `${LIST_KIND_INFO[kind as ListKind].emoji} *${LIST_KIND_INFO[kind as ListKind].label}* · ${n}`, line),
+    '',
+    footnote('Pídeme una "para copiar" y te la paso en texto limpio'),
+  ].join('\n');
 }
 
 export function listView(list: Checklist, items: ChecklistItem[]): string {
+  const kind = listKindOf(list);
   const checked = items.filter((i) => i.checked).length;
   const pending = items.filter((i) => !i.checked);
   const done = items.filter((i) => i.checked);
-  const lines = [`📋 *${list.name.replace(/\*/g, '')}* · ${checked} de ${items.length}`, progressBar(checked, items.length)];
+  const lines = [`${LIST_KIND_INFO[kind].emoji} *${list.name.replace(/\*/g, '')}* · ${checked} de ${items.length}`, progressBar(checked, items.length)];
+  if (kind !== 'general') lines.push(footnote(`Lista de ${LIST_KIND_INFO[kind].label.toLowerCase()}`));
   if (pending.length) lines.push('', ...pending.map((i) => `⬜ ${i.title} ${idChip(i.id)}`));
   if (done.length) lines.push('', ...done.map((i) => `☑️ ~${i.title.replace(/~/g, '')}~ ${idChip(i.id)}`));
   return lines.join('\n');

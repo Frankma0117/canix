@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Plus, Trash2, Check, X, ChevronDown, ListChecks } from 'lucide-react';
+import { Plus, Trash2, Check, X, ChevronDown, Copy } from 'lucide-react';
 import { useApi, errMsg } from '../lib/api.ts';
-import type { Checklist } from '../lib/types.ts';
-import { Page, Notice } from '../components/ui/Page.tsx';
+import type { Checklist, ListKind } from '../lib/types.ts';
+import { Page, Notice, Tabs } from '../components/ui/Page.tsx';
+import { Select } from '../components/ui/Input.tsx';
+import { useToast } from '../components/ui/Toast.tsx';
 import { Card } from '../components/ui/Card.tsx';
 import { Badge } from '../components/ui/Badge.tsx';
 import { Button, IconButton } from '../components/ui/Button.tsx';
@@ -11,6 +13,29 @@ import { EmptyState } from '../components/ui/EmptyState.tsx';
 import { Skeleton } from '../components/ui/Skeleton.tsx';
 
 type Item = Checklist['items'][number];
+
+/** The kinds a list can be, in the order they're shown. Music, movies, series, books and games are
+ *  their own kinds so they can be found together and copied out as clean text. */
+const KINDS: { id: ListKind; label: string; emoji: string }[] = [
+  { id: 'musica', label: 'Música', emoji: '🎵' },
+  { id: 'peliculas', label: 'Películas', emoji: '🎬' },
+  { id: 'series', label: 'Series', emoji: '📺' },
+  { id: 'libros', label: 'Libros', emoji: '📚' },
+  { id: 'juegos', label: 'Juegos', emoji: '🎮' },
+  { id: 'compras', label: 'Compras', emoji: '🛒' },
+  { id: 'general', label: 'Otras', emoji: '📋' },
+];
+const kindInfo = (kind: ListKind) => KINDS.find((k) => k.id === kind) ?? KINDS[KINDS.length - 1];
+
+/** The list as clean text to paste anywhere: title, then one item per line. */
+function asText(list: Checklist, items: Item[]): string {
+  const pending = items.filter((i) => !i.checked).map((i) => `- ${i.title}`);
+  const done = items.filter((i) => i.checked).map((i) => `- ${i.title}`);
+  const lines = [`${kindInfo(list.kind).emoji} ${list.name}`];
+  if (pending.length) lines.push('', ...(done.length ? ['Pendientes:'] : []), ...pending);
+  if (done.length) lines.push('', 'Ya marcados:', ...done);
+  return lines.join('\n');
+}
 
 /** One row of a list: a big tap target that checks/unchecks it, with remove on the side. */
 function ItemRow({ item, onToggle, onRemove }: { item: Item; onToggle: () => void; onRemove: () => void }) {
@@ -47,6 +72,8 @@ function ItemRow({ item, onToggle, onRemove }: { item: Item; onToggle: () => voi
 
 function ListCard({ list, onChanged, onError }: { list: Checklist; onChanged: () => Promise<void>; onError: (m: string) => void }) {
   const api = useApi();
+  const toast = useToast();
+  const kind = kindInfo(list.kind);
   const [items, setItems] = useState<Item[]>(list.items);
   const [draft, setDraft] = useState('');
   const [showDone, setShowDone] = useState(false);
@@ -94,6 +121,24 @@ function ListCard({ list, onChanged, onError }: { list: Checklist; onChanged: ()
     }
   }
 
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(asText(list, items));
+      toast.success(`"${list.name}" copiada: pégala donde quieras.`);
+    } catch {
+      onError('No se pudo copiar. Tu navegador no dio permiso para usar el portapapeles.');
+    }
+  }
+
+  async function changeKind(next: ListKind) {
+    try {
+      await api.put(`/api/lists/${list.id}`, { kind: next });
+      await onChanged();
+    } catch (e) {
+      onError(errMsg(e));
+    }
+  }
+
   async function removeList() {
     if (!confirm(`¿Borrar la lista "${list.name}" con todo lo que tiene?`)) return;
     try {
@@ -107,18 +152,32 @@ function ListCard({ list, onChanged, onError }: { list: Checklist; onChanged: ()
   return (
     <Card className="flex flex-col p-5">
       <div className="flex items-start gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-secondary text-primary-dark dark:bg-primary/15 dark:text-white" aria-hidden>
-          <ListChecks size={20} />
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-secondary text-xl dark:bg-primary/15" aria-hidden>
+          {kind.emoji}
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="font-display text-lg font-extrabold leading-tight text-ink dark:text-white">{list.name}</h3>
           <p className="mt-0.5 text-sm text-gray-dark">{items.length === 0 ? 'Vacía, agrégale algo abajo' : `${done.length} de ${items.length} marcados`}</p>
         </div>
         {complete && <Badge tone="success">Completa</Badge>}
+        <IconButton label={`Copiar la lista ${list.name} como texto`} onClick={copy} className="shrink-0">
+          <Copy size={16} />
+        </IconButton>
         <IconButton label={`Borrar la lista ${list.name}`} onClick={removeList} className="shrink-0 hover:!bg-error/10 hover:!text-error">
           <Trash2 size={16} />
         </IconButton>
       </div>
+
+      <label className="mt-3 flex items-center gap-2 text-xs font-semibold text-gray-dark">
+        Tipo de lista
+        <Select value={list.kind} onChange={(e) => changeKind(e.target.value as ListKind)} className="!w-auto !py-1.5 !text-xs" aria-label={`Tipo de la lista ${list.name}`}>
+          {KINDS.map((k) => (
+            <option key={k.id} value={k.id}>
+              {k.emoji} {k.label}
+            </option>
+          ))}
+        </Select>
+      </label>
 
       {items.length > 0 && (
         <div
@@ -175,6 +234,8 @@ export function ListsPage() {
   const api = useApi();
   const [lists, setLists] = useState<Checklist[] | null>(null);
   const [name, setName] = useState('');
+  const [newKind, setNewKind] = useState<ListKind | 'auto'>('auto');
+  const [filter, setFilter] = useState<ListKind | 'all'>('all');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -196,8 +257,9 @@ export function ListsPage() {
     if (!name.trim()) return;
     setCreating(true);
     try {
-      await api.post('/api/lists', { name: name.trim() });
+      await api.post('/api/lists', { name: name.trim(), ...(newKind === 'auto' ? {} : { kind: newKind }) });
       setName('');
+      setNewKind('auto');
       await load();
     } catch (err) {
       setError(errMsg(err));
@@ -211,7 +273,7 @@ export function ListsPage() {
       title="Listas"
       eyebrow="Mi día"
       sticker="compras"
-      description='Listas para ir marcando de a poco: compras, películas, libros, juegos… También por WhatsApp: "agrega leche a la lista de mercado".'
+      description='Listas para ir marcando de a poco. Las de música, películas, series, libros y juegos tienen su propio tipo, y cualquiera se copia como texto para llevarla a otro lado. También por WhatsApp: "agrega Dune a mi lista de películas".'
     >
       {error && <Notice tone="error">{error}</Notice>}
 
@@ -220,6 +282,14 @@ export function ListsPage() {
           <div className="min-w-[12rem] flex-1">
             <Input placeholder="Nombre de una lista nueva (ej. Mercado)" aria-label="Nombre de la lista nueva" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
+          <Select value={newKind} onChange={(e) => setNewKind(e.target.value as ListKind | 'auto')} className="!w-auto" aria-label="Tipo de la lista nueva">
+            <option value="auto">Tipo: según el nombre</option>
+            {KINDS.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.emoji} {k.label}
+              </option>
+            ))}
+          </Select>
           <Button type="submit" disabled={!name.trim()} loading={creating}>
             <Plus size={16} /> Crear lista
           </Button>
@@ -235,10 +305,23 @@ export function ListsPage() {
 
       {lists?.length === 0 && <EmptyState sticker="compras" title="Sin listas todavía" description="Crea la primera arriba, o pídesela a Canix por WhatsApp." />}
 
+      {lists && lists.length > 0 && (
+        <Tabs
+          tabs={[
+            { id: 'all' as ListKind | 'all', label: 'Todas', count: lists.length },
+            ...KINDS.filter((k) => lists.some((l) => l.kind === k.id)).map((k) => ({ id: k.id as ListKind | 'all', label: `${k.emoji} ${k.label}`, count: lists.filter((l) => l.kind === k.id).length })),
+          ]}
+          active={filter}
+          onChange={setFilter}
+        />
+      )}
+
       <div className="grid items-start gap-4 lg:grid-cols-2">
-        {lists?.map((l) => (
-          <ListCard key={l.id} list={l} onChanged={load} onError={setError} />
-        ))}
+        {lists
+          ?.filter((l) => filter === 'all' || l.kind === filter)
+          .map((l) => (
+            <ListCard key={l.id} list={l} onChanged={load} onError={setError} />
+          ))}
       </div>
     </Page>
   );

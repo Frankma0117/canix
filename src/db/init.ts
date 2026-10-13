@@ -4,6 +4,7 @@ import { db } from './pool.js';
 import { initAccessSchema } from './schema-access.js';
 import { initSchedulingSchema } from './schema-scheduling.js';
 import { initGrowthSchema } from '../growth/schema.js';
+import { inferListKind } from '../util/list-kinds.js';
 
 /**
  * Creates every table if it doesn't exist yet, and runs the small set of idempotent migrations
@@ -556,6 +557,14 @@ export function initSchema(): void {
     )
     WHERE scope = 'routine' AND recurrence_freq = 'weekly' AND weekdays IS NULL
   `);
+
+  // What a list is a list of - musica/peliculas/series/libros/juegos/compras/general (see
+  // util/list-kinds.ts). Lists created before this existed are classified once from their name;
+  // nothing else about them changes.
+  ensureColumn('checklists', 'kind', 'kind TEXT');
+  for (const row of db.prepare('SELECT id, name FROM checklists WHERE kind IS NULL').all() as { id: number; name: string }[]) {
+    db.prepare('UPDATE checklists SET kind = ? WHERE id = ?').run(inferListKind(row.name), row.id);
+  }
 
   // Administrator's "modo prueba" (see permissions/test-mode.ts): JSON { label, permissions, since }
   // while the admin is trying the bot as if they only had those permissions; NULL = off.

@@ -1,3 +1,4 @@
+import { listAsText } from '../../util/list-kinds.js';
 import { listView } from '../views.js';
 import type { Tool } from '../tool-registry.js';
 import { checklistItemsRepo } from '../../db/repositories/checklists.repo.js';
@@ -6,11 +7,16 @@ import { resolveChecklist } from './resolve-checklist.js';
 
 export const viewListTool: Tool = {
   name: 'view_list',
-  description: 'Muestra los ítems de una lista, marcando cuáles ya están marcados (✅) y cuáles no (⬜). Devuelve la lista ya diseñada para WhatsApp: envíala TAL CUAL.',
+  description: 'Muestra los ítems de una lista, marcando cuáles ya están marcados y cuáles no. Con plain=true la devuelve como texto limpio para copiar y pegar en otro lado. En ambos casos envía lo que devuelve TAL CUAL.',
   parameters: {
     type: 'object',
     properties: {
       list: { type: 'string', description: 'Nombre o id de la lista.' },
+      plain: {
+        type: 'boolean',
+        description:
+          'true cuando piden la lista para copiarla, compartirla o pasarla a otro lado: devuelve texto limpio (título y un ítem por línea, sin casillas ni números).',
+      },
       target_user: {
         type: 'string',
         description: 'Solo administrador: nombre o número de otra persona con acceso, para ver SU lista en vez de la tuya.',
@@ -31,6 +37,6 @@ export const viewListTool: Tool = {
     const items = checklistItemsRepo.list(list.id);
     if (items.length === 0) return `"${list.name}" todavía no tiene ítems - usa add_list_item para agregarle.`;
 
-    return listView(list, items);
+    return args.plain ? listAsText(list, items) : listView(list, items);
   },
 };

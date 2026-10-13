@@ -78,6 +78,7 @@ export const PERMISSIONS: PermissionDef[] = [
       'delete_todo',
       'edit_todo',
       'create_list',
+      'edit_list',
       'add_list_item',
       'list_lists',
       'view_list',
