@@ -16,4 +16,7 @@ export interface FashionRouterContext {
 export interface FashionRouterResult {
   consumed: boolean;
   reply?: string;
+  /** With consumed=false: the text the rest of the bot should answer instead of the one just sent
+   *  (an earlier message Fashion held while it asked whether it was about the outfit). */
+  forward?: string;
 }

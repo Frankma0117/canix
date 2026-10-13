@@ -623,6 +623,7 @@ export class BotManager {
           }
           return;
         }
+        if (result.forward) text = result.forward;
       }
       // Special modes (rutinas/tareas/notas/contactos/comidas/premios/resúmenes) - see agent/modes.ts.
       // Also zero-token, same raw-command pattern as everything above. Runs after Fashion Mode

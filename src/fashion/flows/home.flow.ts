@@ -2,6 +2,7 @@ import { fashionSessionsRepo } from '../../db/repositories/fashion-sessions.repo
 import type { FashionRouterContext, FashionRouterResult } from '../router-types.js';
 import { parseRequestLocally } from '../outfit/request.js';
 import type { FashionSessionData } from '../types.js';
+import { readFollowUp } from '../follow-up.js';
 
 export const HOME_MENU = `👔 *Fashion Mode*
 Escribe el *número*, o pídelo directo.
@@ -17,7 +18,7 @@ Escribe el *número*, o pídelo directo.
 > "armario camisas blancas" · "zapatos favoritos"
 > *actualizar ropa* revisa de nuevo todas tus prendas`;
 
-const CLOTHES_WORDS_RE = /\b(outfit|pinta|look|ropa|prenda|prendas|pongo|ponerme|vestir|vestirme|visto|combina|combinar|armario|closet|conjunto|elegante|formal|informal|casual)\b/;
+const CLOTHES_WORDS_RE = /\b(outfit|pinta|look|ropa|prenda|prendas|me pongo|ponerme|vestir|vestirme|combina|combinar|armario|closet|elegante|formal|informal|casual)\b/;
 
 /** True when a free-text message plausibly asks for (or adjusts) an outfit: it names an occasion,
  *  a garment, a color, the weather... or uses a clothes word. */
@@ -80,6 +81,12 @@ export async function handleHome(ctx: FashionRouterContext): Promise<FashionRout
         '- Prendas que sí o que no: "con mis tenis blancos", "sin chaqueta"\n\n' +
         '> Ej. "cena elegante con frío, con el blazer, nada de negro"',
     };
+  }
+  // "qué camisas blancas tengo" asks to SEE clothes, not for an outfit.
+  if (text !== '3' && readFollowUp(text) === 'wardrobe') {
+    const { enterWardrobeList, parseFilterText } = await import('./list-garments.flow.js');
+    const { wardrobeQuery } = await import('../follow-up.js');
+    return { consumed: true, reply: enterWardrobeList(ctx.userId, parseFilterText(wardrobeQuery(text))) };
   }
   const outfitMatch = text.match(/^(?:crear\s+)?outfit\s+(.+)$/);
   const requestText = outfitMatch ? outfitMatch[1] : text;

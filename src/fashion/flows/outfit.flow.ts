@@ -15,6 +15,7 @@ import type { FashionSessionData } from '../types.js';
 import type { FashionRouterContext, FashionRouterResult } from '../router-types.js';
 import { HOME_MENU } from './home.flow.js';
 import { sleep } from '../../util/human-delay.js';
+import { readFollowUp, wardrobeQuery } from '../follow-up.js';
 
 const USER_GENDER_TO_GARMENT_GENDER: Record<string, string> = { male: 'hombre', female: 'mujer' };
 
@@ -152,6 +153,18 @@ export async function handleOutfitResult(ctx: FashionRouterContext): Promise<Fas
     return { consumed: true, reply: HOME_MENU };
   }
 
+  // The answer to "¿es para cambiar el outfit o es otra cosa?" - asked about the message held in pendingFollowUp.
+  if (data.pendingFollowUp) {
+    const held = data.pendingFollowUp;
+    fashionSessionsRepo.setState(ctx.userId, 'FASHION_OUTFIT_RESULT', { outfit } satisfies FashionSessionData);
+    if (text === '1' || /^(cambiar|cambia|ajustar|ajusta|el outfit|s[ií])\b/i.test(text)) return refineOutfit(ctx, outfit, held);
+    if (text === '2' || /^(otra cosa|es otra cosa|no|salir|nada)\b/i.test(text)) {
+      fashionSessionsRepo.clear(ctx.userId);
+      return { consumed: false, forward: held };
+    }
+    // anything else is a new message of its own, read below like any other
+  }
+
   if (text === '3' || /^volver/i.test(text)) {
     fashionSessionsRepo.setState(ctx.userId, 'FASHION_HOME', {});
     return { consumed: true, reply: HOME_MENU };
@@ -198,22 +211,36 @@ export async function handleOutfitResult(ctx: FashionRouterContext): Promise<Fas
     return handleHome(ctx);
   }
 
-  // Not about clothes: Fashion Mode steps aside and the message is handled like any other.
-  const { isAboutClothes } = await import('./home.flow.js');
-  if (!isAboutClothes(text)) {
+  // Only what clearly reads as an adjustment is taken as one (see follow-up.ts). The rest goes
+  // where it belongs, and what can't be told apart is asked - never answered with one more outfit.
+  const kind = readFollowUp(text);
+  if (kind === 'other') {
     fashionSessionsRepo.clear(ctx.userId);
     return { consumed: false };
   }
+  if (kind === 'wardrobe') {
+    const { enterWardrobeList, parseFilterText } = await import('./list-garments.flow.js');
+    return { consumed: true, reply: enterWardrobeList(ctx.userId, parseFilterText(wardrobeQuery(text))) };
+  }
+  if (kind === 'new_outfit') return { consumed: true, reply: await enterOutfitRequest(ctx, text) };
+  if (kind === 'unsure') {
+    fashionSessionsRepo.setState(ctx.userId, 'FASHION_OUTFIT_RESULT', { outfit, pendingFollowUp: text } satisfies FashionSessionData);
+    return { consumed: true, reply: FOLLOW_UP_QUESTION };
+  }
+  return refineOutfit(ctx, outfit, text);
+}
 
-  // Anything else adjusts the request being worked on: "sin chaqueta", "con tenis blancos", "más
-  // formal", "mejor para clima frío" - merged onto it (see outfit/request.ts) and recommended again.
+const FOLLOW_UP_QUESTION =
+  '🤔 No sé si eso es para cambiar el outfit o es otra cosa.\n\n1️⃣  👕 Cambiar este outfit\n2️⃣  💬 Es otra cosa\n> Con *2* salgo de outfits y te respondo eso normal';
+
+/** Merges an adjustment ("sin chaqueta", "más formal") onto the outfit's request and recommends again. */
+async function refineOutfit(ctx: FashionRouterContext, outfit: NonNullable<FashionSessionData['outfit']>, text: string): Promise<FashionRouterResult> {
   const change = await parseOutfitIntent(ctx.userId, text);
   if (Object.values(change).every((v) => v === undefined || (Array.isArray(v) && v.length === 0))) {
     return { consumed: true, reply: `No entendí ese ajuste.\n\n${RESULT_OPTIONS}\n${REFINE_HINT}` };
   }
   const refined = withProfileDefaults(ctx.userId, refineContext(outfit.context as OutfitContext, change));
-  const { recommendOutfit: recommend } = await import('../outfit/recommendation.service.js');
-  const refinedResult = await recommend(ctx.userId, refined, { forceNew: true });
+  const refinedResult = await recommendOutfit(ctx.userId, refined, { forceNew: true });
   return { consumed: true, reply: await renderResult(ctx, refined, refinedResult) };
 }
 

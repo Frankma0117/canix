@@ -109,6 +109,9 @@ export interface FashionSessionData {
     missingRoles: string[];
     reason: string;
   };
+  /** A message that came after an outfit and could be an adjustment or something else entirely:
+   *  kept while the person is asked which (see flows/outfit.flow.ts). */
+  pendingFollowUp?: string;
   /** Home just asked "¿para qué lo quieres?" (option 3) - the next message is that answer, whatever it says. */
   awaitingOutfit?: boolean;
   /** Ids of saved outfits last rendered by "mis outfits" (same 1-based-index pattern as lastListedIds). */
