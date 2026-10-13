@@ -121,6 +121,19 @@ export function splitChoices(reply: string): { text: string; choices: Choices | 
   return { text, choices: { options: labels.map((label) => ({ label, reply: label })), binary: false } };
 }
 
+/**
+ * Options only make sense under a question. The model sometimes tacks an options marker onto a
+ * reply that asks nothing - seen on a list of reminders, which went out ending in "1 Ese horario /
+ * 2 Otro horario" left over from an earlier turn - so they're kept only when what's actually
+ * being sent closes with a question.
+ */
+export function choicesFor(text: string, choices: Choices | null): Choices | null {
+  if (!choices) return null;
+  const lines = text.split(String.fromCharCode(10)).map((l) => l.trim()).filter((l) => l && !l.startsWith('>'));
+  const closing = lines.slice(-2).join(' ');
+  return closing.includes('?') ? choices : null;
+}
+
 /** Removes the options line - for what gets stored as the conversation and read aloud. */
 export function stripChoices(reply: string): string {
   return splitChoices(reply).text;

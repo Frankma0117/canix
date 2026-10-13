@@ -6,7 +6,7 @@ import { applyAnswer, answerFromVote, answerFromText } from '../agent/reminder-p
 import { sendAutoSticker, ROUTINE_DONE_KEYWORDS } from '../util/stickers.js';
 import { toWhatsApp, reactionFooter } from '../util/wa-format.js';
 import { choicePromptsRepo } from '../db/repositories/choice-prompts.repo.js';
-import { splitChoices, withChoices, choicesHint, registerChoices, reactionAnswer, replyForReaction, replyForNumber, YES_NO } from '../agent/choices.js';
+import { splitChoices, choicesFor, withChoices, choicesHint, registerChoices, reactionAnswer, replyForReaction, replyForNumber, YES_NO } from '../agent/choices.js';
 import type { PromptAnswer, PromptSource, ReminderPrompt } from '../types/index.js';
 import { jidNormalizedUser, downloadMediaMessage, type WAMessage } from 'baileys';
 import { WaManager } from './wa-manager.js';
@@ -706,9 +706,10 @@ export class BotManager {
       // A list the model re-typed its own way goes out in its designed form (see agent/views.ts).
       const reply = preferDesigned(split.text, turnTools);
       // The menu shown through the AI (show_menu) answers to its numbers like /menu does.
-      const menuShown = !asked && turnTools.some((t) => t.name === 'show_menu');
+      const menuShown = !choicesFor(reply, asked) && turnTools.some((t) => t.name === 'show_menu');
       const menuAccess = { fashionEnabled: env.fashion.enabled, callsEnabled: isTwilioConfigured(), isAdmin: botUser.role === 'admin', permissions: effectivePermissions(botUser) };
-      const choices = asked;
+      // ...and only under a reply that really ends in a question (see choicesFor).
+      const choices = choicesFor(reply, asked);
       const sendReplyText = async () => {
         const id = await this.wa.sendTextWithId(jid, withChoices(reply, choices));
         if (choices) registerChoices(user.id, id, choices);
