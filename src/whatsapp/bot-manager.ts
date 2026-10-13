@@ -634,9 +634,10 @@ export class BotManager {
       // agent/views.ts) - no AI turn. Kept in the history so "borra el #3" right after makes sense.
       const botTools = allowedToolsFor(botUser);
       const modeTools = toolsForMode(isModeKey(botUser.active_mode) ? botUser.active_mode : null);
-      const listTool = listToolAsked(text);
-      if (listTool && (botTools === null || botTools.includes(listTool)) && (modeTools === null || modeTools.includes(listTool))) {
-        const listText = await registry.get(listTool)!.execute({}, { ownerJid: user.jid, userId: user.id, isAdmin: botUser.role === 'admin', wa: this.wa });
+      const listAsk = listToolAsked(text);
+      const listTool = listAsk?.tool;
+      if (listAsk && listTool && (botTools === null || botTools.includes(listTool)) && (modeTools === null || modeTools.includes(listTool))) {
+        const listText = await registry.get(listTool)!.execute(listAsk.args, { ownerJid: user.jid, userId: user.id, isAdmin: botUser.role === 'admin', wa: this.wa });
         messagesRepo.add(user.id, 'user', text);
         messagesRepo.add(user.id, 'assistant', listText);
         remindersRepo.confirmForUser(user.id);

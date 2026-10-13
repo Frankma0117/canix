@@ -52,6 +52,9 @@ export interface Reminder {
   window_end: string | null;
   awaiting_confirmation: number;
   missed_confirmations: number;
+  paused_until?: string | null;
+  /** Emoji that fits what the reminder is about (picked by the server from its text). */
+  icon?: string;
   created_at: string;
 }
 
@@ -313,6 +316,8 @@ export type PromptSource = 'poll' | 'reply' | 'chat' | 'web';
 export interface Routine {
   id: number;
   title: string;
+  /** Emoji that fits what the routine is about (picked by the server from its title). */
+  icon?: string;
   category_id: number | null;
   reminder_time: string;
   duration_minutes: number | null;

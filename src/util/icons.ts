@@ -76,6 +76,8 @@ export function iconFor(title: string, fallback = '🔹'): string {
 }
 
 /** "🚿 Ducha diaria" - the title with its emoji in front; a title that already has one stays as is. */
-export function withIcon(title: string, fallback = '🔹'): string {
+export function withIcon(rawTitle: string, fallback = '🔹'): string {
+  // Shown with a capital first letter however it was typed ("tomar agua" -> "Tomar agua").
+  const title = rawTitle.trim().replace(/^\p{Ll}/u, (c) => c.toUpperCase());
   return HAS_EMOJI_RE.test(title) ? title : `${iconFor(title, fallback)} ${title}`;
 }

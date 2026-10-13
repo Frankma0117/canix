@@ -3,7 +3,7 @@ import { Plus, Trash2, Flame, Pencil, Check, X, History, Clock, Timer, CalendarD
 import { useApi, errMsg } from '../lib/api.ts';
 import type { Category, PromptSource, PromptWithResponses, Routine, RoutineFreq } from '../lib/types.ts';
 import { WEEKDAY_NAMES, WEEKDAY_SHORT, formatDayLong, formatWhen, todayISO, weekday } from '../lib/dates.ts';
-import { Page, Notice, SectionTitle } from '../components/ui/Page.tsx';
+import { Page, Notice, SectionTitle, Tabs } from '../components/ui/Page.tsx';
 import { Card } from '../components/ui/Card.tsx';
 import { Badge } from '../components/ui/Badge.tsx';
 import { Button, IconButton } from '../components/ui/Button.tsx';
@@ -55,7 +55,7 @@ const isSpaced = (r: Routine) => (r.freq === 'weekly' && r.interval > 1) || (r.f
 const fallsOn = (r: Routine, wd: number) => r.freq === 'daily' || (r.freq === 'weekly' && r.weekdays.includes(wd));
 const byTime = (a: Routine, b: Routine) => a.reminder_time.localeCompare(b.reminder_time) || a.title.localeCompare(b.title);
 
-type Filter = 'all' | 'today' | 'daily' | 'spaced' | 'monthly' | `wd-${number}`;
+type View = 'today' | 'day' | 'freq' | 'all';
 
 // ---------------------------------------------------------------------------------------------
 // History of answers for one routine
@@ -163,7 +163,10 @@ function RoutineCard({
         </div>
 
         <div className="min-w-0 flex-1 basis-56">
-          <h3 className="font-display text-base font-bold text-ink dark:text-white">{routine.title}</h3>
+          <h3 className="font-display text-base font-bold text-ink dark:text-white">
+            {routine.icon && !/\p{Extended_Pictographic}/u.test(routine.title) && <span aria-hidden>{routine.icon} </span>}
+            {routine.title}
+          </h3>
           <p className="sr-only">Aviso a las {clockText(routine.reminder_time)}</p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             <Badge tone="brand">
@@ -537,7 +540,8 @@ export function RoutinesPage() {
   const api = useApi();
   const [categories, setCategories] = useState<Category[]>([]);
   const [routines, setRoutines] = useState<Routine[] | null>(null);
-  const [filter, setFilter] = useState<Filter>('all');
+  const [view, setView] = useState<View>('today');
+  const [day, setDay] = useState<number>(() => weekday(todayISO()));
   const [form, setForm] = useState<{ draft: Draft; original: Routine | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -559,51 +563,31 @@ export function RoutinesPage() {
   const todayWd = weekday(todayISO());
   const all = useMemo(() => [...(routines ?? [])].sort(byTime), [routines]);
 
-  /** Sections shown for the current filter: [title, hint, routines]. */
+  /** What the current view shows: one or more titled groups of routines. */
   const sections = useMemo<{ key: string; title: string; hint?: string; items: Routine[] }[]>(() => {
-    const daily = all.filter(isEveryDay);
-    const spaced = all.filter(isSpaced);
-    const monthly = all.filter((r) => r.freq === 'monthly');
-    const perDay = WEEK_ORDER.map((wd) => ({
-      key: `wd-${wd}`,
-      title: cap(WEEKDAY_NAMES[wd]) + (wd === todayWd ? ' · hoy' : ''),
-      hint: 'Rutinas que solo van este día de la semana',
-      items: all.filter((r) => isWeeklyPlain(r) && r.weekdays.includes(wd)),
-    }));
-
-    if (filter === 'today') {
+    if (view === 'today') {
       return [{ key: 'today', title: `Hoy, ${formatDayLong(todayISO())}`, hint: 'Lo que toca hoy, en orden de hora', items: all.filter((r) => r.occurs_today) }];
     }
-    if (filter === 'daily') return [{ key: 'daily', title: 'Todos los días', items: daily }];
-    if (filter === 'spaced') return [{ key: 'spaced', title: 'Cada 15 días y más espaciadas', items: spaced }];
-    if (filter === 'monthly') return [{ key: 'monthly', title: 'Mensuales', items: monthly }];
-    if (filter.startsWith('wd-')) {
-      const wd = Number(filter.slice(3));
+    if (view === 'day') {
       return [
         {
-          key: filter,
-          title: `Los ${WEEKDAY_NAMES[wd]}`,
+          key: `day-${day}`,
+          title: `Los ${WEEKDAY_NAMES[day]}${day === todayWd ? ' · hoy' : ''}`,
           hint: 'Todo lo que puede tocar ese día: las de todos los días, las de ese día y las quincenales que caen en él',
-          items: all.filter((r) => fallsOn(r, wd)),
+          items: all.filter((r) => fallsOn(r, day)),
         },
       ];
     }
-    return [
-      { key: 'daily', title: 'Todos los días', items: daily },
-      ...perDay,
-      { key: 'spaced', title: 'Cada 15 días y más espaciadas', hint: 'Quincenales, cada varias semanas o cada ciertos días', items: spaced },
-      { key: 'monthly', title: 'Mensuales', items: monthly },
-    ].filter((s) => s.items.length > 0);
-  }, [all, filter, todayWd]);
-
-  const chips: { id: Filter; label: string; count: number }[] = [
-    { id: 'all', label: 'Todas', count: all.length },
-    { id: 'today', label: 'Hoy', count: all.filter((r) => r.occurs_today).length },
-    { id: 'daily', label: 'Todos los días', count: all.filter(isEveryDay).length },
-    ...WEEK_ORDER.map((wd) => ({ id: `wd-${wd}` as Filter, label: cap(WEEKDAY_SHORT[wd]), count: all.filter((r) => fallsOn(r, wd)).length })),
-    { id: 'spaced', label: 'Cada 15 días', count: all.filter(isSpaced).length },
-    { id: 'monthly', label: 'Mensuales', count: all.filter((r) => r.freq === 'monthly').length },
-  ];
+    if (view === 'freq') {
+      return [
+        { key: 'daily', title: 'Todos los días', items: all.filter(isEveryDay) },
+        { key: 'weekly', title: 'Ciertos días de la semana', hint: 'Ej. solo lunes, miércoles y viernes', items: all.filter(isWeeklyPlain) },
+        { key: 'spaced', title: 'Cada 15 días y más espaciadas', hint: 'Quincenales, cada varias semanas o cada ciertos días', items: all.filter(isSpaced) },
+        { key: 'monthly', title: 'Mensuales', items: all.filter((r) => r.freq === 'monthly') },
+      ].filter((s) => s.items.length > 0);
+    }
+    return [{ key: 'all', title: 'Todas tus rutinas', hint: 'En orden de hora', items: all }];
+  }, [all, view, day, todayWd]);
 
   const todayItems = all.filter((r) => r.occurs_today);
   const todayDone = todayItems.filter((r) => r.today_answer === 'yes').length;
@@ -614,7 +598,7 @@ export function RoutinesPage() {
       title="Rutinas y hábitos"
       eyebrow="Hábitos"
       sticker="rutina"
-      description="Tus rutinas organizadas por día y por frecuencia. Canix te avisa a la hora y tú la marcas con un toque: aquí, o en la encuesta de Sí / No que llega por WhatsApp."
+      description="Tus hábitos que se repiten, con su racha. Canix te avisa a la hora y tú la marcas con un toque: aquí, o en WhatsApp (encuesta de Sí / No o reaccionando 👍 al aviso)."
       actions={
         <Button onClick={() => setForm({ draft: emptyDraft(), original: null })}>
           <Plus size={16} /> Nueva rutina
@@ -646,35 +630,67 @@ export function RoutinesPage() {
       {routines && routines.length > 0 && (
         <>
           {todayItems.length > 0 && (
-            <p className="mb-4 text-sm font-semibold text-ink dark:text-white" aria-live="polite">
-              Hoy llevas {todayDone} de {todayItems.length} {todayItems.length === 1 ? 'rutina' : 'rutinas'}.
-            </p>
+            <Card className="mb-5 p-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="font-display text-base font-extrabold text-ink dark:text-white">Hoy</p>
+                <p className="text-sm font-semibold text-gray-dark" aria-live="polite">
+                  {todayDone} de {todayItems.length} {todayItems.length === 1 ? 'rutina hecha' : 'rutinas hechas'}
+                </p>
+              </div>
+              <div
+                className="mt-2.5 h-2.5 overflow-hidden rounded-full bg-gray-medium/60 dark:bg-white/10"
+                role="progressbar"
+                aria-valuenow={todayDone}
+                aria-valuemin={0}
+                aria-valuemax={todayItems.length}
+                aria-label="Rutinas hechas hoy"
+              >
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${todayDone === todayItems.length ? 'bg-success' : 'brand-gradient'}`}
+                  style={{ width: `${Math.round((todayDone / todayItems.length) * 100)}%` }}
+                />
+              </div>
+            </Card>
           )}
 
-          <div role="group" aria-label="Filtrar rutinas" className="mb-6 flex flex-wrap gap-2">
-            {chips.map((c) => {
-              const on = filter === c.id;
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  aria-pressed={on}
-                  onClick={() => setFilter(c.id)}
-                  className={`inline-flex h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 ${
-                    on
-                      ? 'border-primary bg-primary text-white'
-                      : 'border-gray-medium bg-white text-ink hover:border-primary/40 dark:border-white/10 dark:bg-white/5 dark:text-white'
-                  }`}
-                >
-                  {c.label}
-                  <span className={`rounded-full px-1.5 text-xs ${on ? 'bg-white/25' : 'bg-gray-medium/70 text-gray-dark dark:bg-white/10 dark:text-white/70'}`}>{c.count}</span>
-                </button>
-              );
-            })}
-          </div>
+          <Tabs
+            tabs={[
+              { id: 'today' as View, label: 'Hoy', count: todayItems.length },
+              { id: 'day' as View, label: 'Por día' },
+              { id: 'freq' as View, label: 'Por frecuencia' },
+              { id: 'all' as View, label: 'Todas', count: all.length },
+            ]}
+            active={view}
+            onChange={setView}
+          />
 
-          {sections.map((s) => (
-            <section key={s.key} aria-label={s.title}>
+          {view === 'day' && (
+            <div role="group" aria-label="Día de la semana" className="mb-5 grid grid-cols-7 gap-1 rounded-2xl bg-gray-medium/50 p-1 dark:bg-white/5">
+              {WEEK_ORDER.map((wd) => {
+                const on = day === wd;
+                const count = all.filter((r) => fallsOn(r, wd)).length;
+                return (
+                  <button
+                    key={wd}
+                    type="button"
+                    aria-pressed={on}
+                    aria-label={`${WEEKDAY_NAMES[wd]}, ${count} ${count === 1 ? 'rutina' : 'rutinas'}${wd === todayWd ? ', hoy' : ''}`}
+                    onClick={() => setDay(wd)}
+                    className={`flex flex-col items-center rounded-xl px-1 py-2 transition-all focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 ${
+                      on ? 'bg-white text-ink shadow-sm dark:bg-white/15 dark:text-white' : 'text-gray-dark hover:text-ink dark:hover:text-white'
+                    }`}
+                  >
+                    <span className="text-sm font-bold capitalize">{WEEKDAY_SHORT[wd]}</span>
+                    <span className="text-xs font-semibold">{count}</span>
+                    <span className={`mt-0.5 h-1 w-1 rounded-full ${wd === todayWd ? 'bg-primary' : 'bg-transparent'}`} aria-hidden />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {sections.map((s, index) => (
+            <section key={s.key} aria-label={s.title} className={index > 0 ? 'mt-8' : undefined}>
               <SectionTitle hint={s.hint}>
                 {s.title} <span className="text-sm font-semibold text-gray-dark">({s.items.length})</span>
               </SectionTitle>

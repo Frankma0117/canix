@@ -20,6 +20,8 @@ import { describeSchedule, occursOn, routineStreak, scheduleOf } from '../agent/
 import { logRoutineAnswer } from '../agent/reminder-prompts.js';
 import { reminderPromptsRepo } from '../db/repositories/reminder-prompts.repo.js';
 import { VOICES, currentVoice, findVoice, voiceSample } from '../audio/voices.js';
+import { iconFor } from '../util/icons.js';
+import { stripKnownPrefix } from '../util/motivational.js';
 import { isFishConfigured } from '../audio/fish-audio.js';
 import { todayLocal, nowLocal } from '../util/datetime.js';
 import { phoneToJid, jidToPhone } from '../util/jid.js';
@@ -43,6 +45,8 @@ import type {
   RewardPunishmentType,
   CallReminderStatus,
 } from '../types/index.js';
+
+const USER_REMINDER_KINDS = new Set(['reminder', 'important_date', 'flexible', 'interval']);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(here, '..', '..', 'public');
@@ -267,7 +271,14 @@ export function createServer(bot: BotManager): Express {
       const status = req.query.status as ReminderStatus | undefined;
       const categoryId = req.query.categoryId ? Number(req.query.categoryId) : undefined;
       const uid = userId(req);
-      res.json(categoryId ? remindersRepo.listByCategory(uid, categoryId, status) : remindersRepo.listAll(uid, status));
+      const rows = categoryId ? remindersRepo.listByCategory(uid, categoryId, status) : remindersRepo.listAll(uid, status);
+      // Only what the person thinks of as a reminder: a routine's own notice/check-in rows belong
+      // to Rutinas, and the silent housekeeping ones (daily reset, dedup, weekly report) to nobody.
+      res.json(
+        rows
+          .filter((r) => USER_REMINDER_KINDS.has(r.kind))
+          .map((r) => ({ ...r, message: stripKnownPrefix(r.message), icon: iconFor(stripKnownPrefix(r.message), '🔔') })),
+      );
     }),
   );
   app.put(
@@ -571,6 +582,7 @@ export function createServer(bot: BotManager): Express {
           return {
             id: t.id,
             title: t.title,
+            icon: iconFor(t.title),
             category_id: t.category_id,
             reminder_time: schedule.time,
             duration_minutes: t.duration_minutes,

@@ -1,4 +1,4 @@
-import { todosView } from '../views.js';
+import { todosView, routinesView } from '../views.js';
 import type { Tool } from '../tool-registry.js';
 import { todosRepo } from '../../db/repositories/todos.repo.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
@@ -9,7 +9,7 @@ import type { TodoScope, TodoStatus } from '../../types/index.js';
 export const listTodosTool: Tool = {
   name: 'list_todos',
   description:
-    'Lista tareas pendientes (o hechas), filtrando por scope ("today", "later", "routine"), categoría y/o estado. Devuelve la lista ya diseñada para WhatsApp: envíala TAL CUAL.',
+    'Lista tareas pendientes (o hechas), filtrando por scope ("today", "later"), categoría y/o estado. Las RUTINAS no salen aquí salvo que pases scope "routine" (así se listan las rutinas con su id). Devuelve la lista ya diseñada para WhatsApp: envíala TAL CUAL.',
   parameters: {
     type: 'object',
     properties: {
@@ -42,7 +42,10 @@ export const listTodosTool: Tool = {
       categoryId,
     });
 
-    if (todos.length === 0) return 'No tienes tareas que coincidan.';
-    return todosView(todos, (id) => linksRepo.getById(userId, id)?.url, { done: args.status === 'done' });
+    // Routines aren't tasks: they only show when asked for by name (scope "routine").
+    const wanted = args.scope ? todos : todos.filter((t) => t.scope !== 'routine');
+    if (wanted.length === 0) return args.scope === 'routine' ? 'No tienes rutinas creadas.' : 'No tienes tareas que coincidan.';
+    if (args.scope === 'routine') return routinesView(wanted);
+    return todosView(wanted, (id) => linksRepo.getById(userId, id)?.url, { done: args.status === 'done' });
   },
 };

@@ -1,4 +1,5 @@
 import { withIcon } from '../util/icons.js';
+import { stripKnownPrefix } from '../util/motivational.js';
 import { todosRepo } from '../db/repositories/todos.repo.js';
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
@@ -154,6 +155,8 @@ export function agendaView(userId: number, date: string = todayLocal()): { text:
   const unmarked: Row[] = [];
   const upcoming: Row[] = [];
   const marked: Row[] = [];
+  // Reminders are their own thing (a one-off notice, nothing to mark as a habit) - listed apart.
+  const reminders: Row[] = [];
   let doneCount = 0;
   let routinesDue = 0;
 
@@ -176,12 +179,12 @@ export function agendaView(userId: number, date: string = todayLocal()): { text:
     for (const rem of remindersRepo.listAll(userId, 'pending')) {
       if (rem.kind !== 'reminder' && rem.kind !== 'important_date' && rem.kind !== 'flexible') continue;
       const time = reminderTimeOn(rem, date);
-      if (time) upcoming.push({ time, label: withIcon(rem.message, '🔔') });
+      if (time) reminders.push({ time, label: withIcon(stripKnownPrefix(rem.message), '🔔') });
     }
   }
 
   const byTime = (a: Row, b: Row) => a.time.localeCompare(b.time);
-  for (const list of [unmarked, upcoming, marked]) list.sort(byTime);
+  for (const list of [unmarked, upcoming, marked, reminders]) list.sort(byTime);
   const todos = isToday
     ? todosRepo.list(userId, { scope: 'today', status: 'pending' })
     : todosRepo.list(userId, { status: 'pending' }).filter((t) => t.scope !== 'routine' && t.due_date === date);
@@ -189,14 +192,21 @@ export function agendaView(userId: number, date: string = todayLocal()): { text:
   const lines = [isToday ? `📅 *Tu día* · ${dayLabel(date).replace(/^Hoy · /, '')}` : `📅 *${dayLabel(date)}*`];
   if (routinesDue > 0 && !(date > today)) lines.push(`${progressBar(doneCount, routinesDue)}  ${doneCount} de ${routinesDue} rutinas hechas`);
 
-  if (unmarked.length + upcoming.length + marked.length + todos.length === 0) {
+  if (unmarked.length + upcoming.length + marked.length + reminders.length + todos.length === 0) {
     lines.push('', isPast ? 'No hay nada registrado ese día.' : 'No tienes nada agendado 🎉');
     return { text: lines.join('\n'), unmarked: 0 };
   }
 
-  lines.push(...agendaBlock('🔴 *Sin marcar*', unmarked, { fromEnd: true }));
-  lines.push(...agendaBlock('🟢 *Marcadas*', marked, { fromEnd: true }));
-  lines.push(...agendaBlock(isToday ? '🔵 *Lo que viene*' : '🔵 *Programado*', upcoming));
+  if (routinesDue > 0) {
+    lines.push('', '🔁 *RUTINAS*');
+    const blocks = [
+      ...agendaBlock('🔴 *Sin marcar*', unmarked, { fromEnd: true }),
+      ...agendaBlock('🟢 *Marcadas*', marked, { fromEnd: true }),
+      ...agendaBlock(isToday ? '🔵 *Lo que viene*' : '🔵 *Programadas*', upcoming),
+    ];
+    lines.push(...blocks.slice(1)); // the section title already gives the gap
+  }
+  lines.push(...agendaBlock('⏰ *RECORDATORIOS*', reminders));
   if (todos.length > 0) {
     lines.push('', `📌 *Pendientes sin hora* · ${todos.length}`, ...todos.slice(0, AGENDA_MAX_ROWS).map((t) => `⬜ ${withIcon(t.title, '')}`.replace('⬜  ', '⬜ ')));
     if (todos.length > AGENDA_MAX_ROWS) lines.push(`_… y ${todos.length - AGENDA_MAX_ROWS} más_`);

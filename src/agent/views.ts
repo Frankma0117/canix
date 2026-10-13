@@ -153,23 +153,37 @@ export function remindersView(reminders: Reminder[], linkUrl: (id: number) => st
 
 export function todosView(todos: Todo[], linkUrl: (id: number) => string | undefined, opts: { done?: boolean } = {}): string {
   const { shown, more } = capped(todos, 'filtra por tipo o categoría');
-  const groupName: Record<string, string> = { today: '📌 *Hoy*', later: '🗂️ *Para después*', routine: '🔁 *Rutinas*' };
+  const groupName: Record<string, string> = { today: '📌 *Hoy*', later: '🗂️ *Para después*' };
   const line = (t: Todo) => {
     const url = t.link_id ? linkUrl(t.link_id) : undefined;
-    if (t.scope === 'routine') {
-      const s = scheduleOf(t);
-      return `${timeChip(s.time)} ${withIcon(t.title)} ${idChip(t.id)}\n> ${describeSchedule(s)}${t.duration_minutes ? ` · ${t.duration_minutes} min` : ''}${url ? `\n${url}` : ''}`;
-    }
     const due = t.due_date && t.scope !== 'today' ? ` · ${dayLabel(t.due_date).toLowerCase()}` : '';
     return `${opts.done ? '☑️' : '⬜'} ${t.title}${due} ${idChip(t.id)}${url ? `\n${url}` : ''}`;
   };
-  const order = ['today', 'later', 'routine'];
+  const order = ['today', 'later'];
   const sorted = [...shown].sort((a, b) => order.indexOf(a.scope) - order.indexOf(b.scope));
   return [
     `✅ *${opts.done ? 'Tareas hechas' : 'Tus pendientes'}* · ${todos.length}`,
     ...grouped(sorted, (t) => t.scope, (scope, n) => `${groupName[scope] ?? `*${scope}*`} · ${n}`, line),
     ...more,
   ].join('\n');
+}
+
+/** All the routines, by frequency - each with its hour, how often, and its `#id`. */
+export function routinesView(routines: Todo[]): string {
+  const groupOf = (t: Todo) => {
+    const s = scheduleOf(t);
+    if (s.freq === 'monthly') return '🗓️ *Mensuales*';
+    if (s.interval > 1) return '📆 *Cada 15 días o más*';
+    return s.freq === 'weekly' && s.weekdays.length < 7 ? '📅 *Ciertos días*' : '🔁 *Todos los días*';
+  };
+  const order = ['🔁 *Todos los días*', '📅 *Ciertos días*', '📆 *Cada 15 días o más*', '🗓️ *Mensuales*'];
+  const sorted = [...routines].sort((a, b) => order.indexOf(groupOf(a)) - order.indexOf(groupOf(b)) || scheduleOf(a).time.localeCompare(scheduleOf(b).time));
+  const line = (t: Todo) => {
+    const s = scheduleOf(t);
+    const detail = [s.freq === 'daily' && s.interval === 1 ? null : describeSchedule(s), t.duration_minutes ? `${t.duration_minutes} min` : null].filter(Boolean).join(' · ');
+    return `${timeChip(s.time)} ${withIcon(t.title)} ${idChip(t.id)}${detail ? `\n> ${detail}` : ''}`;
+  };
+  return [`🔁 *Tus rutinas* · ${routines.length}`, ...grouped(sorted, groupOf, (name, n) => `${name} · ${n}`, line)].join('\n');
 }
 
 export function categoriesView(categories: Category[]): string {
@@ -253,6 +267,7 @@ const LIST_WORDS: Record<string, string> = {
   tareas: 'list_todos',
   categorias: 'list_categories',
   recetas: 'list_recipes',
+  rutinas: 'list_todos',
 };
 const LIST_ASK_RE = new RegExp(
   `^(?:(?:muestrame|mostrame|dime|dame|ver|listar|lista|listame|cuales son|que|quiero ver|a ver|enviame|mandame)\\s+)?(?:(?:todos|todas)\\s+)?(?:mis|los|las)?\\s*(${Object.keys(LIST_WORDS).join('|')})(?:\\s+(?:tengo|que tengo|hay|guardados|guardadas|pendientes|activos|programados))?$`,
@@ -264,7 +279,7 @@ const LIST_ASK_RE = new RegExp(
  * answered straight from the data with the designed list: no model turn, so nothing can be
  * re-typed, summarized or - as seen in testing - made up.
  */
-export function listToolAsked(text: string): string | null {
+export function listToolAsked(text: string): { tool: string; args: Record<string, unknown> } | null {
   const t = text
     .toLowerCase()
     .normalize('NFD')
@@ -274,5 +289,6 @@ export function listToolAsked(text: string): string | null {
     .trim();
   if (!t || t.length > 45 || /\d/.test(t)) return null;
   const m = LIST_ASK_RE.exec(t);
-  return m ? LIST_WORDS[m[1]] : null;
+  if (!m) return null;
+  return m[1] === 'rutinas' ? { tool: 'list_todos', args: { scope: 'routine' } } : { tool: LIST_WORDS[m[1]], args: {} };
 }
