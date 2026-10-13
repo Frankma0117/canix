@@ -8,6 +8,9 @@ import { enterOutfitRequest, handleOutfitResult, enterMyOutfits, handleMyOutfits
 import { enterPdfImport, handlePdfReview } from './flows/add-garment-pdf.flow.js';
 import { isPdfDocument } from './image/pdf-intake.js';
 import { revalidateWardrobe, REVALIDATE_KEYWORDS } from './flows/revalidate-garments.flow.js';
+import { llmVision } from './vision/llm-vision.service.js';
+import { queueReclassification } from './review.js';
+import { wardrobeUpkeep } from './upkeep.js';
 import { enterProfilePhoto, handleProfilePhotoWaiting, PROFILE_PHOTO_KEYWORDS } from './flows/profile-photo.flow.js';
 import type { FashionRouterContext, FashionRouterResult } from './router-types.js';
 import type { FashionState } from './types.js';
@@ -85,6 +88,16 @@ export async function handleFashionMessage(ctx: FashionRouterContext): Promise<F
   // option). Session state is left untouched afterward; this is an out-of-band maintenance action,
   // not a state transition.
   if (REVALIDATE_KEYWORDS.includes(textLower)) {
+    // With the vision LLM the whole wardrobe goes back through it in the background (see review.ts).
+    if (llmVision.enabled()) {
+      const queued = queueReclassification(ctx.userId);
+      if (queued === 0) return { consumed: true, reply: 'Todavía no tienes prendas guardadas para revisar - agrega algunas primero.' };
+      void wardrobeUpkeep();
+      return {
+        consumed: true,
+        reply: `🔄 Voy a revisar tus ${queued} prenda(s) mirando cada foto. Te aviso cuando termine; lo que no logre definir te lo pregunto en el portal, en *Mi armario → Por revisar*.`,
+      };
+    }
     return { consumed: true, reply: await revalidateWardrobe(ctx) };
   }
 

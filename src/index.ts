@@ -1,4 +1,6 @@
 import { wardrobeUpkeep } from './fashion/upkeep.js';
+import { setWardrobeNotifier } from './fashion/review.js';
+import { repairRoutines } from './agent/routine-repairs.js';
 import { quietLibsignalLogs } from './util/quiet-libsignal.js';
 import { acquireSingleInstanceLock } from './util/single-instance.js';
 import { env } from './config/env.js';
@@ -87,6 +89,9 @@ async function main() {
   setSchedulingNotifier(bot.session);
   await bot.start();
 
+  // Routines left without notices get them back before the scheduler looks (see routine-repairs.ts).
+  repairRoutines();
+
   // 4) Reminder scheduler
   const scheduler = new TaskScheduler(bot.session);
   scheduler.start();
@@ -99,6 +104,10 @@ async function main() {
 
   // Wardrobe upkeep (see fashion/upkeep.ts): colors read from the photos, exact duplicates removed -
   // a small batch now and every 20 minutes, in the background.
+  setWardrobeNotifier(async (userId, text) => {
+    const owner = usersRepo.getById(userId);
+    if (owner) await bot.session.sendText(owner.jid, text);
+  });
   void wardrobeUpkeep();
   setInterval(() => void wardrobeUpkeep(), 20 * 60_000).unref();
 

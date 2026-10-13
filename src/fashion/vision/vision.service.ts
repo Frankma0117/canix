@@ -9,6 +9,8 @@ export interface FieldMeta {
   confidence: number;
   tier: ConfidenceTier;
   certainty: 'observado' | 'inferido';
+  /** The person said so themselves (portal answer or edit): never overwritten by a re-analysis. */
+  byUser?: boolean;
 }
 
 export interface VisionAnalysisResult {

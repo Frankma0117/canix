@@ -36,6 +36,7 @@ export const CATEGORIES_BY_TYPE: Record<GarmentType, CategoryOption[]> = {
     { value: 'pantalon', label: 'Pantalón' },
     { value: 'chino', label: 'Chino' },
     { value: 'pantalon_vestir', label: 'Pantalón de vestir' },
+    { value: 'jogger', label: 'Jogger / sudadera' },
     { value: 'short', label: 'Short' },
     { value: 'falda', label: 'Falda' },
   ],
@@ -120,6 +121,7 @@ const VISION_PROMPTS: Record<string, string> = {
   pantalon: 'trousers or pants',
   chino: 'chino pants',
   pantalon_vestir: 'formal dress pants',
+  jogger: 'jogger sweatpants or track pants',
   short: 'shorts',
   falda: 'a skirt',
   // category - FULL_BODY

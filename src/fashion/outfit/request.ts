@@ -91,6 +91,7 @@ const CATEGORY_WORDS = vocabulary({
   sweater: ['sweater', 'sueter', 'saco de lana', 'buzo', 'jersey'],
   sudadera: ['sudadera', 'sudaderas'],
   hoodie: ['hoodie', 'capota', 'con capucha'],
+  jogger: ['jogger', 'joggers', 'sudadera', 'pantalon de sudadera', 'pantalon deportivo', 'pants'],
   short: ['short', 'shorts', 'pantaloneta', 'bermuda', 'bermudas'],
   chaqueta: ['chaqueta', 'chaquetas', 'chamarra', 'campera'],
   blazer: ['blazer', 'saco', 'americana'],

@@ -563,6 +563,26 @@ export function initSchema(): void {
   // twice, and when its color was last read from the photo.
   ensureColumn('garments', 'image_hash', 'image_hash TEXT');
   ensureColumn('garments', 'color_checked_at', 'color_checked_at TEXT');
+  // Classification by the vision LLM (see fashion/review.ts): how many times it was tried on a
+  // garment that couldn't be read, and the questions it left for the person to answer in the portal.
+  ensureColumn('garments', 'llm_attempts', 'llm_attempts INTEGER NOT NULL DEFAULT 0');
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS garment_questions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      garment_id INTEGER NOT NULL REFERENCES garments(id) ON DELETE CASCADE,
+      field TEXT NOT NULL,
+      question TEXT NOT NULL,
+      options TEXT NOT NULL DEFAULT '[]',
+      suggested TEXT,
+      status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'answered', 'skipped')),
+      answer TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      answered_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_garment_questions_user ON garment_questions(user_id, status);
+    CREATE INDEX IF NOT EXISTS idx_garment_questions_garment ON garment_questions(garment_id);
+  `);
   // A garment's type is decided by what it is: trousers saved as a "top" (the classifier got the
   // type wrong but the category right) could never be picked as the bottom of an outfit.
   for (const [type, categories] of Object.entries(CATEGORIES_BY_TYPE)) {

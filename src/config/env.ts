@@ -169,8 +169,8 @@ export const env = {
     contactEmail: process.env.CONTACT_EMAIL ?? '',
   },
 
-  // fal.ai (image generation) - deliberately NOT used by the bot (the user only wants their own
-  // sticker pack); kept configured only for generating web-portal assets by hand when needed.
+  // fal.ai - the bot never GENERATES images with it (the user only wants their own sticker pack);
+  // it's used to LOOK at garment photos and classify them (see fashion.llmVision below).
   fal: {
     apiKey: process.env.FAL_KEY ?? '',
   },
@@ -215,6 +215,19 @@ export const env = {
       serviceUrl: process.env.FASHION_VISION_SERVICE_URL ?? 'http://127.0.0.1:8008',
       timeoutMs: parseInt(process.env.FASHION_VISION_TIMEOUT_MS ?? '15000', 10),
       minConfidence: parseFloat(process.env.FASHION_VISION_MIN_CONFIDENCE ?? '0.35'),
+    },
+
+    // Garment classification by a vision LLM through fal.ai (see vision/llm-vision.service.ts) -
+    // used whenever FAL_KEY is set, with the local service above as the fallback. Below
+    // `askBelow` confidence on what a garment is (or `askColorBelow` on its color) the person is
+    // asked from the portal instead of the guess being taken as good.
+    llmVision: {
+      enabled: (process.env.FASHION_LLM_VISION_ENABLED ?? 'true').toLowerCase() === 'true',
+      endpoint: process.env.FASHION_LLM_VISION_ENDPOINT ?? 'fal-ai/any-llm/vision',
+      model: process.env.FASHION_LLM_VISION_MODEL ?? 'google/gemini-2.5-flash',
+      timeoutMs: parseInt(process.env.FASHION_LLM_VISION_TIMEOUT_MS ?? '60000', 10),
+      askBelow: parseFloat(process.env.FASHION_LLM_VISION_ASK_BELOW ?? '0.8'),
+      askColorBelow: parseFloat(process.env.FASHION_LLM_VISION_ASK_COLOR_BELOW ?? '0.65'),
     },
 
     // Outfit recommendation engine (see fashion/outfit/) - reuses the SAME DeepSeek client/model

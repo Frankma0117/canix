@@ -69,6 +69,15 @@ export interface GarmentDraft {
    *  confirm-or-correct summary so we don't claim confidence in a field the user never provided
    *  and the model didn't confidently detect either. */
   detectedFields?: string[];
+  // Only filled in by the vision LLM (see vision/llm-vision.service.ts).
+  subcategory?: string;
+  gender?: string;
+  season?: string[];
+  weather?: string[];
+  occasions?: string[];
+  brand?: string;
+  /** What it wasn't sure about - saved as portal questions once the garment exists (fashion/review.ts). */
+  doubts?: { field: string; question: string; options: string[]; suggested: string | null }[];
 }
 
 /** Session `data` shape per state - not every state uses all of these, but keeping one flat

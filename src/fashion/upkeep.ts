@@ -6,6 +6,7 @@ import { dominantColor } from './image/dominant-color.js';
 import { buildShortDescription } from './description.js';
 import { env } from '../config/env.js';
 import { sleep } from '../util/human-delay.js';
+import { reclassifyPending } from './review.js';
 import type { Garment } from '../types/index.js';
 
 /**
@@ -14,11 +15,14 @@ import type { Garment } from '../types/index.js';
  *     classifier left it empty or "multicolor" - a color a person typed is never touched;
  *   - fingerprints each photo, and removes a garment whose photo is byte-for-byte the same as
  *     another one of that person's (the same PDF imported twice doubled a whole wardrobe).
+ * Then every garment the vision LLM hasn't seen is classified by it (review.ts) - that part does
+ * use AI, once per garment, and only when a fal.ai key is configured.
  * Each garment is looked at once (color_checked_at). Runs a small batch at a time so it never
  * competes with the bot for the machine.
  */
 const BATCH = 40;
 const BETWEEN_GARMENTS_MS = 250;
+const RECLASSIFY_BATCH = 250;
 let running = false;
 
 async function fetchImage(url: string): Promise<Buffer | null> {
@@ -46,7 +50,8 @@ async function checkOne(g: Garment): Promise<'colored' | 'checked' | 'unreachabl
   if (!image) return 'unreachable';
 
   const hash = createHash('sha1').update(image).digest('hex');
-  const needsColor = !g.color || g.color === 'multicolor';
+  // What the vision LLM said about a color stands ("multicolor" included): it looked at the garment.
+  const needsColor = (!g.color || g.color === 'multicolor') && !g.analysis_model?.startsWith('fal:');
   const reading = needsColor ? await dominantColor(image) : null;
 
   if (reading && reading.share >= 0.3) {
@@ -89,13 +94,22 @@ function removeExactDuplicates(): { removed: number; storageKeys: string[] } {
   return { removed, storageKeys };
 }
 
+/** Garments the vision LLM hasn't classified yet (see review.ts) - after duplicates are gone, so none is paid for twice. */
+async function reclassify(): Promise<void> {
+  const { done, failed } = await reclassifyPending(RECLASSIFY_BATCH);
+  if (done || failed) console.log('[FASHION] Reclasificación con visión: %d prenda(s) clasificadas, %d no se pudieron leer.', done, failed);
+}
+
 /** One pass over the garments not looked at yet. Safe to call as often as wanted; never throws. */
 export async function wardrobeUpkeep(): Promise<void> {
   if (!env.fashion.enabled || running) return;
   running = true;
   try {
     const pending = db.prepare('SELECT * FROM garments WHERE is_active = 1 AND color_checked_at IS NULL ORDER BY id LIMIT ?').all(BATCH) as Garment[];
-    if (pending.length === 0) return;
+    if (pending.length === 0) {
+      await reclassify();
+      return;
+    }
 
     let colored = 0;
     let unreachable = 0;
@@ -119,6 +133,7 @@ export async function wardrobeUpkeep(): Promise<void> {
       unreachable,
       removed,
     );
+    await reclassify();
   } catch (err) {
     console.error('[FASHION] Mantenimiento del armario falló:', (err as Error).message);
   } finally {

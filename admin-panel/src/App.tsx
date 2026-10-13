@@ -43,7 +43,8 @@ function Gate() {
 
 /** Current section lives in the URL hash (#/agenda) - survives reloads, works with back/forward. */
 function useHashSection(): [string, (id: string) => void] {
-  const read = () => window.location.hash.replace(/^#\/?/, '');
+  // anything after "?" belongs to the page itself (e.g. #/wardrobe?tab=review)
+  const read = () => window.location.hash.replace(/^#\/?/, '').replace(/\?.*$/, '');
   const [section, setSection] = useState(read);
   useEffect(() => {
     const onHash = () => setSection(read());

@@ -3,7 +3,7 @@ import { fashionSessionsRepo } from '../../db/repositories/fashion-sessions.repo
 import { garmentsRepo } from '../../db/repositories/garments.repo.js';
 import { intakeGarmentImage, extensionForMimetype } from '../image/image-intake.js';
 import { spacesStorageService } from '../storage/spaces-storage.service.js';
-import { httpVisionService } from '../vision/http-vision.service.js';
+import { analyzeForDraft, saveDraftQuestions } from '../review.js';
 import { GARMENT_TYPES, GARMENT_TYPE_LABELS, CATEGORIES_BY_TYPE, normalizeColor, ANALYSIS_VERSION } from '../taxonomy.js';
 import type { GarmentType } from '../taxonomy.js';
 import type { FashionSessionData, GarmentDraft } from '../types.js';
@@ -25,6 +25,12 @@ export function draftToCreateFields(draft: GarmentDraft & { type: string; catego
     thumbnailUrl: draft.thumbnailUrl,
     type: draft.type,
     category: draft.category,
+    subcategory: draft.subcategory,
+    gender: draft.gender,
+    season: draft.season,
+    weather: draft.weather,
+    occasions: draft.occasions,
+    brand: draft.brand,
     color: draft.color,
     secondaryColors: draft.secondaryColors,
     pattern: draft.pattern,
@@ -149,10 +155,8 @@ export async function handleWaitingImage(ctx: FashionRouterContext): Promise<Fas
     detectedFields: [],
   };
 
-  const analysis = await httpVisionService.analyze(intake.analysisCopy);
-  if (analysis) {
-    console.log('[FASHION] Prenda analizada para #%d (vision ok).', ctx.userId);
-    applyVisionAnalysis(draft, analysis);
+  if (await analyzeForDraft(draft, intake.analysisCopy, ctx.userId)) {
+    console.log('[FASHION] Prenda analizada para #%d (%s).', ctx.userId, draft.analysisModel ?? 'vision');
   } else {
     console.log('[FASHION] Vision no disponible para #%d, sigue manual.', ctx.userId);
   }
@@ -299,6 +303,7 @@ export async function handleConfirmation(ctx: FashionRouterContext): Promise<Fas
 
   if (choice === '1' || /^s(i|í)/i.test(choice)) {
     const id = garmentsRepo.create(ctx.userId, draftToCreateFields(draft as GarmentDraft & { type: string; category: string }));
+    saveDraftQuestions(ctx.userId, id, draft, true);
     console.log('[FASHION] Prenda #%d guardada para el usuario #%d.', id, ctx.userId);
     fashionSessionsRepo.setState(ctx.userId, 'FASHION_HOME', {});
     return { consumed: true, reply: `✅ Prenda #${id} guardada en tu armario.\n\n${HOME_MENU}` };

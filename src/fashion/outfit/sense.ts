@@ -11,7 +11,7 @@ import type { OutfitContext } from './candidate-filter.js';
 
 /** How dressy each kind of garment normally is: 0 muy informal ... 4 muy formal. */
 const CATEGORY_FORMALITY: Record<string, number> = {
-  sudadera: 0, hoodie: 0, short: 0, sandalias: 0, gorra: 0, mochila: 0,
+  sudadera: 0, hoodie: 0, jogger: 0, short: 0, sandalias: 0, gorra: 0, mochila: 0,
   camiseta: 1, top: 1, jeans: 1, tenis: 1, sneakers: 1, chaqueta: 1, impermeable: 1,
   polo: 2, blusa: 2, sweater: 2, chino: 2, pantalon: 2, falda: 2, botas: 2, mocasines: 2, chaleco: 2, abrigo: 2, gabardina: 2,
   vestido: 2, enterizo: 2, reloj: 2, cinturon: 2, gafas: 2, bolso: 2, bufanda: 2, sombrero: 2, joyeria: 2, otros: 2,
@@ -35,8 +35,8 @@ const OCCASION_NEEDS: Record<string, { formality: string; style?: string; weathe
   cita: { formality: 'smart_casual', likes: ['camisa', 'polo', 'jeans', 'chino', 'botas'] },
   cena: { formality: 'smart_casual', likes: ['camisa', 'polo', 'chino', 'jeans'] },
   fiesta: { formality: 'smart_casual', style: 'urbano', likes: ['camisa', 'polo', 'camiseta', 'jeans', 'chaqueta', 'sneakers', 'tenis', 'botas'] },
-  viaje: { formality: 'informal', likes: ['camiseta', 'hoodie', 'sudadera', 'jeans', 'tenis', 'sneakers', 'mochila'] },
-  gimnasio: { formality: 'muy_informal', style: 'deportivo', likes: ['camiseta', 'top', 'sudadera', 'short', 'tenis', 'sneakers'] },
+  viaje: { formality: 'informal', likes: ['camiseta', 'hoodie', 'sudadera', 'jeans', 'jogger', 'tenis', 'sneakers', 'mochila'] },
+  gimnasio: { formality: 'muy_informal', style: 'deportivo', likes: ['camiseta', 'top', 'sudadera', 'jogger', 'short', 'tenis', 'sneakers'] },
   playa: { formality: 'muy_informal', weather: 'calido', likes: ['camiseta', 'top', 'short', 'sandalias', 'gafas', 'sombrero', 'gorra'] },
   casual: { formality: 'informal', likes: ['camiseta', 'polo', 'jeans', 'tenis', 'sneakers'] },
 };

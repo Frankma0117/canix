@@ -6,9 +6,10 @@ import { intakeGarmentPdf } from '../image/pdf-intake.js';
 import { toAnalysisCopy, toThumbnail } from '../image/image-processing.js';
 import { spacesStorageService } from '../storage/spaces-storage.service.js';
 import { httpVisionService } from '../vision/http-vision.service.js';
+import { analyzeForDraft, saveDraftQuestions } from '../review.js';
 import { CATEGORIES_BY_TYPE } from '../taxonomy.js';
 import type { GarmentType } from '../taxonomy.js';
-import { renderTypeOptions, applyVisionAnalysis, draftToCreateFields } from './add-garment.flow.js';
+import { renderTypeOptions, draftToCreateFields } from './add-garment.flow.js';
 import type { FashionSessionData, GarmentDraft } from '../types.js';
 import type { FashionRouterContext, FashionRouterResult } from '../router-types.js';
 import { HOME_MENU } from './home.flow.js';
@@ -94,8 +95,7 @@ async function processOneExtractedImage(userId: number, raw: Buffer): Promise<Ga
     detectedFields: [],
   };
 
-  const analysis = await httpVisionService.analyze(analysisCopy);
-  if (analysis) applyVisionAnalysis(draft, analysis);
+  await analyzeForDraft(draft, analysisCopy, userId);
 
   return draft;
 }
@@ -141,18 +141,22 @@ export async function handlePdfReview(ctx: FashionRouterContext): Promise<Fashio
   if (/^(guardar( todas)?|s(i|í))$/i.test(text)) {
     let saved = 0;
     let skipped = 0;
+    let asked = 0;
     for (const draft of queue) {
       if (!draft.type || !draft.category) {
         skipped++;
         continue;
       }
       const id = garmentsRepo.create(ctx.userId, draftToCreateFields(draft as GarmentDraft & { type: string; category: string }));
+      saveDraftQuestions(ctx.userId, id, draft);
+      asked += draft.doubts?.length ? 1 : 0;
       saved++;
       console.log('[FASHION] Prenda #%d guardada (PDF) para el usuario #%d.', id, ctx.userId);
     }
     fashionSessionsRepo.setState(ctx.userId, 'FASHION_HOME', {});
     const skipNote = skipped > 0 ? `\n${skipped} no se pudieron clasificar automáticamente - mándalas como foto suelta para agregarlas.` : '';
-    return { consumed: true, reply: `✅ Guardé ${saved} prenda(s) en tu armario.${skipNote}\n\n${HOME_MENU}` };
+    const askNote = asked > 0 ? `\nEn ${asked} tengo dudas: te las pregunto en el portal, en *Mi armario → Por revisar*.` : '';
+    return { consumed: true, reply: `✅ Guardé ${saved} prenda(s) en tu armario.${skipNote}${askNote}\n\n${HOME_MENU}` };
   }
 
   const choice = Number(text);

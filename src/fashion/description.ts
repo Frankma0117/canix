@@ -1,5 +1,6 @@
 import { CATEGORIES_BY_TYPE } from './taxonomy.js';
 import type { GarmentType } from './taxonomy.js';
+import { colorFor } from './look.js';
 
 /**
  * Turns the underscore_case taxonomy values into readable Spanish ("azul_marino" -> "azul marino").
@@ -50,7 +51,7 @@ export interface DescribableGarment {
  */
 export function buildShortDescription(g: DescribableGarment): string {
   const parts = [categoryLabel(g.type, g.category)];
-  if (g.color) parts.push(humanize(g.color));
+  if (g.color) parts.push(g.category ? colorFor(g.category, g.color) : humanize(g.color));
   if (g.sleeves && g.sleeves !== 'sin_mangas') parts.push(`de ${humanize(g.sleeves)}`);
   return parts.join(' ');
 }

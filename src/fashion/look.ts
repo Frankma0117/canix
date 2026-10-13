@@ -9,7 +9,7 @@ import type { OutfitContext } from './outfit/candidate-filter.js';
  */
 const CATEGORY_EMOJI: Record<string, string> = {
   camiseta: '👕', camisa: '👔', polo: '👕', blusa: '👚', top: '🎽', sweater: '🧶', sudadera: '🧥', hoodie: '🧥', chaleco: '🦺',
-  jeans: '👖', pantalon: '👖', chino: '👖', pantalon_vestir: '👖', short: '🩳', falda: '👗',
+  jeans: '👖', pantalon: '👖', chino: '👖', pantalon_vestir: '👖', jogger: '👖', short: '🩳', falda: '👗',
   vestido: '👗', enterizo: '🩱', traje: '🤵',
   chaqueta: '🧥', blazer: '🧥', abrigo: '🧥', impermeable: '☔', gabardina: '🧥',
   tenis: '👟', sneakers: '👟', zapatos: '👞', botas: '🥾', sandalias: '🩴', mocasines: '👞',

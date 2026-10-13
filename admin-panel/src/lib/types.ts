@@ -295,9 +295,53 @@ export interface GarmentCard {
   image_url: string;
   type: string;
   category: string;
+  category_label: string;
   color: string | null;
   short_description: string | null;
   favorite: boolean;
+  /** The classifier has open questions about it (see the "Por revisar" tab). */
+  needs_review?: boolean;
+}
+
+export type GarmentFieldValue = string | string[] | null;
+
+export interface GarmentQuestionView {
+  id: number;
+  field: string;
+  label: string;
+  question: string;
+  options: { value: string; label: string }[];
+  suggested: string | null;
+  many: boolean;
+  /** What the garment is / its color, as opposed to a detail like the material. */
+  main: boolean;
+}
+
+export interface GarmentDetail extends GarmentCard {
+  full_image_url: string;
+  long_description: string | null;
+  seen: string | null;
+  classified_by: 'vision' | 'local' | null;
+  by_user: string[];
+  fields: Record<string, GarmentFieldValue>;
+  questions: GarmentQuestionView[];
+}
+
+export interface WardrobeTaxonomy {
+  types: { value: string; label: string; categories: { value: string; label: string }[] }[];
+  fields: { key: string; label: string; kind: 'one' | 'many' | 'text'; options: { value: string; label: string }[]; only_types: string[] | null }[];
+}
+
+export interface WardrobeReviewStatus {
+  enabled: boolean;
+  total: number;
+  classified: number;
+  pending: number;
+  unreadable: number;
+  open_questions: number;
+  main_questions: number;
+  garments_to_review: number;
+  main_garments: number;
 }
 
 // ---------------- Usage (paid resources) ----------------
