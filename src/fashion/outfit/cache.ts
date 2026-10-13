@@ -20,7 +20,8 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>();
 
 export function contextSignature(context: Record<string, unknown>): string {
-  return JSON.stringify(context, Object.keys(context).sort());
+  // Sorted top-level keys, full nested values (a key whitelist here used to drop what's inside them).
+  return JSON.stringify(Object.fromEntries(Object.entries(context).sort(([a], [b]) => a.localeCompare(b))));
 }
 
 /** Cheap, non-cryptographic hash of "has anything in the wardrobe changed" - just the sorted

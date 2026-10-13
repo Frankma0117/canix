@@ -1,3 +1,6 @@
+import { iconFor } from '../util/icons.js';
+import { exercisesBlock } from './views.js';
+import { exercisesRepo } from '../db/repositories/exercises.repo.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { reminderPromptsRepo } from '../db/repositories/reminder-prompts.repo.js';
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
@@ -57,6 +60,12 @@ function bold(text: string): string {
 }
 
 /** Routines get the poll. */
+/** "🏃 *Cardio*" - the title in bold with the emoji that fits it (see util/icons.ts). */
+function titled(title: string, fallback = '🔹'): string {
+  const icon = /\p{Extended_Pictographic}/u.test(title) ? '' : `${iconFor(title, fallback)} `;
+  return `${icon}${bold(title)}`;
+}
+
 function wantsPoll(reminder: Reminder): boolean {
   if (env.reminderConfirmPolls === 'off') return false;
   return (reminder.kind === 'routine_reminder' || reminder.kind === 'routine_checkin') && !!reminder.todo_id;
@@ -89,9 +98,12 @@ export function formatReminderText(reminder: Reminder, routine?: Todo): string {
   if (routine) {
     const details = [`🕒 ${shortTime(reminder.run_at)}`];
     if (routine.duration_minutes) details.push(`⏱️ ${routine.duration_minutes} min`);
-    return `${routineStartPrefix()}\n${bold(routine.title)}\n${details.join('  ·  ')}`;
+    // What to do, right in the notice, when the routine has its exercises broken down.
+    const exercises = exercisesRepo.listByRoutine(routine.user_id, routine.id);
+    const plan = exercises.length ? `\n\n${exercisesBlock(exercises)}` : '';
+    return `${routineStartPrefix()}\n${titled(routine.title)}\n${details.join('  ·  ')}${plan}`;
   }
-  if (reminder.kind === 'reminder') return `${plainReminderPrefix()}\n${bold(reminder.message)}`;
+  if (reminder.kind === 'reminder') return `${plainReminderPrefix()}\n${titled(reminder.message, '🔔')}`;
   // Every other kind already carries its own emoji/wording from creation time.
   return reminder.message;
 }
@@ -175,7 +187,7 @@ export function applyAnswer(prompt: ReminderPrompt, answer: PromptAnswer, source
   const routine = prompt.todo_id ? todosRepo.getById(prompt.user_id, prompt.todo_id) : undefined;
   if (!routine) {
     return {
-      ack: (answer === 'yes' ? `✅ Marcado como hecho: ${bold(prompt.title)}` : `📝 Marcado como no hecho: ${bold(prompt.title)}`) + delayNote(prompt, at),
+      ack: (answer === 'yes' ? `✅ Marcado como hecho: ${titled(prompt.title, '🔔')}` : `📝 Marcado como no hecho: ${titled(prompt.title, '🔔')}`) + delayNote(prompt, at),
       celebrate: false,
     };
   }
@@ -185,13 +197,13 @@ export function applyAnswer(prompt: ReminderPrompt, answer: PromptAnswer, source
   const progressNote = progress ? `\n${progress}` : '';
   if (answer === 'no') {
     return {
-      ack: `📝 Marcado: ${bold(routine.title)} no se hizo esta vez. La próxima va con toda 💪${progressNote}${delayNote(prompt, at)}`,
+      ack: `📝 Marcado: ${titled(routine.title)} no se hizo esta vez. La próxima va con toda 💪${progressNote}${delayNote(prompt, at)}`,
       celebrate: false,
     };
   }
   const farewell = prompt.occurrence_date === todayLocal() ? maybeNightFarewell(prompt.user_id) : null;
   return {
-    ack: `✅ Marcado: ${bold(routine.title)} cumplida 🎉${progressNote}${delayNote(prompt, at)}${farewell ? `\n\n${farewell}` : ''}`,
+    ack: `✅ Marcado: ${titled(routine.title)} cumplida 🎉${progressNote}${delayNote(prompt, at)}${farewell ? `\n\n${farewell}` : ''}`,
     celebrate: true,
   };
 }

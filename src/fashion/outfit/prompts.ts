@@ -5,7 +5,7 @@
  * json_object) and are built from taxonomy.ts's own arrays, never a second hardcoded copy of the
  * enum lists, so they can't drift.
  */
-import { OCCASIONS, FORMALITY, SEASONS, WEATHER, STYLES } from '../taxonomy.js';
+import { OCCASIONS, FORMALITY, SEASONS, WEATHER, STYLES, allCategoryValues } from '../taxonomy.js';
 
 export function buildIntentPrompt(text: string): string {
   return `Convierte esta petición de outfit a JSON, usando SOLO estos valores permitidos (o null si no se puede inferir):
@@ -16,9 +16,11 @@ weather: ${WEATHER.join('|')}|null
 style: ${STYLES.join('|')}|null
 colorsPreferred: array de strings (puede ser vacío)
 colorsAvoided: array de strings (puede ser vacío)
+mustHave: prendas que pide incluir, array de {"category": una de ${allCategoryValues().join('|')}, "color": string o null} (puede ser vacío)
+excludeCategories: prendas que pide NO usar, array de esas mismas categorías (puede ser vacío)
 
 Responde SOLO con este JSON exacto, sin texto adicional:
-{"occasion":null,"formality":null,"season":null,"weather":null,"style":null,"colorsPreferred":[],"colorsAvoided":[]}
+{"occasion":null,"formality":null,"season":null,"weather":null,"style":null,"colorsPreferred":[],"colorsAvoided":[],"mustHave":[],"excludeCategories":[]}
 
 Petición: "${text}"`;
 }
@@ -31,14 +33,17 @@ interface CandidateForPrompt {
 }
 
 export function buildRecommendationPrompt(
-  context: { occasion?: string; formality?: string; season?: string; weather?: string; style?: string },
+  context: { occasion?: string; formality?: string; season?: string; weather?: string; style?: string; mustHave?: { category: string; color?: string }[] },
   candidatesByRole: Record<string, CandidateForPrompt[]>,
   avoidCombos: string[],
 ): string {
   const contextLine = Object.entries(context)
-    .filter(([, v]) => v)
+    .filter(([, v]) => typeof v === 'string' && v)
     .map(([k, v]) => `${k}=${v}`)
     .join(', ');
+  const mustLine = context.mustHave?.length
+    ? `\nDEBE incluir estas prendas (elige el candidato de esa categoría): ${context.mustHave.map((m) => `${m.category}${m.color ? ` ${m.color}` : ''}`).join(', ')}`
+    : '';
 
   const candidateLines = Object.entries(candidatesByRole)
     .filter(([, list]) => list.length > 0)
@@ -48,7 +53,7 @@ export function buildRecommendationPrompt(
   const avoidLine = avoidCombos.length ? `\nYa mostraste estas combinaciones, da una DIFERENTE: ${avoidCombos.join(' | ')}` : '';
 
   return `Eres un motor de recomendación de outfits. Elige la mejor combinación con los candidatos dados.
-Contexto: ${contextLine || '(sin restricciones específicas)'}
+Contexto: ${contextLine || '(sin restricciones específicas)'}${mustLine}
 Candidatos por rol (SOLO puedes usar estos ids, nunca inventes uno):
 ${candidateLines}${avoidLine}
 

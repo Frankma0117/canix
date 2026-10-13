@@ -10,6 +10,11 @@ export interface OutfitContext {
   style?: string;
   colorsPreferred?: string[];
   colorsAvoided?: string[];
+  /** "con el blazer azul marino", "con tenis": kinds of garment the outfit must include, optionally
+   *  in a given color (see outfit/request.ts). Enforced after picking (recommendation.service.ts). */
+  mustHave?: { category: string; color?: string }[];
+  /** "sin corbata", "sin chaqueta": kinds of garment that must not appear at all. */
+  excludeCategories?: string[];
   /** "hazme un outfit con esta camisa" - this garment MUST be included, others are filtered/scored
    *  around it instead of independently (see rules.ts). */
   requiredGarmentId?: number;
@@ -52,13 +57,26 @@ function isHardExcluded(garment: Garment, ctx: OutfitContext): boolean {
     const weathers = parseJsonArray(garment.weather);
     if (weathers.length > 0 && !weathers.includes(ctx.weather)) return true;
   }
+  if (ctx.excludeCategories?.includes(garment.category)) return true;
   if (ctx.colorsAvoided?.length && garment.color && ctx.colorsAvoided.includes(garment.color)) return true;
   if (ctx.genderFilter && garment.gender && garment.gender !== 'unisex' && garment.gender !== ctx.genderFilter) return true;
   return false;
 }
 
+/** True when this garment is one the request asked for by name (and in that color, if it said one). */
+export function matchesMust(garment: Garment, must: { category: string; color?: string }): boolean {
+  return garment.category === must.category && (!must.color || garment.color === must.color);
+}
+
 function score(garment: Garment, ctx: OutfitContext): number {
   let s = 1;
+
+  // A garment asked for by name outranks everything else in its role; the right kind in another
+  // color still beats an unrelated garment.
+  for (const must of ctx.mustHave ?? []) {
+    if (matchesMust(garment, must)) s += 10;
+    else if (garment.category === must.category) s += 4;
+  }
 
   if (ctx.occasion) {
     const occasions = parseJsonArray(garment.occasions);
@@ -98,7 +116,9 @@ export function filterCandidates(all: Garment[], ctx: OutfitContext, maxPerGroup
   for (const garment of all) {
     const type = garment.type as GarmentType;
     if (!GARMENT_TYPES.includes(type)) continue;
-    if (garment.id !== ctx.requiredGarmentId && isHardExcluded(garment, ctx)) continue;
+    // What was asked for by name stays in even if its tags don't fit the occasion - the person chose it.
+    const asked = (ctx.mustHave ?? []).some((m) => m.category === garment.category) && !ctx.excludeCategories?.includes(garment.category);
+    if (garment.id !== ctx.requiredGarmentId && !asked && isHardExcluded(garment, ctx)) continue;
     byType[type].push({ garment, score: garment.id === ctx.requiredGarmentId ? Infinity : score(garment, ctx) });
   }
 

@@ -1,31 +1,58 @@
 import { fashionSessionsRepo } from '../../db/repositories/fashion-sessions.repo.js';
 import { garmentsRepo, type GarmentFilters } from '../../db/repositories/garments.repo.js';
-import { normalizeCategory, normalizeColor, CATEGORIES_BY_TYPE } from '../taxonomy.js';
+import type { GarmentType } from '../taxonomy.js';
+import { plainText, takeWords, CATEGORY_WORDS, COLOR_WORDS, TYPE_WORDS } from '../outfit/request.js';
+import { categoryLabel, colorFor, garmentLabel, humanize, TYPE_TITLES } from '../look.js';
+import { keycap } from '../../util/wa-format.js';
 import type { FashionSessionData } from '../types.js';
 import type { FashionRouterContext, FashionRouterResult } from '../router-types.js';
 import { HOME_MENU } from './home.flow.js';
 
 const PAGE_SIZE = 10;
 
-/** Parses trailing filter text ("camisas", "blancos", "favoritos") into GarmentFilters - purely
- *  local/taxonomy-based, zero AI cost (see taxonomy.ts's normalizeCategory/normalizeColor). */
+/**
+ * Reads a wardrobe filter that can combine several things at once - "camisas blancas", "zapatos
+ * negros favoritos", "accesorios", "chaquetas de cuero" - into GarmentFilters. Purely local, zero
+ * AI cost (see outfit/request.ts for the vocabulary); words it doesn't know become a text search
+ * over each garment's description, so "de cuero" or a brand still narrows the list.
+ */
 export function parseFilterText(text: string): GarmentFilters {
-  const trimmed = text.trim().toLowerCase();
-  if (!trimmed) return {};
-  if (/^favorit/.test(trimmed)) return { favorite: true };
-  const category = normalizeCategory(trimmed);
-  if (category) return { category };
-  const color = normalizeColor(trimmed);
-  if (color) return { color };
-  return { search: trimmed };
+  let rest = plainText(text);
+  if (!rest || /^(todo|todas|todos|completo)$/.test(rest)) return {};
+  const filters: GarmentFilters = {};
+
+  if (/\bfavorit[oa]s?\b/.test(rest)) {
+    filters.favorite = true;
+    rest = rest.replace(/\bfavorit[oa]s?\b/g, ' ');
+  }
+  const type = takeWords(rest, TYPE_WORDS);
+  if (type.found[0]) filters.type = type.found[0].value;
+  const category = takeWords(type.rest, CATEGORY_WORDS);
+  if (category.found[0]) filters.category = category.found[0].value;
+  const color = takeWords(category.rest, COLOR_WORDS);
+  if (color.found[0]) filters.color = color.found[0].value;
+
+  const leftover = color.rest
+    .replace(/~+/g, ' ')
+    .split(' ')
+    .filter((w) => w.length > 2 && !['los', 'las', 'mis', 'del', 'con', 'color', 'ver', 'solo', 'que', 'sean', 'son', 'tengo'].includes(w));
+  if (leftover.length) filters.search = leftover.join(' ');
+  // a type named as a group is redundant once a concrete garment was named too
+  if (filters.category) delete filters.type;
+  return filters;
 }
 
-function categoryLabel(category: string): string {
-  for (const cats of Object.values(CATEGORIES_BY_TYPE)) {
-    const match = cats.find((c) => c.value === category);
-    if (match) return match.label;
-  }
-  return category;
+/** "camisas · blanco · favoritos" - the active filter, for the list's title. */
+function filterLabel(filter: GarmentFilters): string {
+  return [
+    filter.type ? TYPE_TITLES[filter.type as GarmentType]?.toLowerCase() : null,
+    filter.category ? categoryLabel(filter.category).toLowerCase() : null,
+    filter.color ? (filter.category ? colorFor(filter.category, filter.color) : humanize(filter.color)) : null,
+    filter.favorite ? 'favoritos' : null,
+    filter.search ? `"${filter.search}"` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 export function enterWardrobeList(userId: number, filter: GarmentFilters): string {
@@ -41,24 +68,20 @@ function renderList(userId: number, filter: GarmentFilters, offset: number): str
     lastListedIds: rows.map((g) => g.id),
   } satisfies FashionSessionData);
 
+  const label = filterLabel(filter);
   if (total === 0) {
-    return 'No tienes prendas que coincidan.\n\n1. Agregar prenda\n2. Volver';
+    return (
+      `👗 *Tu armario*${label ? ` · ${label}` : ''}\n` +
+      `${label ? 'No tienes prendas así.' : 'Todavía no tienes prendas guardadas.'}\n\n` +
+      `1️⃣  📸 Agregar prenda\n2️⃣  ↩️ Volver${label ? '\n\n> O prueba otro filtro: "camisas", "zapatos negros", "favoritos"' : ''}`
+    );
   }
 
-  const from = offset + 1;
-  const to = offset + rows.length;
-  const lines = [`👕 Tu armario`, `${from}-${to} de ${total} prendas`, ''];
-  rows.forEach((g, i) => {
-    const fav = g.favorite ? ' ❤️' : '';
-    lines.push(`${i + 1}. ${categoryLabel(g.category)}${g.color ? ` ${g.color}` : ''}${fav}`);
-  });
+  const lines = [`👗 *Tu armario*${label ? ` · ${label}` : ''}`, `${offset + 1}–${offset + rows.length} de ${total} prendas`, ''];
+  rows.forEach((g, i) => lines.push(`${keycap(i + 1)}  ${garmentLabel(g)}`));
 
-  const nav: string[] = [];
-  if (offset + PAGE_SIZE < total) nav.push('"siguiente" - ver más');
-  if (offset > 0) nav.push('"anterior" - página anterior');
-  if (nav.length) lines.push('', nav.join(' | '));
-  lines.push('', 'Responde con un número para ver el detalle, o "volver".');
-
+  const nav = [offset + PAGE_SIZE < total ? '*siguiente*' : null, offset > 0 ? '*anterior*' : null, '*volver*'].filter(Boolean).join(' · ');
+  lines.push('', '> Escribe el número para ver una prenda', `> ${nav}`, '> O filtra: "camisas blancas", "zapatos negros", "favoritos"');
   return lines.join('\n');
 }
 

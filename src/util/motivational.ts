@@ -8,28 +8,28 @@ function pick<T>(pool: readonly T[]): T {
 }
 
 const PLAIN_REMINDER_PREFIXES = [
-  '⏰ Recuerda:',
-  '💪 Dale, no se te olvide:',
-  '🙌 Ojo, toca:',
-  '🔥 Vamos, es hora de:',
-  '✨ No lo dejes pasar:',
-  '👊 Métele:',
-  '📣 Aviso importante:',
-  '🚨 Ojo con esto:',
-  '🧠 Para que no se te pase:',
-  '🙏 Un empujoncito:',
-  '⚡ Va rapidito, pero toca:',
-  '🎯 Enfócate un momento en esto:',
+  'Recuerda:',
+  'Dale, no se te olvide:',
+  'Ojo, toca:',
+  'Vamos, es hora de:',
+  'No lo dejes pasar:',
+  'Métele:',
+  'Aviso importante:',
+  'Ojo con esto:',
+  'Para que no se te pase:',
+  'Un empujoncito:',
+  'Va rapidito, pero toca:',
+  'Enfócate un momento en esto:',
 ] as const;
 
 const ROUTINE_START_PREFIXES = [
-  '💪 Vamos, es hora de:',
-  '🔥 Dale, arranca con:',
-  '👊 A darle:',
-  '⏰ Hora de:',
-  '🌟 Toca:',
-  '🏁 Arrancamos con:',
-  '💥 Metámosle a:',
+  'Vamos, es hora de:',
+  'Dale, arranca con:',
+  'A darle:',
+  'Hora de:',
+  'Toca:',
+  'Arrancamos con:',
+  'Metámosle a:',
 ] as const;
 
 const ROUTINE_CHECKIN_TEMPLATES = [

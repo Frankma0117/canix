@@ -1,3 +1,4 @@
+import { withIcon } from '../util/icons.js';
 import { todosRepo } from '../db/repositories/todos.repo.js';
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
@@ -165,17 +166,17 @@ export function agendaView(userId: number, date: string = todayLocal()): { text:
     const log = habitLogsRepo.getForDate(r.id, date);
     if (log?.done) {
       doneCount++;
-      marked.push({ time, label: `${r.title} — hecha ✓` });
-    } else if (log) marked.push({ time, label: `${r.title} — no se hizo` });
-    else if (isPast || (isToday && time <= nowTime)) unmarked.push({ time, label: r.title });
-    else upcoming.push({ time, label: r.title });
+      marked.push({ time, label: `${withIcon(r.title)} — hecha ✓` });
+    } else if (log) marked.push({ time, label: `${withIcon(r.title)} — no se hizo` });
+    else if (isPast || (isToday && time <= nowTime)) unmarked.push({ time, label: withIcon(r.title) });
+    else upcoming.push({ time, label: withIcon(r.title) });
   }
 
   if (!isPast) {
     for (const rem of remindersRepo.listAll(userId, 'pending')) {
       if (rem.kind !== 'reminder' && rem.kind !== 'important_date' && rem.kind !== 'flexible') continue;
       const time = reminderTimeOn(rem, date);
-      if (time) upcoming.push({ time, label: rem.message });
+      if (time) upcoming.push({ time, label: withIcon(rem.message, '🔔') });
     }
   }
 
@@ -197,7 +198,7 @@ export function agendaView(userId: number, date: string = todayLocal()): { text:
   lines.push(...agendaBlock('🟢 *Marcadas*', marked, { fromEnd: true }));
   lines.push(...agendaBlock(isToday ? '🔵 *Lo que viene*' : '🔵 *Programado*', upcoming));
   if (todos.length > 0) {
-    lines.push('', `📌 *Pendientes sin hora* · ${todos.length}`, ...todos.slice(0, AGENDA_MAX_ROWS).map((t) => `⬜ ${t.title}`));
+    lines.push('', `📌 *Pendientes sin hora* · ${todos.length}`, ...todos.slice(0, AGENDA_MAX_ROWS).map((t) => `⬜ ${withIcon(t.title, '')}`.replace('⬜  ', '⬜ ')));
     if (todos.length > AGENDA_MAX_ROWS) lines.push(`_… y ${todos.length - AGENDA_MAX_ROWS} más_`);
   }
   return { text: lines.join('\n'), unmarked: isToday ? unmarked.length : 0 };

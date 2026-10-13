@@ -2,18 +2,18 @@ import { fashionSessionsRepo } from '../../db/repositories/fashion-sessions.repo
 import type { FashionRouterContext, FashionRouterResult } from '../router-types.js';
 
 export const HOME_MENU = `👔 *Fashion Mode*
+Escribe el *número*, o pídelo directo.
 
-¿Qué quieres hacer?
+1️⃣  📸 Agregar prenda
+2️⃣  👗 Ver mi armario
+3️⃣  ✨ Crear un outfit
+4️⃣  ❤️ Mis outfits guardados
+5️⃣  🚪 Salir
 
-1. 📸 Agregar prenda
-2. 👗 Ver mi armario
-3. ✨ Crear un outfit
-4. ❤️ Mis outfits guardados
-5. 🚪 Salir
-
-También puedes escribir directo: "armario", "armario camisas", "agregar prenda", "outfit boda",
-"mis outfits", "salir", "actualizar ropa" para que revise de nuevo todas tus prendas guardadas
-(color, ajuste, material y más), o "borrar todas las prendas" para vaciar el armario completo.`;
+> Sé tan específico como quieras:
+> "outfit para una boda formal con blazer azul, sin corbata"
+> "armario camisas blancas" · "zapatos favoritos"
+> *actualizar ropa* revisa de nuevo todas tus prendas`;
 
 export function enterHome(userId: number): string {
   fashionSessionsRepo.setState(userId, 'FASHION_HOME', {});
@@ -35,9 +35,12 @@ export async function handleHome(ctx: FashionRouterContext): Promise<FashionRout
     const { enterMyOutfits } = await import('./outfit.flow.js');
     return { consumed: true, reply: enterMyOutfits(ctx.userId) };
   }
+  if (/^(volver|menu|menú|inicio|atras|atrás|fashion|moda)$/.test(text)) {
+    return { consumed: true, reply: HOME_MENU };
+  }
   if (text === '5' || text === 'salir') {
     fashionSessionsRepo.clear(ctx.userId);
-    return { consumed: true, reply: '👋 Saliste de Fashion Mode.' };
+    return { consumed: true, reply: '👋 Saliste de Fashion Mode.\n\n> Escribe *fashion* cuando quieras volver' };
   }
 
   // "armario <filtro>" typed directly from home
@@ -52,7 +55,15 @@ export async function handleHome(ctx: FashionRouterContext): Promise<FashionRout
   // treated as an outfit request directly, per the user's own spec ("no un menú numérico forzado
   // si el lenguaje natural ya expresa la intención").
   if (text === '3' || /^(crear\s+)?outfit$/.test(text)) {
-    return { consumed: true, reply: '¿Para qué ocasión? (ej. "oficina", "boda", "algo casual para una cena")' };
+    return {
+      consumed: true,
+      reply:
+        '✨ *Crear un outfit*\n¿Para qué lo quieres? Dímelo con el detalle que tengas:\n\n' +
+        '- La ocasión: "oficina", "boda", "una cena"\n' +
+        '- El clima o qué tan formal: "con frío", "elegante", "relajado"\n' +
+        '- Prendas que sí o que no: "con mis tenis blancos", "sin chaqueta"\n\n' +
+        '> Ej. "cena elegante con frío, con el blazer, nada de negro"',
+    };
   }
   const outfitMatch = text.match(/^(?:crear\s+)?outfit\s+(.+)$/);
   const requestText = outfitMatch ? outfitMatch[1] : text;

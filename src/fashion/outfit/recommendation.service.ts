@@ -3,13 +3,16 @@ import { aiUsageRepo } from '../../db/repositories/ai-usage.repo.js';
 import { garmentsRepo } from '../../db/repositories/garments.repo.js';
 import { env } from '../../config/env.js';
 import { GARMENT_TYPES } from '../taxonomy.js';
-import { filterCandidates, type OutfitContext, type ScoredGarment } from './candidate-filter.js';
+import { filterCandidates, matchesMust, type OutfitContext, type ScoredGarment } from './candidate-filter.js';
+import { typeForCategory } from '../taxonomy.js';
 import { buildRuleBasedOutfit, validateAndFillPicks, type OutfitPick, type RuleBasedOutfit } from './rules.js';
 import { buildRecommendationPrompt } from './prompts.js';
 import { contextSignature, wardrobeHash, getCached, setCached, getShownCombos, comboSignature } from './cache.js';
 import type { GarmentType } from '../taxonomy.js';
 
 export interface RecommendationResult extends RuleBasedOutfit {
+  /** Garments the request asked for by name that the wardrobe simply doesn't have. */
+  missingMust?: { category: string; color?: string }[];
   reason: string;
   aiUsed: boolean;
   /** True when there were literally zero candidates in any role - nothing to recommend at all. */
@@ -47,21 +50,63 @@ export async function recommendOutfit(userId: number, context: OutfitContext, op
   const totalCandidates = GARMENT_TYPES.reduce((sum, t) => sum + byType[t].length, 0);
 
   if (totalCandidates === 0) {
-    return { picks: [], missingRoles: [...GARMENT_TYPES], usedFullBody: false, reason: '', aiUsed: false, emptyWardrobe: true };
+    return { picks: [], missingRoles: [...GARMENT_TYPES], usedFullBody: false, reason: '', aiUsed: false, emptyWardrobe: allGarments.length === 0 };
   }
 
   const shownCombos = opts.forceNew ? getShownCombos(userId, sig) : new Set<string>();
   const aiPicked = await tryAiRecommendation(userId, context, byType, [...shownCombos]);
 
-  const result: RuleBasedOutfit & { reason: string; aiUsed: boolean } = aiPicked
-    ? { ...validateAndFillPicks(aiPicked.picks, byType), reason: aiPicked.reason, aiUsed: true }
-    : { ...buildRuleBasedOutfit(byType), reason: '', aiUsed: false };
+  const preferFullBody = (context.mustHave ?? []).some((m) => typeForCategory(m.category) === 'FULL_BODY');
+  const picked: RuleBasedOutfit & { reason: string; aiUsed: boolean } = aiPicked
+    ? { ...validateAndFillPicks(aiPicked.picks, byType, { preferFullBody }), reason: aiPicked.reason, aiUsed: true }
+    : { ...buildRuleBasedOutfit(byType, { preferFullBody }), reason: '', aiUsed: false };
+  const result = { ...picked, ...enforceMustHave(picked.picks, byType, context) };
 
   const newShown = new Set(shownCombos);
   newShown.add(comboSignature(result.picks));
   setCached(userId, sig, hash, result, newShown);
 
   return { ...result, emptyWardrobe: false };
+}
+
+/**
+ * Makes sure every garment the request named is actually in the outfit: the model (or the
+ * top-score rule) may have picked something else for that role. For each one asked for, the best
+ * matching candidate takes its role's place (accessories are added alongside); the ones the
+ * wardrobe doesn't have at all are reported, never silently swapped for something similar.
+ */
+function enforceMustHave(
+  picks: OutfitPick[],
+  byType: Record<GarmentType, ScoredGarment[]>,
+  context: OutfitContext,
+): { picks: OutfitPick[]; missingMust: { category: string; color?: string }[] } {
+  let out = [...picks];
+  const missingMust: { category: string; color?: string }[] = [];
+  const byId = new Map<number, ScoredGarment['garment']>();
+  for (const type of GARMENT_TYPES) for (const { garment } of byType[type]) byId.set(garment.id, garment);
+
+  for (const must of context.mustHave ?? []) {
+    const role = typeForCategory(must.category);
+    if (!role) continue;
+    const candidate = byType[role].find((c) => matchesMust(c.garment, must)) ?? byType[role].find((c) => c.garment.category === must.category);
+    if (!candidate) {
+      missingMust.push(must);
+      continue;
+    }
+    if (!matchesMust(candidate.garment, must)) missingMust.push(must); // right kind, but not in that color
+    if (out.some((p) => p.garmentId === candidate.garment.id)) continue;
+    if (role === 'ACCESSORY') out.push({ garmentId: candidate.garment.id, role });
+    else if (role === 'FULL_BODY') out = [...out.filter((p) => p.role !== 'TOP' && p.role !== 'BOTTOM' && p.role !== 'FULL_BODY'), { garmentId: candidate.garment.id, role }];
+    else {
+      // a named top/bottom can't sit next to a full-body piece - the named garment wins
+      const kept = out.filter((p) => p.role !== role && !(p.role === 'FULL_BODY' && (role === 'TOP' || role === 'BOTTOM')));
+      out = [...kept, { garmentId: candidate.garment.id, role }];
+    }
+  }
+
+  const order: GarmentType[] = ['OUTERWEAR', 'TOP', 'FULL_BODY', 'BOTTOM', 'FOOTWEAR', 'ACCESSORY'];
+  out.sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role));
+  return { picks: out.filter((p) => byId.has(p.garmentId)), missingMust };
 }
 
 async function tryAiRecommendation(

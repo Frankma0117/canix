@@ -1,8 +1,9 @@
+import { withIcon } from '../util/icons.js';
 import { todayLocal, addDays, weekdayName } from '../util/datetime.js';
 import { jidToPhone } from '../util/jid.js';
-import { progressBar, timeChip } from '../util/wa-format.js';
+import { keycap, progressBar, timeChip } from '../util/wa-format.js';
 import { describeSchedule, scheduleOf } from './routine-schedule.js';
-import type { Category, Checklist, ChecklistItem, Contact, Link, MealPlan, Note, Reminder, Todo } from '../types/index.js';
+import type { Category, Checklist, ChecklistItem, Contact, Exercise, Link, MealPlan, Note, Reminder, Todo } from '../types/index.js';
 
 /**
  * How every "show me my ..." list looks on WhatsApp - one place, so links, contacts, notes, lists,
@@ -141,7 +142,7 @@ export function remindersView(reminders: Reminder[], linkUrl: (id: number) => st
     if (r.status === 'missed') notes.push('no se envió (el bot estaba caído)');
     const url = r.link_id ? linkUrl(r.link_id) : undefined;
     const when = r.kind === 'flexible' && r.window_start && r.window_end ? `\`${r.window_start}–${r.window_end}\`` : timeChip(r.run_at);
-    return `${when} ${r.message}${recurrenceTag(r)} ${idChip(r.id)}${notes.length ? `\n> ${notes.join(' · ')}` : ''}${url ? `\n${url}` : ''}`;
+    return `${when} ${withIcon(r.message, '🔔')}${recurrenceTag(r)} ${idChip(r.id)}${notes.length ? `\n> ${notes.join(' · ')}` : ''}${url ? `\n${url}` : ''}`;
   };
   return [
     `⏰ *${opts.title ?? 'Tus recordatorios'}* · ${reminders.length}`,
@@ -157,7 +158,7 @@ export function todosView(todos: Todo[], linkUrl: (id: number) => string | undef
     const url = t.link_id ? linkUrl(t.link_id) : undefined;
     if (t.scope === 'routine') {
       const s = scheduleOf(t);
-      return `${timeChip(s.time)} ${t.title} ${idChip(t.id)}\n> ${describeSchedule(s)}${t.duration_minutes ? ` · ${t.duration_minutes} min` : ''}${url ? `\n${url}` : ''}`;
+      return `${timeChip(s.time)} ${withIcon(t.title)} ${idChip(t.id)}\n> ${describeSchedule(s)}${t.duration_minutes ? ` · ${t.duration_minutes} min` : ''}${url ? `\n${url}` : ''}`;
     }
     const due = t.due_date && t.scope !== 'today' ? ` · ${dayLabel(t.due_date).toLowerCase()}` : '';
     return `${opts.done ? '☑️' : '⬜'} ${t.title}${due} ${idChip(t.id)}${url ? `\n${url}` : ''}`;
@@ -196,10 +197,27 @@ export function recipesView(recipes: { id: number; title: string; ingredients: s
   return [`📖 *Tus recetas* · ${recipes.length}`, '', ...recipes.map(line)].join('\n');
 }
 
+/** "4 × 12 · 20 kg", "3 × 45 s", "15 rep" - whatever the exercise has. */
+function exerciseDose(e: Exercise): string {
+  const amount = e.reps ? `${e.reps}${e.sets ? '' : ' rep'}` : e.seconds ? `${e.seconds} s` : '';
+  const sets = e.sets && amount ? `${e.sets} × ${amount}` : e.sets ? `${e.sets} series` : amount;
+  return [sets, e.weight_kg ? `${e.weight_kg} kg` : ''].filter(Boolean).join(' · ');
+}
+
+/** The exercises of a routine as a numbered block - what to do, in order. `withIds` adds each one's
+ *  `#12` (for the list the person edits from; left out of the notice, which is just to follow). */
+export function exercisesBlock(exercises: Exercise[], opts: { title?: string; withIds?: boolean } = {}): string {
+  const rows = exercises.map((e, i) => {
+    const dose = exerciseDose(e);
+    return `${keycap(i + 1)} ${e.name}${dose ? ` — ${dose}` : ''}${opts.withIds ? ` ${idChip(e.id)}` : ''}`;
+  });
+  return [`🏋️ *${opts.title ?? 'Ejercicios'}* · ${exercises.length}`, ...rows].join('\n');
+}
+
 /** Tools whose result is already a designed message (see above) rather than data to phrase. */
 const DESIGNED_TOOLS = new Set([
   'get_today_agenda', 'get_week_report', 'list_links', 'list_contacts', 'list_notes', 'list_lists', 'view_list',
-  'list_reminders', 'list_todos', 'list_categories', 'list_meal_plan', 'list_recipes',
+  'list_reminders', 'list_todos', 'list_categories', 'list_meal_plan', 'list_recipes', 'list_exercises',
 ]);
 const LIST_ROW_RE = /^(?:[-•]\s|`|\d+[.)]\s|[0-9]\uFE0F?\u20E3|#\d|[⬜☑✅🔗👤📝📋])/u;
 

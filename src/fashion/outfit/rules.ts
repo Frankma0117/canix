@@ -23,10 +23,10 @@ export interface RuleBasedOutfit {
  * outfit more sensible here" to chance: a full-body piece (vestido/traje) is only used when there
  * isn't a good top+bottom pairing available, and the two are never mixed in one outfit.
  */
-export function buildRuleBasedOutfit(byType: Record<GarmentType, ScoredGarment[]>): RuleBasedOutfit {
+export function buildRuleBasedOutfit(byType: Record<GarmentType, ScoredGarment[]>, opts: { preferFullBody?: boolean } = {}): RuleBasedOutfit {
   const missing: GarmentType[] = [];
   const picks: OutfitPick[] = [];
-  const usedFullBody = byType.FULL_BODY.length > 0 && (byType.TOP.length === 0 || byType.BOTTOM.length === 0);
+  const usedFullBody = byType.FULL_BODY.length > 0 && (opts.preferFullBody || byType.TOP.length === 0 || byType.BOTTOM.length === 0);
 
   if (usedFullBody) {
     if (byType.FULL_BODY[0]) picks.push({ garmentId: byType.FULL_BODY[0].garment.id, role: 'FULL_BODY' });
@@ -57,7 +57,7 @@ export function buildRuleBasedOutfit(byType: Record<GarmentType, ScoredGarment[]
  * top pick for that role (see buildRuleBasedOutfit) - the user always gets a complete, valid
  * outfit back, never a broken partial one just because one AI-picked id didn't check out.
  */
-export function validateAndFillPicks(aiPicks: OutfitPick[], byType: Record<GarmentType, ScoredGarment[]>): RuleBasedOutfit {
+export function validateAndFillPicks(aiPicks: OutfitPick[], byType: Record<GarmentType, ScoredGarment[]>, opts: { preferFullBody?: boolean } = {}): RuleBasedOutfit {
   const validById = new Map<number, GarmentType>();
   for (const type of GARMENT_TYPES) {
     for (const { garment } of byType[type]) validById.set(garment.id, type);
@@ -73,7 +73,7 @@ export function validateAndFillPicks(aiPicks: OutfitPick[], byType: Record<Garme
       ? valid.filter((p) => (valid.filter((v) => v.role === 'FULL_BODY').length >= valid.filter((v) => v.role === 'TOP' || v.role === 'BOTTOM').length ? p.role !== 'TOP' && p.role !== 'BOTTOM' : p.role !== 'FULL_BODY'))
       : valid;
 
-  const fallback = buildRuleBasedOutfit(byType);
+  const fallback = buildRuleBasedOutfit(byType, opts);
   const picks = [...filtered];
   const missing: GarmentType[] = [];
 

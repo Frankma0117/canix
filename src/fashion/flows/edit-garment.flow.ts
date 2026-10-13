@@ -5,6 +5,7 @@ import type { GarmentType } from '../taxonomy.js';
 import type { FashionSessionData } from '../types.js';
 import type { FashionRouterContext, FashionRouterResult } from '../router-types.js';
 import { HOME_MENU } from './home.flow.js';
+import { garmentLabel } from '../look.js';
 
 const EDITABLE_FIELDS = ['type', 'category', 'color', 'material', 'fit', 'favorite'] as const;
 type EditableField = (typeof EDITABLE_FIELDS)[number];
@@ -34,13 +35,9 @@ export function showGarmentDetail(userId: number, garmentId: number): string {
 
   fashionSessionsRepo.setState(userId, 'FASHION_GARMENT_DETAIL', { selectedGarmentId: garmentId } satisfies FashionSessionData);
 
-  const header = garment.favorite ? '❤️ ' : '';
-  const description = garment.long_description ?? `${categoryLabel(garment.category)}${garment.color ? `, color ${garment.color}` : ''}.`;
-
-  const lines = [
-    `${header}${description}`,
-    `🖼️ ${garment.image_url}`,
-  ];
+  const lines = [`*${garmentLabel(garment).replace(/^(\S+) /, '$1 ').replace(' ❤️', '')}*${garment.favorite ? ' ❤️' : ''}`];
+  if (garment.long_description) lines.push(garment.long_description);
+  lines.push(garment.image_url);
 
   let confidenceMeta: Record<string, { tier: string }> = {};
   try {
@@ -49,10 +46,10 @@ export function showGarmentDetail(userId: number, garmentId: number): string {
     confidenceMeta = {};
   }
   if (Object.values(confidenceMeta).some((m) => m.tier === 'baja')) {
-    lines.push('⚠️ Algunos datos son una estimación con confianza baja.');
+    lines.push('> Algunos datos son una estimación: corrígelos con *Editar* si no coinciden');
   }
 
-  lines.push('', '1. Marcar/quitar favorito', '2. Editar', '3. Eliminar', '4. Volver al armario');
+  lines.push('', `1️⃣  ${garment.favorite ? '🤍 Quitar de favoritos' : '❤️ Marcar favorito'}`, '2️⃣  ✏️ Editar', '3️⃣  🗑️ Eliminar', '4️⃣  ↩️ Volver al armario');
 
   return lines.join('\n');
 }

@@ -6,7 +6,10 @@ import { usersRepo } from '../../db/repositories/users.repo.js';
 import { parseOutfitIntent } from '../outfit/intent.js';
 import { recommendOutfit } from '../outfit/recommendation.service.js';
 import type { OutfitContext } from '../outfit/candidate-filter.js';
-import { CATEGORIES_BY_TYPE, GARMENT_TYPE_LABELS } from '../taxonomy.js';
+import { GARMENT_TYPE_LABELS } from '../taxonomy.js';
+import { refineContext } from '../outfit/request.js';
+import { categoryEmoji, categoryLabel, colorFor, describeRequest, garmentLabel, humanize } from '../look.js';
+import { keycap } from '../../util/wa-format.js';
 import type { GarmentType } from '../taxonomy.js';
 import type { FashionSessionData } from '../types.js';
 import type { FashionRouterContext, FashionRouterResult } from '../router-types.js';
@@ -44,17 +47,8 @@ function withProfileDefaults(userId: number, context: OutfitContext): OutfitCont
   return merged;
 }
 
-const ROLE_EMOJI: Record<string, string> = {
-  TOP: '👕', BOTTOM: '👖', FULL_BODY: '👗', OUTERWEAR: '🧥', FOOTWEAR: '👞', ACCESSORY: '⌚',
-};
-
-function categoryLabel(category: string): string {
-  for (const cats of Object.values(CATEGORIES_BY_TYPE)) {
-    const match = cats.find((c) => c.value === category);
-    if (match) return match.label;
-  }
-  return category;
-}
+const RESULT_OPTIONS = '1️⃣  💾 Guardar este outfit\n2️⃣  🔄 Dame otra opción\n3️⃣  ↩️ Volver';
+const REFINE_HINT = '> Ajústalo escribiendo: "sin chaqueta", "con tenis", "más formal", "nada de negro"';
 
 /**
  * Entry point for a free-form outfit request ("outfit para una boda", "algo fresco pero elegante
@@ -75,45 +69,57 @@ export async function enterOutfitRequest(ctx: FashionRouterContext, rawText: str
     return `Todavía no tienes prendas guardadas - agrega algunas primero con "agregar prenda".\n\n${HOME_MENU}`;
   }
 
-  return renderResult(ctx, context as Record<string, unknown>, result.picks, result.missingRoles, result.reason);
+  return renderResult(ctx, context, result);
 }
 
 async function renderResult(
   ctx: FashionRouterContext,
-  context: Record<string, unknown>,
-  picks: { garmentId: number; role: GarmentType }[],
-  missingRoles: GarmentType[],
-  reason: string,
+  context: OutfitContext,
+  result: { picks: { garmentId: number; role: GarmentType }[]; missingRoles: GarmentType[]; missingMust?: { category: string; color?: string }[]; reason: string },
 ): Promise<string> {
+  const { picks, missingRoles, reason } = result;
   fashionSessionsRepo.setState(ctx.userId, 'FASHION_OUTFIT_RESULT', {
-    outfit: { context, picks, missingRoles, reason },
+    outfit: { context: context as Record<string, unknown>, picks, missingRoles, reason },
   } satisfies FashionSessionData);
 
+  const asked = describeRequest(context);
+  const missingMust = (result.missingMust ?? []).map((m) => {
+    const label = `${categoryLabel(m.category).toLowerCase()}${m.color ? ` ${colorFor(m.category, m.color)}` : ''}`;
+    const owned = garmentsRepo.listAllActive(ctx.userId).some((g) => g.category === m.category);
+    return owned ? `No tienes ${label}, usé la que más se acerca` : `No tienes ${label} en tu armario`;
+  });
+
   if (picks.length === 0) {
-    return `No tengo suficientes prendas compatibles para armarte un outfit todavía.\n\n1. Volver`;
+    return [
+      '✨ *Tu outfit*',
+      ...(asked ? [`🎯 ${asked}`] : []),
+      '',
+      'Con eso no me alcanzan las prendas de tu armario para armar una combinación.',
+      ...missingMust.map((m) => `> ${m}`),
+      '',
+      '1️⃣  ↩️ Volver',
+      '> O pídelo menos específico',
+    ].join('\n');
   }
 
-  const lines = ['✨ *Outfit recomendado*', ''];
+  const lines = ['✨ *Tu outfit*', ...(asked ? [`🎯 ${asked}`] : []), ''];
   const imagesToSend: { url: string; caption: string }[] = [];
 
   for (const pick of picks) {
     const garment = garmentsRepo.getById(ctx.userId, pick.garmentId);
     if (!garment) continue;
-    const emoji = ROLE_EMOJI[pick.role] ?? '👕';
-    lines.push(`${emoji} ${categoryLabel(garment.category)}${garment.color ? ` ${garment.color}` : ''}`);
+    lines.push(garmentLabel(garment));
     // The full-resolution original, not the small wardrobe-listing thumbnail - this is the "here's
     // what I picked for you" moment, where a handful of photos going out at once matters more than
     // it does for scrolling through a whole wardrobe list (see list-garments.flow.ts, which still
     // uses the thumbnail on purpose for that different case).
-    imagesToSend.push({ url: garment.image_url, caption: `${emoji} ${categoryLabel(garment.category)}` });
+    imagesToSend.push({ url: garment.image_url, caption: garmentLabel({ ...garment, favorite: 0 }) });
   }
 
-  for (const role of missingRoles) {
-    lines.push(`⚠️ No tienes ${GARMENT_TYPE_LABELS[role].toLowerCase()} adecuado para esto todavía.`);
-  }
-
-  if (reason) lines.push('', `¿Por qué? ${reason}`);
-  lines.push('', '1. Guardar este outfit', '2. Dame otra opción', '3. Volver');
+  const notes = [...missingMust, ...missingRoles.map((role) => `No tienes ${GARMENT_TYPE_LABELS[role].toLowerCase()} que sirva para esto`)];
+  if (reason) lines.push('', `💬 ${reason}`);
+  if (notes.length) lines.push('', ...notes.map((n) => `> ${n}`));
+  lines.push('', RESULT_OPTIONS, REFINE_HINT);
 
   // Best-effort, never blocks the text summary above (which already went out via the returned
   // reply) - a few photos, not the whole wardrobe, matching the "no enviar todo de golpe" spirit.
@@ -167,20 +173,41 @@ export async function handleOutfitResult(ctx: FashionRouterContext): Promise<Fas
     );
     console.log('[FASHION] Outfit #%d guardado para el usuario #%d.', id, ctx.userId);
     fashionSessionsRepo.setState(ctx.userId, 'FASHION_HOME', {});
-    return { consumed: true, reply: `✅ Outfit #${id} guardado.\n\n${HOME_MENU}` };
+    return { consumed: true, reply: `✅ *Outfit guardado* · lo encuentras en "mis outfits"\n\n${HOME_MENU}` };
   }
 
   if (text === '2' || /^otra/i.test(text)) {
     const { recommendOutfit } = await import('../outfit/recommendation.service.js');
     const result = await recommendOutfit(ctx.userId, outfit.context, { forceNew: true });
     if (result.emptyWardrobe || result.picks.length === 0) {
-      return { consumed: true, reply: 'No tengo otra combinación distinta para ofrecerte con lo que tienes guardado.\n\n1. Guardar este outfit\n2. Dame otra opción\n3. Volver' };
+      return { consumed: true, reply: `No tengo otra combinación distinta con lo que tienes guardado.\n\n${RESULT_OPTIONS}\n${REFINE_HINT}` };
     }
-    const reply = await renderResult(ctx, outfit.context, result.picks, result.missingRoles, result.reason);
+    const reply = await renderResult(ctx, outfit.context as OutfitContext, result);
     return { consumed: true, reply };
   }
 
-  return { consumed: true, reply: '1. Guardar este outfit\n2. Dame otra opción\n3. Volver' };
+  // Going somewhere else in Fashion Mode isn't an adjustment to this outfit.
+  if (/^(armario|mis prendas|mis outfits|agregar|guardar ropa|menu|menú|inicio|fashion|moda)\b/i.test(text)) {
+    fashionSessionsRepo.setState(ctx.userId, 'FASHION_HOME', {});
+    const { handleHome } = await import('./home.flow.js');
+    return handleHome(ctx);
+  }
+
+  // Anything else adjusts the request being worked on: "sin chaqueta", "con tenis blancos", "más
+  // formal", "mejor para clima frío" - merged onto it (see outfit/request.ts) and recommended again.
+  const change = await parseOutfitIntent(ctx.userId, text);
+  if (Object.values(change).every((v) => v === undefined || (Array.isArray(v) && v.length === 0))) {
+    return { consumed: true, reply: `No entendí ese ajuste.\n\n${RESULT_OPTIONS}\n${REFINE_HINT}` };
+  }
+  const refined = withProfileDefaults(ctx.userId, refineContext(outfit.context as OutfitContext, change));
+  const { recommendOutfit: recommend } = await import('../outfit/recommendation.service.js');
+  const refinedResult = await recommend(ctx.userId, refined, { forceNew: true });
+  return { consumed: true, reply: await renderResult(ctx, refined, refinedResult) };
+}
+
+function outfitTitle(o: { id: number; occasion: string | null; name: string | null; favorite: number }): string {
+  const label = o.name ?? (o.occasion ? `Para ${humanize(o.occasion)}` : `Outfit #${o.id}`);
+  return `${label}${o.favorite ? ' ❤️' : ''}`;
 }
 
 export function enterMyOutfits(userId: number): string {
@@ -189,15 +216,14 @@ export function enterMyOutfits(userId: number): string {
     lastListedOutfitIds: rows.map((o) => o.id),
   } satisfies FashionSessionData);
 
-  if (total === 0) return 'No tienes outfits guardados todavía.\n\n1. Volver';
+  if (total === 0) return '❤️ *Tus outfits guardados*\nTodavía no has guardado ninguno.\n\n1️⃣  ↩️ Volver\n\n> Crea uno con "outfit para la oficina" y guárdalo';
 
-  const lines = ['❤️ *Tus outfits guardados*', ''];
+  const lines = [`❤️ *Tus outfits guardados* · ${total}`, ''];
   rows.forEach((o, i) => {
-    const fav = o.favorite ? ' ❤️' : '';
-    const label = o.occasion ?? o.name ?? `Outfit #${o.id}`;
-    lines.push(`${i + 1}. ${label}${fav} (${o.garments.length} prenda${o.garments.length === 1 ? '' : 's'})`);
+    lines.push(`${keycap(i + 1)}  *${outfitTitle(o)}*`);
+    lines.push(`> ${o.garments.map((link) => categoryEmoji(link.garment.category, link.role)).join(' ')}  ${o.garments.length} prenda${o.garments.length === 1 ? '' : 's'}`);
   });
-  lines.push('', 'Responde con un número para ver el detalle, o "volver".');
+  lines.push('', '> Escribe el número para ver uno · *volver*');
   return lines.join('\n');
 }
 
@@ -205,22 +231,21 @@ export async function handleMyOutfitsList(ctx: FashionRouterContext): Promise<Fa
   const data = fashionSessionsRepo.getData<FashionSessionData>(ctx.userId);
   const text = ctx.text.trim().toLowerCase();
 
-  if (text === 'volver' || text === '1') {
+  const ids = data.lastListedOutfitIds ?? [];
+  // "1" is "Volver" only on the empty screen - with outfits listed it's the first one.
+  if (text === 'volver' || (text === '1' && ids.length === 0)) {
     fashionSessionsRepo.setState(ctx.userId, 'FASHION_HOME', {});
     return { consumed: true, reply: HOME_MENU };
   }
 
-  const ids = data.lastListedOutfitIds ?? [];
   const choice = Number(text);
   if (Number.isInteger(choice) && choice >= 1 && choice <= ids.length) {
     const outfit = outfitsRepo.getById(ctx.userId, ids[choice - 1]);
     if (!outfit) return { consumed: true, reply: 'No encontré ese outfit.' };
-    const lines = [`${outfit.occasion ?? outfit.name ?? `Outfit #${outfit.id}`}${outfit.favorite ? ' ❤️' : ''}`, ''];
-    for (const link of outfit.garments) {
-      lines.push(`${ROLE_EMOJI[link.role] ?? '👕'} ${categoryLabel(link.garment.category)}${link.garment.color ? ` ${link.garment.color}` : ''}`);
-    }
-    if (outfit.ai_reason) lines.push('', outfit.ai_reason);
-    lines.push('', '(vuelve a escribir "mis outfits" para ver la lista de nuevo)');
+    const lines = [`✨ *${outfitTitle(outfit)}*`, ''];
+    for (const link of outfit.garments) lines.push(garmentLabel(link.garment));
+    if (outfit.ai_reason) lines.push('', `💬 ${outfit.ai_reason}`);
+    lines.push('', '> Escribe otro número para ver otro · *volver*');
     return { consumed: true, reply: lines.join('\n') };
   }
 

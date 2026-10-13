@@ -1,7 +1,8 @@
 import { getAiClient } from '../../agent/provider.js';
 import { aiUsageRepo } from '../../db/repositories/ai-usage.repo.js';
-import { normalizeOccasion, normalizeColor } from '../taxonomy.js';
+import { OCCASIONS, FORMALITY, SEASONS, WEATHER, STYLES, isValidCategory, normalizeColor } from '../taxonomy.js';
 import { buildIntentPrompt } from './prompts.js';
+import { parseRequestLocally, refineContext } from './request.js';
 import type { OutfitContext } from './candidate-filter.js';
 
 interface RawIntent {
@@ -12,39 +13,49 @@ interface RawIntent {
   style?: string | null;
   colorsPreferred?: string[] | null;
   colorsAvoided?: string[] | null;
+  mustHave?: { category?: string | null; color?: string | null }[] | null;
+  excludeCategories?: string[] | null;
 }
 
+const oneOf = (pool: readonly string[], value: string | null | undefined) => (value && pool.includes(value) ? value : undefined);
+const colors = (list: string[] | null | undefined) => {
+  const out = [...new Set((list ?? []).map((c) => normalizeColor(String(c))).filter((c): c is string => !!c))];
+  return out.length ? out : undefined;
+};
+
+/** Keeps only what's in the wardrobe's own vocabulary - the model's answer is never trusted as is. */
 function clean(raw: RawIntent): OutfitContext {
+  const mustHave = (raw.mustHave ?? [])
+    .filter((m) => m?.category && isValidCategory(m.category))
+    .map((m) => ({ category: m.category as string, ...(m.color && normalizeColor(m.color) ? { color: normalizeColor(m.color) as string } : {}) }));
+  const excludeCategories = (raw.excludeCategories ?? []).filter((c) => typeof c === 'string' && isValidCategory(c));
   return {
-    occasion: raw.occasion ?? undefined,
-    formality: raw.formality ?? undefined,
-    season: raw.season ?? undefined,
-    weather: raw.weather ?? undefined,
-    style: raw.style ?? undefined,
-    colorsPreferred: raw.colorsPreferred ?? undefined,
-    colorsAvoided: raw.colorsAvoided ?? undefined,
+    occasion: oneOf(OCCASIONS, raw.occasion),
+    formality: oneOf(FORMALITY, raw.formality),
+    season: oneOf(SEASONS, raw.season),
+    weather: oneOf(WEATHER, raw.weather),
+    style: oneOf(STYLES, raw.style),
+    colorsPreferred: colors(raw.colorsPreferred),
+    colorsAvoided: colors(raw.colorsAvoided),
+    ...(mustHave.length ? { mustHave } : {}),
+    ...(excludeCategories.length ? { excludeCategories } : {}),
   };
 }
 
 /**
- * Turns free text ("outfit para una boda", "algo fresco pero elegante para salir con mi novia")
- * into a structured OutfitContext. Structured requests (a single word/phrase that directly matches
- * a known occasion, e.g. "boda", "oficina") are resolved LOCALLY first, at zero AI cost - this is
- * the common case (the user's own spec explicitly lists "outfit oficina"/"outfit boda" as the
- * expected everyday phrasing). Only genuinely ambiguous/descriptive text falls through to a
- * DeepSeek call (see prompts.ts's buildIntentPrompt) - never images, never conversation history,
- * just this one line of text, minimizing tokens per the user's explicit priority.
+ * Turns an outfit request into a structured OutfitContext. A request made of things the wardrobe
+ * already has words for - the occasion, how formal, the weather, garments to include or leave
+ * out, colors ("boda de noche formal con blazer azul marino, sin corbata") - is read LOCALLY at
+ * zero AI cost (see request.ts), however many of them it combines. Only when words are left over
+ * that nothing here recognizes does one DeepSeek call read the sentence (see prompts.ts) - never
+ * images, never conversation history - and even then whatever was read locally wins.
  */
 export async function parseOutfitIntent(userId: number, text: string): Promise<OutfitContext> {
   const trimmed = text.trim();
-  const localOccasion = normalizeOccasion(trimmed);
-  if (localOccasion) {
-    console.log('[FASHION] Intención resuelta localmente (sin IA): occasion=%s', localOccasion);
-    return { occasion: localOccasion };
-  }
-  const localColor = normalizeColor(trimmed);
-  if (localColor) {
-    return { colorsPreferred: [localColor] };
+  const local = parseRequestLocally(trimmed);
+  if (local.leftover.length <= 1) {
+    console.log('[FASHION] Petición leída localmente (sin IA): %s', JSON.stringify(local.context));
+    return local.context;
   }
 
   try {
@@ -53,7 +64,7 @@ export async function parseOutfitIntent(userId: number, text: string): Promise<O
       model,
       messages: [{ role: 'user', content: buildIntentPrompt(trimmed) }],
       temperature: 0.2,
-      max_tokens: 200,
+      max_tokens: 300,
       response_format: { type: 'json_object' },
     });
 
@@ -61,12 +72,12 @@ export async function parseOutfitIntent(userId: number, text: string): Promise<O
     if (usage) aiUsageRepo.log(userId, 'fashion_intent', model, usage.prompt_tokens, usage.completion_tokens);
 
     const content = res.choices[0]?.message?.content;
-    if (!content) return {};
-    const parsed = JSON.parse(content) as RawIntent;
-    console.log('[FASHION] Intención clasificada por IA: %s', JSON.stringify(parsed));
-    return clean(parsed);
+    if (!content) return local.context;
+    const parsed = clean(JSON.parse(content) as RawIntent);
+    console.log('[FASHION] Petición leída con IA (sobraban: %s): %s', local.leftover.join(' '), JSON.stringify(parsed));
+    return refineContext(parsed, local.context);
   } catch (err) {
-    console.error('[FASHION] No se pudo clasificar la intención con IA, sigo sin contexto extra:', (err as Error).message);
-    return {};
+    console.error('[FASHION] No se pudo leer la petición con IA, sigo con lo entendido localmente:', (err as Error).message);
+    return local.context;
   }
 }
