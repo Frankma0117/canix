@@ -5,6 +5,7 @@ import { initAccessSchema } from './schema-access.js';
 import { initSchedulingSchema } from './schema-scheduling.js';
 import { initGrowthSchema } from '../growth/schema.js';
 import { inferListKind } from '../util/list-kinds.js';
+import { CATEGORIES_BY_TYPE } from '../fashion/taxonomy.js';
 
 /**
  * Creates every table if it doesn't exist yet, and runs the small set of idempotent migrations
@@ -557,6 +558,17 @@ export function initSchema(): void {
     )
     WHERE scope = 'routine' AND recurrence_freq = 'weekly' AND weekdays IS NULL
   `);
+
+  // Wardrobe upkeep (see fashion/upkeep.ts): the photo's fingerprint, to spot the same picture saved
+  // twice, and when its color was last read from the photo.
+  ensureColumn('garments', 'image_hash', 'image_hash TEXT');
+  ensureColumn('garments', 'color_checked_at', 'color_checked_at TEXT');
+  // A garment's type is decided by what it is: trousers saved as a "top" (the classifier got the
+  // type wrong but the category right) could never be picked as the bottom of an outfit.
+  for (const [type, categories] of Object.entries(CATEGORIES_BY_TYPE)) {
+    const marks = categories.map(() => '?').join(',');
+    db.prepare(`UPDATE garments SET type = ? WHERE type != ? AND category IN (${marks})`).run(type, type, ...categories.map((c) => c.value));
+  }
 
   // What a list is a list of - musica/peliculas/series/libros/juegos/compras/general (see
   // util/list-kinds.ts). Lists created before this existed are classified once from their name;

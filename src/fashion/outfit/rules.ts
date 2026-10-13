@@ -1,6 +1,7 @@
 import { GARMENT_TYPES } from '../taxonomy.js';
 import type { GarmentType } from '../taxonomy.js';
 import type { ScoredGarment } from './candidate-filter.js';
+import { colorHarmony } from './sense.js';
 
 export interface OutfitPick {
   garmentId: number;
@@ -23,6 +24,20 @@ export interface RuleBasedOutfit {
  * outfit more sensible here" to chance: a full-body piece (vestido/traje) is only used when there
  * isn't a good top+bottom pairing available, and the two are never mixed in one outfit.
  */
+/** The candidate with the best score once how its color sits with what's already picked is counted. */
+function best(candidates: ScoredGarment[], colors: (string | null | undefined)[]): ScoredGarment | undefined {
+  let winner: ScoredGarment | undefined;
+  let winnerScore = -Infinity;
+  for (const c of candidates) {
+    const total = c.score + colors.reduce((sum, color) => sum + colorHarmony(color, c.garment.color), 0);
+    if (total > winnerScore) {
+      winner = c;
+      winnerScore = total;
+    }
+  }
+  return winner;
+}
+
 export function buildRuleBasedOutfit(byType: Record<GarmentType, ScoredGarment[]>, opts: { preferFullBody?: boolean } = {}): RuleBasedOutfit {
   const missing: GarmentType[] = [];
   const picks: OutfitPick[] = [];
@@ -32,13 +47,18 @@ export function buildRuleBasedOutfit(byType: Record<GarmentType, ScoredGarment[]
     if (byType.FULL_BODY[0]) picks.push({ garmentId: byType.FULL_BODY[0].garment.id, role: 'FULL_BODY' });
     else missing.push('FULL_BODY');
   } else {
-    if (byType.TOP[0]) picks.push({ garmentId: byType.TOP[0].garment.id, role: 'TOP' });
+    const top = byType.TOP[0];
+    if (top) picks.push({ garmentId: top.garment.id, role: 'TOP' });
     else missing.push('TOP');
-    if (byType.BOTTOM[0]) picks.push({ garmentId: byType.BOTTOM[0].garment.id, role: 'BOTTOM' });
+    // the bottom that best goes with that top, not just the highest-scored one on its own
+    const bottom = best(byType.BOTTOM, [top?.garment.color]);
+    if (bottom) picks.push({ garmentId: bottom.garment.id, role: 'BOTTOM' });
     else missing.push('BOTTOM');
   }
 
-  if (byType.FOOTWEAR[0]) picks.push({ garmentId: byType.FOOTWEAR[0].garment.id, role: 'FOOTWEAR' });
+  const worn = picks.map((p) => GARMENT_TYPES.flatMap((t) => byType[t]).find((c) => c.garment.id === p.garmentId)?.garment.color);
+  const shoes = best(byType.FOOTWEAR, worn);
+  if (shoes) picks.push({ garmentId: shoes.garment.id, role: 'FOOTWEAR' });
   else missing.push('FOOTWEAR');
 
   if (byType.OUTERWEAR[0]) picks.push({ garmentId: byType.OUTERWEAR[0].garment.id, role: 'OUTERWEAR' }); // optional, not "missing"
@@ -63,7 +83,14 @@ export function validateAndFillPicks(aiPicks: OutfitPick[], byType: Record<Garme
     for (const { garment } of byType[type]) validById.set(garment.id, type);
   }
 
-  const valid = aiPicks.filter((p) => validById.get(p.garmentId) === p.role);
+  const seenRoles = new Set<GarmentType>();
+  const valid = aiPicks.filter((p) => {
+    if (validById.get(p.garmentId) !== p.role) return false;
+    // one of each, except accessories (two coats in the same outfit slipped through before)
+    if (p.role !== 'ACCESSORY' && seenRoles.has(p.role)) return false;
+    seenRoles.add(p.role);
+    return true;
+  });
   const hasFullBody = valid.some((p) => p.role === 'FULL_BODY');
   const hasLayered = valid.some((p) => p.role === 'TOP' || p.role === 'BOTTOM');
   // If the AI mixed both branches, prefer whichever has more valid picks - drop the other branch

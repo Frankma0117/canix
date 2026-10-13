@@ -305,6 +305,9 @@ export interface Recipe {
 export interface Garment {
   id: number;
   user_id: number;
+  // Fingerprint of the photo and when its color was read from it - see fashion/upkeep.ts.
+  image_hash: string | null;
+  color_checked_at: string | null;
   public_id: string;
   storage_key: string;
   image_url: string;

@@ -57,7 +57,8 @@ Contexto: ${contextLine || '(sin restricciones específicas)'}${mustLine}
 Candidatos por rol (SOLO puedes usar estos ids, nunca inventes uno):
 ${candidateLines}${avoidLine}
 
-Reglas: usa TOP+BOTTOM o FULL_BODY, nunca ambos a la vez. FOOTWEAR siempre que haya candidatos. OUTERWEAR y ACCESSORY son opcionales.
+Reglas: usa TOP+BOTTOM o FULL_BODY, nunca ambos a la vez. UNA sola prenda por rol (salvo ACCESSORY). FOOTWEAR siempre que haya candidatos. OUTERWEAR solo si aparece en los candidatos; ACCESSORY es opcional.
+Combina colores con criterio: los neutros (negro, blanco, gris, beige, azul_marino, café) van con todo; evita juntar dos colores fuertes distintos o el mismo color fuerte arriba y abajo. Varía: no repitas siempre la primera prenda de cada lista.
 
 Responde SOLO con este JSON exacto, sin texto adicional:
 {"picks":[{"garmentId":0,"role":"TOP"}],"reason":"una frase corta explicando por qué"}`;

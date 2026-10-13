@@ -5,9 +5,10 @@ import { env } from '../../config/env.js';
 import { GARMENT_TYPES } from '../taxonomy.js';
 import { filterCandidates, matchesMust, type OutfitContext, type ScoredGarment } from './candidate-filter.js';
 import { typeForCategory } from '../taxonomy.js';
+import { outerwearWanted, rememberShown, withOccasionNeeds } from './sense.js';
 import { buildRuleBasedOutfit, validateAndFillPicks, type OutfitPick, type RuleBasedOutfit } from './rules.js';
 import { buildRecommendationPrompt } from './prompts.js';
-import { contextSignature, wardrobeHash, getCached, setCached, getShownCombos, comboSignature } from './cache.js';
+import { contextSignature, wardrobeHash, setCached, getShownCombos, comboSignature } from './cache.js';
 import type { GarmentType } from '../taxonomy.js';
 
 export interface RecommendationResult extends RuleBasedOutfit {
@@ -33,27 +34,30 @@ interface AiResponseShape {
  * genuinely can't cover a role) - see the user's own "REGLA CRÍTICA CONTRA ALUCINACIONES" and
  * error-handling requirements.
  */
-export async function recommendOutfit(userId: number, context: OutfitContext, opts: { forceNew?: boolean } = {}): Promise<RecommendationResult> {
+export async function recommendOutfit(userId: number, request: OutfitContext, opts: { forceNew?: boolean } = {}): Promise<RecommendationResult> {
   const allGarments = garmentsRepo.listAllActive(userId);
   const hash = wardrobeHash(allGarments);
-  const sig = contextSignature(context as Record<string, unknown>);
+  const sig = contextSignature(request as Record<string, unknown>);
+  // What the occasion implies (how formal, what kinds of garment) when the request didn't say.
+  const context = withOccasionNeeds(request);
 
-  if (!opts.forceNew) {
-    const cached = getCached(userId, sig, hash);
-    if (cached) {
-      console.log('[FASHION] Recomendación servida desde cache para #%d (sin llamar a la IA).', userId);
-      return { ...cached.result, emptyWardrobe: false };
-    }
-  }
+  // No answer is replayed from a cache: asking again is asking for something else. What was shown
+  // for this same request is remembered so the next one differs.
+  const shownCombos = getShownCombos(userId, sig);
+  void opts;
 
-  const byType = filterCandidates(allGarments, context, env.fashion.ai.maxCandidatesPerRole);
+  const byType = filterCandidates(allGarments, context, env.fashion.ai.maxCandidatesPerRole, userId);
   const totalCandidates = GARMENT_TYPES.reduce((sum, t) => sum + byType[t].length, 0);
 
   if (totalCandidates === 0) {
     return { picks: [], missingRoles: [...GARMENT_TYPES], usedFullBody: false, reason: '', aiUsed: false, emptyWardrobe: allGarments.length === 0 };
   }
 
-  const shownCombos = opts.forceNew ? getShownCombos(userId, sig) : new Set<string>();
+  // A jacket or coat only when the request, the weather or the formality calls for one.
+  const outer = outerwearWanted(context, byType.OUTERWEAR.some((c) => c.garment.category === 'blazer'));
+  if (outer === 'none') byType.OUTERWEAR = [];
+  else if (outer === 'blazer') byType.OUTERWEAR = byType.OUTERWEAR.filter((c) => c.garment.category === 'blazer');
+
   const aiPicked = await tryAiRecommendation(userId, context, byType, [...shownCombos]);
 
   const preferFullBody = (context.mustHave ?? []).some((m) => typeForCategory(m.category) === 'FULL_BODY');
@@ -65,6 +69,7 @@ export async function recommendOutfit(userId: number, context: OutfitContext, op
   const newShown = new Set(shownCombos);
   newShown.add(comboSignature(result.picks));
   setCached(userId, sig, hash, result, newShown);
+  rememberShown(userId, result.picks.map((p) => p.garmentId));
 
   return { ...result, emptyWardrobe: false };
 }

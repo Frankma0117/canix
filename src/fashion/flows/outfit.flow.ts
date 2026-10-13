@@ -116,7 +116,12 @@ async function renderResult(
     imagesToSend.push({ url: garment.image_url, caption: garmentLabel({ ...garment, favorite: 0 }) });
   }
 
-  const notes = [...missingMust, ...missingRoles.map((role) => `No tienes ${GARMENT_TYPE_LABELS[role].toLowerCase()} que sirva para esto`)];
+  const MISSING: Partial<Record<GarmentType, string>> = {
+    BOTTOM: 'No tienes pantalones, jeans ni faldas guardados: mándame una foto de cada uno ("agregar prenda") y los combino',
+    TOP: 'No tienes camisas ni camisetas guardadas que sirvan para esto',
+    FOOTWEAR: 'No tienes zapatos guardados que sirvan para esto',
+  };
+  const notes = [...missingMust, ...missingRoles.map((role) => MISSING[role] ?? `No tienes ${GARMENT_TYPE_LABELS[role].toLowerCase()} que sirva para esto`)];
   if (reason) lines.push('', `💬 ${reason}`);
   if (notes.length) lines.push('', ...notes.map((n) => `> ${n}`));
   lines.push('', RESULT_OPTIONS, REFINE_HINT);

@@ -1,3 +1,4 @@
+import { wardrobeUpkeep } from './fashion/upkeep.js';
 import { quietLibsignalLogs } from './util/quiet-libsignal.js';
 import { acquireSingleInstanceLock } from './util/single-instance.js';
 import { env } from './config/env.js';
@@ -95,6 +96,11 @@ async function main() {
     expireDemos(bot.session).catch((err) => console.error('[DEMO] Error venciendo demos:', (err as Error).message));
   }, 5 * 60_000);
   demoTimer.unref();
+
+  // Wardrobe upkeep (see fashion/upkeep.ts): colors read from the photos, exact duplicates removed -
+  // a small batch now and every 20 minutes, in the background.
+  void wardrobeUpkeep();
+  setInterval(() => void wardrobeUpkeep(), 20 * 60_000).unref();
 
   // 5) HTTP server + admin panel (each client logs in with their own token - see server/auth.ts)
   const app = createServer(bot);

@@ -1,6 +1,7 @@
 import { formalityIndex, GARMENT_TYPES } from '../taxonomy.js';
 import type { GarmentType } from '../taxonomy.js';
 import type { Garment } from '../../types/index.js';
+import { garmentFormality, recentPenalty } from './sense.js';
 
 export interface OutfitContext {
   occasion?: string;
@@ -45,9 +46,10 @@ function parseJsonArray(value: string | null): string[] {
  *  own "reglas determinísticas" requirement - not everything should be left to the AI to notice). */
 function isHardExcluded(garment: Garment, ctx: OutfitContext): boolean {
   if (ctx.formality) {
+    // By what the garment is, not only by its tag (see sense.ts): a hoodie is out of a formal look,
+    // a t-shirt tagged "formal" by the classifier isn't suddenly in.
     const requested = formalityIndex(ctx.formality);
-    const actual = formalityIndex(garment.formality);
-    if (requested !== undefined && actual !== undefined && Math.abs(requested - actual) >= 2) return true;
+    if (requested !== undefined && Math.abs(requested - garmentFormality(garment)) >= 3) return true;
   }
   if (ctx.season) {
     const seasons = parseJsonArray(garment.season);
@@ -84,17 +86,21 @@ function score(garment: Garment, ctx: OutfitContext): number {
   }
   if (ctx.formality) {
     const requested = formalityIndex(ctx.formality);
-    const actual = formalityIndex(garment.formality);
-    if (requested !== undefined && actual !== undefined) {
-      const gap = Math.abs(requested - actual);
-      s += gap === 0 ? 1.5 : gap === 1 ? 0.5 : 0;
+    if (requested !== undefined) {
+      const gap = Math.abs(requested - garmentFormality(garment));
+      s += gap === 0 ? 2 : gap === 1 ? 1 : gap === 2 ? -0.5 : -2;
     }
   }
+  // The kinds of garment the occasion calls for (a shirt for the office, trainers for the gym).
+  if ((ctx as { likes?: string[] }).likes?.includes(garment.category)) s += 1.5;
+  if (ctx.weather === 'lluvia' && garment.category === 'impermeable') s += 3;
+  if (ctx.weather === 'frio' && ['abrigo', 'chaqueta', 'sweater', 'hoodie', 'sudadera', 'botas', 'bufanda'].includes(garment.category)) s += 1.5;
+  if (ctx.weather === 'calido' && ['abrigo', 'sweater', 'hoodie', 'sudadera', 'botas', 'bufanda', 'gabardina'].includes(garment.category)) s -= 2;
   if (ctx.style) {
     const styles = parseJsonArray(garment.style);
     if (styles.includes(ctx.style)) s += 1;
   }
-  if (ctx.colorsPreferred?.length && garment.color && ctx.colorsPreferred.includes(garment.color)) s += 1;
+  if (ctx.colorsPreferred?.length && garment.color && ctx.colorsPreferred.includes(garment.color)) s += 0.75;
   if (garment.favorite) s += 0.25; // small nudge toward things the user already likes
 
   return s;
@@ -103,7 +109,11 @@ function score(garment: Garment, ctx: OutfitContext): number {
 /** Local, zero-AI-cost filtering + scoring + grouping by type - the "150 prendas -> 40 -> 20 -> 10"
  *  reduction from the user's own spec happens entirely here, before anything is ever sent to
  *  DeepSeek (see recommendation.service.ts, which only receives the capped output of this). */
-export function filterCandidates(all: Garment[], ctx: OutfitContext, maxPerGroup: number): Record<GarmentType, ScoredGarment[]> {
+/**
+ * `vary` (the person's id) makes two askings differ: what was shown lately steps back, and near-ties
+ * are broken at random instead of always by the same garment (the first row in the table).
+ */
+export function filterCandidates(all: Garment[], ctx: OutfitContext, maxPerGroup: number, vary?: number): Record<GarmentType, ScoredGarment[]> {
   const byType: Record<GarmentType, ScoredGarment[]> = {
     TOP: [],
     BOTTOM: [],
@@ -119,7 +129,8 @@ export function filterCandidates(all: Garment[], ctx: OutfitContext, maxPerGroup
     // What was asked for by name stays in even if its tags don't fit the occasion - the person chose it.
     const asked = (ctx.mustHave ?? []).some((m) => m.category === garment.category) && !ctx.excludeCategories?.includes(garment.category);
     if (garment.id !== ctx.requiredGarmentId && !asked && isHardExcluded(garment, ctx)) continue;
-    byType[type].push({ garment, score: garment.id === ctx.requiredGarmentId ? Infinity : score(garment, ctx) });
+    const variation = vary === undefined ? 0 : Math.random() * 0.9 - recentPenalty(vary, garment.id);
+    byType[type].push({ garment, score: garment.id === ctx.requiredGarmentId ? Infinity : score(garment, ctx) + variation });
   }
 
   for (const type of GARMENT_TYPES) {
