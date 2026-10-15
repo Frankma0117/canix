@@ -43,7 +43,15 @@ function matchFashionEntry(text: string): { matched: boolean; wardrobe: boolean;
   if (/\b(mi armario|mis prendas|mi closet|mi ropa guardada)\b/.test(plain)) {
     return { matched: true, wardrobe: true, myOutfits: false, trailing: plain.replace(/^.*\b(mi armario|mis prendas|mi closet|mi ropa guardada)\b/, '').trim() };
   }
-  if (/\b(mis outfits|outfits guardados)\b/.test(plain)) return { matched: true, wardrobe: false, myOutfits: true, trailing: '' };
+  // Asking about the SAVED ones in any wording ("los outfits que guardé", "qué outfits tengo
+  // guardados", "mis looks") lists them - checked before OUTFIT_ASK_RE, which would otherwise
+  // read the word "outfits" as a request for a brand-new one.
+  if (
+    /\b(mis outfits|mis looks|outfits guardados|looks guardados)\b/.test(plain) ||
+    (/\b(outfits?|looks?|conjuntos?)\b/.test(plain) && /\b(guarde|guardado|guardados|guardaste|guardamos|tengo guardad\w*|salvad\w*)\b/.test(plain))
+  ) {
+    return { matched: true, wardrobe: false, myOutfits: true, trailing: '' };
+  }
   if (OUTFIT_ASK_RE.test(plain)) return { matched: true, wardrobe: false, myOutfits: false, trailing: trimmed };
 
   return { matched: false, wardrobe: false, myOutfits: false, trailing: '' };

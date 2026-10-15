@@ -18,6 +18,7 @@ import { contactsRepo } from '../db/repositories/contacts.repo.js';
 import { extractSharedContacts } from '../util/vcard.js';
 import { saveSharedContacts, undoSharedContacts, UNDO_CONTACTS_COMMAND } from '../agent/shared-contacts.js';
 import { preferDesigned, listToolAsked } from '../agent/views.js';
+import { checklistAsked } from '../agent/tools/resolve-checklist.js';
 import { handleAppointmentCommand, schedulingAsked } from '../scheduling/commands.js';
 import { registry } from '../agent/tool-registry.js';
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
@@ -649,7 +650,10 @@ export class BotManager {
         await this.wa.sendText(jid, appointmentReply);
         return;
       }
-      const listAsk = listToolAsked(text) ?? schedulingAsked(text, user.id, botTools);
+      // One of the person's lists by its name comes first: "mis pendientes" is their list called
+      // "Pendientes" when they have one, not the to-dos.
+      const namedList = checklistAsked(user.id, text);
+      const listAsk = (namedList ? { tool: 'view_list', args: { list: String(namedList) } } : null) ?? listToolAsked(text) ?? schedulingAsked(text, user.id, botTools);
       const listTool = listAsk?.tool;
       if (listAsk && listTool && (botTools === null || botTools.includes(listTool)) && (modeTools === null || modeTools.includes(listTool))) {
         const listText = await registry.get(listTool)!.execute(listAsk.args, { ownerJid: user.jid, userId: user.id, isAdmin: botUser.role === 'admin', wa: this.wa });

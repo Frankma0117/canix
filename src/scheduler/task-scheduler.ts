@@ -1,7 +1,6 @@
 import { stripKnownPrefix } from '../util/motivational.js';
 import { remindersRepo } from '../db/repositories/reminders.repo.js';
 import { usersRepo } from '../db/repositories/users.repo.js';
-import { habitLogsRepo } from '../db/repositories/habit-logs.repo.js';
 import { messagesRepo } from '../db/repositories/messages.repo.js';
 import { processDueCallReminders } from '../calls/call-reminders.service.js';
 import { processSchedulingTick } from '../scheduling/service.js';
@@ -9,7 +8,7 @@ import { nowLocal, addMinutes, addMonths, addDays, addSeconds, dateOnly, randomT
 import { buildWeeklyReportMessage } from '../agent/weekly-report.js';
 import { dedupeUser, summaryTotal, summaryLine } from '../agent/dedup.js';
 import { nextRoutineRunAt } from '../agent/routine-setup.js';
-import { sendReminderWithPrompt, hasPollFor, answeredFor } from '../agent/reminder-prompts.js';
+import { sendReminderWithPrompt } from '../agent/reminder-prompts.js';
 import { todosRepo } from '../db/repositories/todos.repo.js';
 import { checkBudget, recordSend } from '../whatsapp/send-guard.js';
 import { env } from '../config/env.js';
@@ -280,28 +279,16 @@ export class TaskScheduler {
           continue;
         }
 
-        // A routine check-in whose habit was already marked done for the day (e.g. the user did
-        // it early and called checkin_routine before this reminder was due) shouldn't ask again -
-        // just move it along silently instead of re-asking a question that's already answered.
-        // Same when that day's notice already went out with its Sí/No poll (see
-        // agent/reminder-prompts.ts): the answer is one tap away there, so the written question is
-        // only the fallback for a notice whose poll couldn't be sent.
-        if (reminder.kind === 'routine_checkin' && reminder.todo_id) {
-          const duration = todosRepo.getById(reminder.user_id, reminder.todo_id)?.duration_minutes ?? 0;
-          const occurrenceDate = dateOnly(addMinutes(reminder.run_at, -duration));
-          const log = habitLogsRepo.getForDate(reminder.todo_id, occurrenceDate);
-          if (log || answeredFor(reminder.todo_id, occurrenceDate) || hasPollFor(reminder.todo_id, occurrenceDate)) {
-            const next = nextRunAt(reminder);
-            if (next) remindersRepo.reschedule(reminder.id, next);
-            else remindersRepo.markStatus(reminder.id, 'executed');
-            console.log(
-              '[SCHEDULER] Chequeo #%d omitido (rutina #%d ya marcada o con encuesta el %s).',
-              reminder.id,
-              reminder.todo_id,
-              occurrenceDate,
-            );
-            continue;
-          }
+        // A routine's check-in ("¿Ya hiciste tu rutina?") is never sent: it landed at notice time +
+        // duration - the same minute for routines without one, 5-10 min later otherwise - so every
+        // routine arrived twice, both asking for the same 👍/👎. The notice alone carries that
+        // footer. The row itself stays (pause/edit/delete move the routine's pair together, see
+        // routine-setup.ts); it's just moved along silently.
+        if (reminder.kind === 'routine_checkin') {
+          const next = nextRunAt(reminder);
+          if (next) remindersRepo.reschedule(reminder.id, next);
+          else remindersRepo.markStatus(reminder.id, 'executed');
+          continue;
         }
 
         // Confirmation gate (see needsConfirmation()'s comment): if the LAST send of this exact

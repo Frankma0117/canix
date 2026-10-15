@@ -6,8 +6,9 @@ import { resolveActingUser } from './act-on-behalf.js';
 export const listListsTool: Tool = {
   name: 'list_lists',
   description:
-    'Muestra todas tus listas con cuántos ítems tiene cada una marcados/total (ej. "juegos de Mario", "películas por  Devuelve la lista ya diseñada para WhatsApp: envíala TAL CUAL.' +
-    'ver"). Para ver el detalle ítem por ítem de una en particular usa view_list.',
+    'Muestra todas tus listas con cuántos ítems tiene cada una marcados/total (ej. "juegos de Mario", "películas por ' +
+    'ver"). Devuelve la lista ya diseñada para WhatsApp: envíala TAL CUAL. Para ver el detalle ítem por ítem de una ' +
+    'en particular usa view_list. Úsala SIEMPRE antes de decir que no hay listas o que una lista no existe.',
   parameters: {
     type: 'object',
     properties: {

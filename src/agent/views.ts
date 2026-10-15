@@ -216,11 +216,18 @@ export function routinesView(routines: Todo[]): string {
   return [`🔁 *Tus rutinas* · ${routines.length}`, ...grouped(sorted, groupOf, (name, n) => `${name} · ${n}`, line)].join('\n');
 }
 
-export function categoriesView(categories: Category[]): string {
+/** With `linkCounts` (category id -> links saved there) each one says how many links it holds, so
+ *  "¿en cuál tengo algo?" is answered from the list itself. */
+export function categoriesView(categories: Category[], linkCounts?: Map<number, number>): string {
+  const count = (c: Category) => {
+    if (!linkCounts) return '';
+    const n = linkCounts.get(c.id) ?? 0;
+    return ` · ${n === 0 ? 'sin links' : `${n} link${n === 1 ? '' : 's'}`}`;
+  };
   return [
     `📁 *Tus categorías* · ${categories.length}`,
     '',
-    ...categories.map((c) => `📁 *${c.name.replace(/\*/g, '')}* ${idChip(c.id)}${c.description ? `\n> ${c.description}` : ''}`),
+    ...categories.map((c) => `📁 *${c.name.replace(/\*/g, '')}*${count(c)} ${idChip(c.id)}${c.description ? `\n> ${c.description}` : ''}`),
   ].join('\n');
 }
 
@@ -268,23 +275,31 @@ const LIST_ROW_RE = /^(?:[-•]\s|`|\d+[.)]\s|[0-9]\uFE0F?\u20E3|#\d|[⬜☑✅�
 
 /**
  * The model is told to pass a designed list through untouched, and mostly does - but sometimes it
- * re-types the list its own way. When the reply is itself a list and the last thing the turn
- * fetched was a designed one that isn't in it, the designed one goes out instead, followed by the
- * model's closing question if it had one. A reply that isn't a list (it only looked something up
- * to answer a specific question) is left alone.
+ * re-types the list its own way, and has been seen copying the real title line and then making up
+ * the items under it. Every designed view fetched this turn has to be in the reply in full; when the
+ * reply is showing a list (it carries one of those titles, or reads as a list) and any isn't, the
+ * real ones go out instead, followed by the model's closing question if it had one. A reply that
+ * isn't a list (it only looked something up to answer a specific question) is left alone.
  */
 export function preferDesigned(reply: string, turnTools: { name: string; result: string }[]): string {
-  const last = turnTools[turnTools.length - 1];
-  if (!last || !DESIGNED_TOOLS.has(last.name)) return reply;
-  const designed = last.result.trim();
-  const header = designed.split('\n')[0];
-  if (!/^\S+ \*[^*]+\*/.test(header) || reply.includes(header)) return reply;
+  const designed = [
+    ...new Set(
+      turnTools
+        .filter((t) => DESIGNED_TOOLS.has(t.name) && /^\S+ \*[^*]+\*/.test(t.result.trim().split('\n')[0]))
+        .map((t) => t.result.trim()),
+    ),
+  ];
+  if (designed.length === 0) return reply;
+  const flat = (s: string) => s.replace(/\s+/g, ' ').trim();
+  if (designed.every((d) => flat(reply).includes(flat(d)))) return reply;
 
   const lines = reply.split('\n').map((l) => l.trim()).filter(Boolean);
-  if (lines.filter((l) => LIST_ROW_RE.test(l)).length < 3) return reply;
-  const closing = lines[lines.length - 1];
+  const showsTitle = designed.some((d) => reply.includes(d.split('\n')[0]));
+  if (!showsTitle && lines.filter((l) => LIST_ROW_RE.test(l)).length < 3) return reply;
+  const closing = lines[lines.length - 1] ?? '';
   const keepClosing = /\?\s*(\p{Extended_Pictographic}|\s)*$/u.test(closing) && !LIST_ROW_RE.test(closing);
-  return keepClosing ? `${designed}\n\n${closing}` : designed;
+  const real = designed.join('\n\n');
+  return keepClosing ? `${real}\n\n${closing}` : real;
 }
 
 const LIST_WORDS: Record<string, string> = {

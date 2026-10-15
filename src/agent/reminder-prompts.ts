@@ -113,17 +113,15 @@ export function formatReminderText(reminder: Reminder, routine?: Todo): string {
 }
 
 /**
- * Sends a due reminder: the formatted text and, for a routine, the Sí/No poll right under it (its
- * title carrying the streak). Throws only if the text itself couldn't be sent; a poll that fails
- * just leaves the notice without one (the routine then falls back to its written check-in, see
- * hasPollFor). Returns how many WhatsApp messages actually went out, for the send governor.
+ * Sends a due reminder: the formatted text with the 👍/👎 footer when it's something to confirm.
+ * Throws only if the text couldn't be sent. Returns how many WhatsApp messages actually went out,
+ * for the send governor.
  */
 export async function sendReminderWithPrompt(wa: WaManager, reminder: Reminder, target: string): Promise<number> {
   const isRoutine = reminder.kind === 'routine_reminder' || reminder.kind === 'routine_checkin';
   const routine = isRoutine && reminder.todo_id ? todosRepo.getById(reminder.user_id, reminder.todo_id) : undefined;
-  // The written check-in (only sent when that day's notice went out without its poll - see
-  // hasPollFor) is a question too, so it carries the same Sí/No; it belongs to the day the routine
-  // started, which is `duration` before this check-in.
+  // A check-in (no longer sent by the scheduler, see task-scheduler.ts) belongs to the day the
+  // routine started, which is `duration` before it.
   const isCheckin = reminder.kind === 'routine_checkin';
   const occurrenceDate = dateOnly(isCheckin && routine ? addMinutes(reminder.run_at, -(routine.duration_minutes ?? 0)) : reminder.run_at);
   // No poll under routine notices any more: it asked the same thing twice (the notice already says
@@ -160,17 +158,6 @@ export async function sendReminderWithPrompt(wa: WaManager, reminder: Reminder, 
     pollSecret: pollMsgId ? secret : null,
   });
   return pollMsgId ? 2 : 1;
-}
-
-/** True when that day's notice of a routine went out with its poll - the written check-in question
- *  is then redundant and stays silent. */
-export function hasPollFor(todoId: number, occurrenceDate: string): boolean {
-  return !!reminderPromptsRepo.findForRoutineDate(todoId, occurrenceDate)?.poll_msg_id;
-}
-
-/** True when that day's notice was already answered (yes or no): nothing left to ask about it. */
-export function answeredFor(todoId: number, occurrenceDate: string): boolean {
-  return !!reminderPromptsRepo.findForRoutineDate(todoId, occurrenceDate)?.answer;
 }
 
 function delayNote(prompt: ReminderPrompt, at: string): string {

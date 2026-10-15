@@ -157,7 +157,18 @@ const FORCE_TOOL_REMINDER =
   'dijiste que ya hiciste algo sin haber llamado ninguna tool - lo segundo es imposible, nada se ' +
   'ejecutó todavía. Mi mensaje de ahora es la respuesta/información que te hacía falta. AHORA debes ' +
   'llamar la tool correspondiente con ese dato, en este mismo turno. No respondas solo con texto ' +
-  'confirmando algo que no has hecho.';
+  'confirmando algo que no has hecho. Y si te pregunté por algo que tengo guardado (listas, links, ' +
+  'categorías, notas, recetas, contactos, recordatorios, tareas), consúltalo con su tool: lo que ' +
+  'recuerdes de la conversación puede estar desactualizado o mal.';
+
+/** "muéstrame mis listas", "qué tengo en la de películas", "cuáles links tengo" - a question
+ *  about saved data, which can only be answered by looking it up. */
+function asksForSavedData(text: string): boolean {
+  const t = text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const noun = /\b(listas?|links?|enlaces?|categorias?|notas?|recetas?|contactos?|recordatorios?|pendientes|tareas?)\b/.test(t);
+  const ask = /\b(muestra\w*|ensena\w*|mostra\w*|ver|veo|dame|pasa\w*|cuales?|que|cuantos?|cuantas?|tengo|hay|revisa\w*)\b/.test(t);
+  return noun && ask;
+}
 
 const BASE_PROMPT = `Te llamas Canix. Eres mi asistente personal por WhatsApp, pero sobre todo eres mi parcero: hablamos
 como dos amigos que se conocen bien, casi como si fueras mi propia voz interna ayudándome a no
@@ -354,6 +365,14 @@ Reglas de las herramientas:
   ítem/la lista completa, usa add_list_item/view_list/check_list_item/delete_list_item/delete_list -
   nunca metas esto en add_todo ni add_note, y nunca inventes qué ítems tiene una lista, mostrá solo
   lo que view_list/list_lists realmente devuelve.
+- Si te mando "necesito una lista" seguido de cosas (una por línea), créala con esas cosas EN ESE
+  MISMO TURNO: ponle tú un nombre que encaje (ej. "Compras") y agrega cada línea como ítem, tal cual.
+- Mis mensajes te llegan COMPLETOS: nunca me digas que algo "llegó cortado" o incompleto. Un ítem
+  corto o raro ("Comprar T", "pilas AA", "cable C") es literal - guárdalo así; si de verdad no se
+  entiende, primero guarda lo demás y luego pregunta qué es, sin suponer que se cortó.
+- Nunca afirmes cuántos links, ítems o datos tengo (ni "0", ni "no tienes nada") sin haber llamado
+  en ESE turno la herramienta que lo consulta, y responde con lo que devuelve. "¿En cuál tengo
+  algo?" sobre links/categorías = list_categories (trae cuántos links tiene cada una).
 - Una vez una rutina queda marcada como cumplida hoy (checkin_routine con done=true), NO vuelvas a
   preguntarme si ya la hice por el resto del día - ya quedó registrada. Abajo en el contexto ves
   cuáles rutinas de hoy ya están marcadas.
@@ -675,13 +694,18 @@ export async function processMessage(
     // that failure mode (falsely claiming a message was sent) is far worse than an occasional
     // unnecessary tool call, so both cases now force it.)
     const claimsCompletion = CLAIMED_DONE_RE.test(choice.content ?? '');
-    if (toolCalls.length === 0 && i === 0 && !forcedRetryUsed && (claimsCompletion || previousTurnWasQuestion)) {
+    // (c) answering a question about my saved data (lists, links, notes...) without looking it up:
+    // whatever it says then comes from memory or is made up.
+    const asksSavedData = asksForSavedData(userText);
+    if (toolCalls.length === 0 && i === 0 && !forcedRetryUsed && (claimsCompletion || previousTurnWasQuestion || asksSavedData)) {
       forcedRetryUsed = true;
       console.log(
         '[LLM] %s - reintento forzado (tool_choice=required).',
         claimsCompletion
           ? 'El modelo dijo que ya hizo algo sin llamar ninguna tool'
-          : 'Respuesta sin accion justo tras una pregunta pendiente',
+          : asksSavedData
+            ? 'Preguntaron por datos guardados y el modelo respondió sin consultarlos'
+            : 'Respuesta sin accion justo tras una pregunta pendiente',
       );
       messages.push(choice as ChatMsg);
       messages.push({ role: 'system', content: FORCE_TOOL_REMINDER });
