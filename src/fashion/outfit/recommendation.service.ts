@@ -90,16 +90,28 @@ function enforceMustHave(
   const byId = new Map<number, ScoredGarment['garment']>();
   for (const type of GARMENT_TYPES) for (const { garment } of byType[type]) byId.set(garment.id, garment);
 
-  for (const must of context.mustHave ?? []) {
-    const role = typeForCategory(must.category);
+  // "Un outfit con esta camisa": that exact garment goes first, before anything named by kind.
+  const required = context.requiredGarmentId !== undefined ? byId.get(context.requiredGarmentId) : undefined;
+  const wanted: { must?: { category: string; color?: string }; garment?: ScoredGarment['garment'] }[] = [
+    ...(required ? [{ garment: required }] : []),
+    ...(context.mustHave ?? []).map((must) => ({ must })),
+  ];
+
+  for (const want of wanted) {
+    const must = want.must ?? { category: want.garment!.category };
+    const role = (want.garment?.type as GarmentType | undefined) ?? typeForCategory(must.category);
     if (!role) continue;
-    const candidate = byType[role].find((c) => matchesMust(c.garment, must)) ?? byType[role].find((c) => c.garment.category === must.category);
+    const candidate = want.garment
+      ? { garment: want.garment }
+      : (byType[role].find((c) => matchesMust(c.garment, must)) ?? byType[role].find((c) => c.garment.category === must.category));
     if (!candidate) {
       missingMust.push(must);
       continue;
     }
-    if (!matchesMust(candidate.garment, must)) missingMust.push(must); // right kind, but not in that color
+    if (!want.garment && !matchesMust(candidate.garment, must)) missingMust.push(must); // right kind, but not in that color
     if (out.some((p) => p.garmentId === candidate.garment.id)) continue;
+    // the garment chosen by hand already holds this role - a same-kind "must" doesn't replace it
+    if (required && candidate.garment.id !== required.id && out.some((p) => p.garmentId === required.id && p.role === role && role !== 'ACCESSORY')) continue;
     if (role === 'ACCESSORY') out.push({ garmentId: candidate.garment.id, role });
     else if (role === 'FULL_BODY') out = [...out.filter((p) => p.role !== 'TOP' && p.role !== 'BOTTOM' && p.role !== 'FULL_BODY'), { garmentId: candidate.garment.id, role }];
     else {

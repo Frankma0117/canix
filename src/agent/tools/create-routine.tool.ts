@@ -4,6 +4,7 @@ import { createRoutineWithReminders, parseScheduleInput, isValidTime } from '../
 import { describeSchedule, scheduleOf } from '../routine-schedule.js';
 import { todosRepo } from '../../db/repositories/todos.repo.js';
 import { resolveActingUser } from './act-on-behalf.js';
+import { relatedLinks } from '../related.js';
 
 export const createRoutineTool: Tool = {
   name: 'create_routine',
@@ -72,10 +73,19 @@ export const createRoutineTool: Tool = {
     const id = createRoutineWithReminders(userId, targetJid, { title, categoryId, reminderTime, durationMinutes, ...schedule });
     const created = todosRepo.getById(userId, id)!;
 
+    // What they already saved on this (a workout video, a playlist...) - offered right away.
+    const related = relatedLinks(userId, `${title} ${args.category ?? ''}`);
+    const relatedNote = related.length
+      ? ` Tiene guardados estos links relacionados, sugiéreselos (título + url) para usar en la rutina:\n${related
+          .map((l) => `- ${l.title || l.description || 'Link'} ${l.url}`)
+          .join('\n')}`
+      : '';
+
     return (
       `Listo, creé la rutina #${id} "${title}" (${describeSchedule(scheduleOf(created))}) 👍 ` +
       `Aviso a las ${reminderTime} (${durationMinutes} min), empieza el ${created.start_date}. ` +
-      'El aviso llega con una encuesta de Sí/No para marcarla; también se puede marcar con checkin_routine.'
+      'Se marca reaccionando 👍/👎 al aviso (o con checkin_routine si lo escribe).' +
+      relatedNote
     );
   },
 };

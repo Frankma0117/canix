@@ -8,6 +8,20 @@ import { Input, Label, Textarea } from '../components/ui/Input.tsx';
 import { Modal } from '../components/ui/Modal.tsx';
 import { EmptyState } from '../components/ui/EmptyState.tsx';
 import { Skeleton } from '../components/ui/Skeleton.tsx';
+import { Badge } from '../components/ui/Badge.tsx';
+
+function usageChips(c: Category): string[] {
+  const u = c.usage;
+  if (!u) return [];
+  const chip = (n: number, one: string, many: string, icon: string) => (n ? `${icon} ${n} ${n === 1 ? one : many}` : '');
+  return [
+    chip(u.links, 'link', 'links', '🔗'),
+    chip(u.notes, 'nota', 'notas', '💡'),
+    chip(u.reminders, 'recordatorio', 'recordatorios', '⏰'),
+    chip(u.todos, 'tarea', 'tareas', '✅'),
+    chip(u.recipes, 'receta', 'recetas', '📖'),
+  ].filter(Boolean);
+}
 
 export function CategoriesPage() {
   const api = useApi();
@@ -41,7 +55,7 @@ export function CategoriesPage() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('¿Eliminar esta categoría? Los links/tareas asociados quedarán sin categoría.')) return;
+    if (!confirm('¿Eliminar esta categoría? Lo que tenga (links, notas, recordatorios, tareas, recetas) quedará sin categoría, no se borra.')) return;
     await api.del(`/api/categories/${id}`);
     await load();
   }
@@ -54,6 +68,9 @@ export function CategoriesPage() {
           <Plus size={16} /> Nueva categoría
         </Button>
       </div>
+      <p className="-mt-3 mb-6 text-sm text-gray-dark">
+        Son generales: una misma categoría (por ejemplo “Salud”) agrupa tus links, notas, recordatorios, tareas y recetas.
+      </p>
 
       {!categories && (
         <div className="space-y-3">
@@ -77,6 +94,9 @@ export function CategoriesPage() {
               <div>
                 <p className="font-medium text-ink dark:text-white">{c.name}</p>
                 {c.description && <p className="text-sm text-gray-dark">{c.description}</p>}
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {usageChips(c).length === 0 ? <Badge tone="neutral">Vacía</Badge> : usageChips(c).map((chip) => <Badge key={chip} tone="neutral">{chip}</Badge>)}
+                </div>
               </div>
               <button
                 onClick={() => handleDelete(c.id)}

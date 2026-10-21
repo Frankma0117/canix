@@ -16,6 +16,7 @@ import type { FashionRouterContext, FashionRouterResult } from '../router-types.
 import { HOME_MENU } from './home.flow.js';
 import { sleep } from '../../util/human-delay.js';
 import { readFollowUp, wardrobeQuery } from '../follow-up.js';
+import { todayLocal } from '../../util/datetime.js';
 
 const USER_GENDER_TO_GARMENT_GENDER: Record<string, string> = { male: 'hombre', female: 'mujer' };
 
@@ -48,8 +49,17 @@ function withProfileDefaults(userId: number, context: OutfitContext): OutfitCont
   return merged;
 }
 
-const RESULT_OPTIONS = '1️⃣  💾 Guardar este outfit\n2️⃣  🔄 Dame otra opción\n3️⃣  ↩️ Volver';
+const RESULT_OPTIONS = '1️⃣  💾 Guardar este outfit\n2️⃣  🔄 Dame otra opción\n3️⃣  ↩️ Volver\n4️⃣  👕 Me lo puse (no me lo sugieras esta semana)';
 const REFINE_HINT = '> Ajústalo escribiendo: "sin chaqueta", "con tenis", "más formal", "nada de negro"';
+const WORN_RE = /^(me lo puse|me la puse|lo use|lo usé|ya lo use|ya lo usé|usado|usada|marcar usad[oa]s?)\b/i;
+
+/** "Armar outfit con esta prenda" (garment detail screen): the outfit is built around that exact garment. */
+export async function enterOutfitWithGarment(ctx: FashionRouterContext, garmentId: number): Promise<string> {
+  await ctx.wa.sendText(ctx.jid, '🔎 Armando un outfit con esa prenda...').catch(() => {});
+  const context = withProfileDefaults(ctx.userId, { requiredGarmentId: garmentId });
+  const result = await recommendOutfit(ctx.userId, context);
+  return renderResult(ctx, context, result);
+}
 
 /**
  * Entry point for a free-form outfit request ("outfit para una boda", "algo fresco pero elegante
@@ -83,7 +93,10 @@ async function renderResult(
     outfit: { context: context as Record<string, unknown>, picks, missingRoles, reason },
   } satisfies FashionSessionData);
 
-  const asked = describeRequest(context);
+  const anchor = context.requiredGarmentId !== undefined ? garmentsRepo.getById(ctx.userId, context.requiredGarmentId) : undefined;
+  const asked = [anchor ? `con tu ${garmentLabel({ ...anchor, favorite: 0 }).replace(/^\S+ /, '').toLowerCase()}` : '', describeRequest(context)]
+    .filter(Boolean)
+    .join(' · ');
   const missingMust = (result.missingMust ?? []).map((m) => {
     const label = `${categoryLabel(m.category).toLowerCase()}${m.color ? ` ${colorFor(m.category, m.color)}` : ''}`;
     const owned = garmentsRepo.listAllActive(ctx.userId).some((g) => g.category === m.category);
@@ -168,6 +181,17 @@ export async function handleOutfitResult(ctx: FashionRouterContext): Promise<Fas
   if (text === '3' || /^volver/i.test(text)) {
     fashionSessionsRepo.setState(ctx.userId, 'FASHION_HOME', {});
     return { consumed: true, reply: HOME_MENU };
+  }
+
+  if (text === '4' || WORN_RE.test(text)) {
+    const ids = outfit.picks.map((p) => p.garmentId).filter((id) => garmentsRepo.getById(ctx.userId, id) !== undefined);
+    garmentsRepo.setWorn(ctx.userId, ids, todayLocal());
+    fashionSessionsRepo.setState(ctx.userId, 'FASHION_HOME', {});
+    const s = ids.length === 1 ? '' : 's';
+    return {
+      consumed: true,
+      reply: `👕 *Listo* · marqué ${ids.length} prenda${s} como usada${s} esta semana\n> No te las vuelvo a sugerir hasta el lunes, salvo que me las pidas\n\n${HOME_MENU}`,
+    };
   }
 
   if (text === '1' || /^guardar/i.test(text)) {

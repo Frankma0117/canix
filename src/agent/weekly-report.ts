@@ -5,6 +5,7 @@ import { todayLocal, nowLocal, addDays, parseWall, weekdayName } from '../util/d
 import { countOccurrences, routineStreak, scheduleOf } from './routine-schedule.js';
 import { env } from '../config/env.js';
 import { progressBar } from '../util/wa-format.js';
+import { rewardsReportLines } from './rewards-progress.js';
 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 /** Longest routine list shown in full - beyond it the rest is summarized. */
@@ -55,6 +56,8 @@ export function buildWeeklyReportMessage(userId: number): string {
     for (const t of stillPending.slice(0, 6)) lines.push(`- ${t.title}`);
     if (stillPending.length > 6) lines.push(`_… y ${stillPending.length - 6} más_`);
   }
+
+  lines.push(...rewardsReportLines(userId, weekStart, today));
 
   return lines.join('\n');
 }

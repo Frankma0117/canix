@@ -215,6 +215,12 @@ export const garmentsRepo = {
     );
   },
 
+  /** Marks garments as worn on `date` (or clears the mark with null) - see fashion/worn.ts. */
+  setWorn(userId: number, ids: number[], date: string | null): void {
+    const stmt = db.prepare("UPDATE garments SET worn_on = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?");
+    for (const id of ids) stmt.run(date, id, userId);
+  },
+
   setFavorite(userId: number, id: number, favorite: boolean): void {
     db.prepare("UPDATE garments SET favorite = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?").run(
       favorite ? 1 : 0,

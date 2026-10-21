@@ -277,7 +277,7 @@ export interface Exercise {
   created_at: string;
 }
 
-export type MealSlot = 'desayuno' | 'almuerzo' | 'cena' | 'onces';
+export type MealSlot = 'desayuno' | 'onces' | 'almuerzo' | 'media_tarde' | 'cena';
 
 export interface MealPlan {
   id: number;
@@ -310,6 +310,8 @@ export interface Garment {
   color_checked_at: string | null;
   /** Failed tries at classifying it with the vision LLM - see fashion/review.ts. */
   llm_attempts: number;
+  /** Last day it was worn ('YYYY-MM-DD') - worn this week keeps it out of outfits (fashion/worn.ts). */
+  worn_on: string | null;
   public_id: string;
   storage_key: string;
   image_url: string;

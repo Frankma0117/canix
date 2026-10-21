@@ -7,6 +7,8 @@ import { keycap } from '../../util/wa-format.js';
 import type { FashionSessionData } from '../types.js';
 import type { FashionRouterContext, FashionRouterResult } from '../router-types.js';
 import { HOME_MENU } from './home.flow.js';
+import { WORN_TAG, wornThisWeek } from '../worn.js';
+import { todayLocal } from '../../util/datetime.js';
 
 const PAGE_SIZE = 10;
 
@@ -78,10 +80,16 @@ function renderList(userId: number, filter: GarmentFilters, offset: number): str
   }
 
   const lines = [`👗 *Tu armario*${label ? ` · ${label}` : ''}`, `${offset + 1}–${offset + rows.length} de ${total} prendas`, ''];
-  rows.forEach((g, i) => lines.push(`${keycap(i + 1)}  ${garmentLabel(g)}`));
+  rows.forEach((g, i) => lines.push(`${keycap(i + 1)}  ${garmentLabel(g)}${wornThisWeek(g) ? ` · ${WORN_TAG}` : ''}`));
 
   const nav = [offset + PAGE_SIZE < total ? '*siguiente*' : null, offset > 0 ? '*anterior*' : null, '*volver*'].filter(Boolean).join(' · ');
-  lines.push('', '> Escribe el número para ver una prenda', `> ${nav}`, '> O filtra: "camisas blancas", "zapatos negros", "favoritos"');
+  lines.push(
+    '',
+    '> Escribe el número para ver una prenda',
+    '> *outfit con la 3* arma un look con esa · *usada 3* la saca de esta semana',
+    `> ${nav}`,
+    '> O filtra: "camisas blancas", "zapatos negros", "favoritos"',
+  );
   return lines.join('\n');
 }
 
@@ -108,6 +116,18 @@ export async function handleWardrobeList(ctx: FashionRouterContext): Promise<Fas
 
   const choice = Number(text);
   const ids = data.lastListedIds ?? [];
+
+  // "outfit con la 3" / "usada 3" (or "usé la 2 y la 4") - acting on listed garments by number.
+  const numbers = (text.match(/\d+/g) ?? []).map(Number).filter((n) => n >= 1 && n <= ids.length);
+  if (numbers.length > 0 && /^(outfit|arma|armame|look)\b/.test(text)) {
+    const { enterOutfitWithGarment } = await import('./outfit.flow.js');
+    return { consumed: true, reply: await enterOutfitWithGarment(ctx, ids[numbers[0] - 1]) };
+  }
+  if (numbers.length > 0 && /^(usad[ao]s?|use|usé|ya use|ya usé|me puse)\b/.test(text)) {
+    garmentsRepo.setWorn(ctx.userId, numbers.map((n) => ids[n - 1]), todayLocal());
+    return { consumed: true, reply: renderList(ctx.userId, filter, offset) };
+  }
+
   if (Number.isInteger(choice) && choice >= 1 && choice <= ids.length) {
     const { showGarmentDetail } = await import('./edit-garment.flow.js');
     return { consumed: true, reply: showGarmentDetail(ctx.userId, ids[choice - 1]) };

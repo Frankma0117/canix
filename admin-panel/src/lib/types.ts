@@ -3,6 +3,8 @@ export interface Category {
   name: string;
   description: string | null;
   created_at: string;
+  /** What it groups - categories are shared by every module. */
+  usage?: { links: number; notes: number; reminders: number; todos: number; recipes: number };
 }
 
 export interface Link {
@@ -262,7 +264,7 @@ export interface Note {
   updated_at?: string;
 }
 
-export type MealSlot = 'desayuno' | 'almuerzo' | 'cena' | 'onces';
+export type MealSlot = 'desayuno' | 'onces' | 'almuerzo' | 'media_tarde' | 'cena';
 
 export interface MealPlan {
   id: number;

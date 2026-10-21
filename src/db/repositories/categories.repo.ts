@@ -1,11 +1,41 @@
 import { db } from '../pool.js';
 import type { Category } from '../../types/index.js';
 
+export interface CategoryUsage {
+  links: number;
+  notes: number;
+  reminders: number;
+  todos: number;
+  recipes: number;
+}
+
 export const categoriesRepo = {
   listAll(userId: number): Category[] {
     return db
       .prepare('SELECT * FROM categories WHERE user_id = ? ORDER BY name COLLATE NOCASE')
       .all(userId) as Category[];
+  },
+
+  /** What each category groups, across every module that can be filed under one (categories are
+   *  shared: one "Salud" holds links, notes, reminders, tasks and recipes alike). */
+  usage(userId: number): Map<number, CategoryUsage> {
+    const out = new Map<number, CategoryUsage>();
+    const empty = (): CategoryUsage => ({ links: 0, notes: 0, reminders: 0, todos: 0, recipes: 0 });
+    const queries: [keyof CategoryUsage, string][] = [
+      ['links', 'SELECT category_id AS id, COUNT(*) AS n FROM links WHERE user_id = ? AND category_id IS NOT NULL GROUP BY category_id'],
+      ['notes', 'SELECT category_id AS id, COUNT(*) AS n FROM notes WHERE user_id = ? AND category_id IS NOT NULL GROUP BY category_id'],
+      ['reminders', "SELECT category_id AS id, COUNT(*) AS n FROM reminders WHERE user_id = ? AND category_id IS NOT NULL AND status = 'pending' GROUP BY category_id"],
+      ['todos', "SELECT category_id AS id, COUNT(*) AS n FROM todos WHERE user_id = ? AND category_id IS NOT NULL AND status = 'pending' GROUP BY category_id"],
+      ['recipes', 'SELECT category_id AS id, COUNT(*) AS n FROM recipes WHERE user_id = ? AND category_id IS NOT NULL GROUP BY category_id'],
+    ];
+    for (const [key, sql] of queries) {
+      for (const row of db.prepare(sql).all(userId) as { id: number; n: number }[]) {
+        const u = out.get(row.id) ?? empty();
+        u[key] = row.n;
+        out.set(row.id, u);
+      }
+    }
+    return out;
   },
 
   getById(userId: number, id: number): Category | undefined {

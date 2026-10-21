@@ -34,7 +34,7 @@ const NAV_FOOTER = '\n\n> */menu* vuelve al menú principal';
  *  in the menu below without an import cycle - modes.ts imports THIS constant, not the reverse.
  *  'stickers' lives outside CORE_CATEGORIES (see STICKERS_CATEGORY below, admin-gated like fashion/
  *  admin) but is still a real mode key - modes.ts merges the two when resolving mode entry. */
-export const MODE_KEYS = ['rutinas', 'tareas', 'notas', 'contactos', 'comidas', 'recetas', 'premios', 'resumenes', 'stickers', 'agenda'] as const;
+export const MODE_KEYS = ['rutinas', 'medicamentos', 'tareas', 'notas', 'contactos', 'comidas', 'recetas', 'premios', 'resumenes', 'stickers', 'agenda'] as const;
 
 /**
  * Which permission(s) make each category visible/enterable (see permissions/catalog.ts) - any one
@@ -42,6 +42,8 @@ export const MODE_KEYS = ['rutinas', 'tareas', 'notas', 'contactos', 'comidas', 
  */
 export const CATEGORY_PERMISSIONS: Record<string, string[]> = {
   recordatorios: ['reminders.manage'],
+  medicamentos: ['reminders.manage'],
+  categorias: ['links.manage', 'notes.manage', 'reminders.manage', 'todos.manage', 'recipes.manage'],
   rutinas: ['routines.manage'],
   tareas: ['todos.manage'],
   notas: ['notes.manage'],
@@ -84,7 +86,22 @@ export const CORE_CATEGORIES: MenuCategory[] = [
       `- Repetido cada cierto tiempo (timer): "avísame cada 30 segundos, 5 veces, para cambiar de serie"\n` +
       `- Editar, cancelar o borrar cualquiera\n` +
       `- Pausar uno por unos días sin perderlo\n` +
-      `- "pausa todo por 5 días" silencia TODAS las notificaciones (recordatorios, rutinas, resúmenes) y vuelve solo - o "reanuda" cuando quieras`,
+      `- "pausa todo por 5 días" silencia TODAS las notificaciones (recordatorios, rutinas, resúmenes) y vuelve solo - o "reanuda" cuando quieras\n` +
+      `- Sin hora: "recuérdame llamar al banco en algún momento" - lo pongo en un espacio libre de tu día y te digo a qué hora`,
+  },
+  {
+    key: 'medicamentos',
+    emoji: '💊',
+    title: 'Medicamentos y belleza',
+    short: 'Pastillas, vitaminas, cremas y cuidado personal: a su hora y que no se te pasen.',
+    aliases: ['medicamentos', 'medicamento', 'medicinas', 'pastillas', 'belleza', 'skincare'],
+    detail:
+      `💊 *Medicamentos y belleza*\n\n` +
+      `- Tomas a hora fija: "recuérdame la pastilla de la tensión todos los días a las 8am"\n` +
+      `- Cada tantas horas: "el antibiótico cada 8 horas por 7 días, empezando a las 6am"\n` +
+      `- Belleza y cuidado personal: "crema de noche todos los días a las 10pm", "mascarilla los domingos"\n` +
+      `- Confírmalas reaccionando 👍/👎 al aviso\n` +
+      `- "qué medicamentos tengo" lista solo estos, aparte de tus otros recordatorios`,
   },
   {
     key: 'rutinas',
@@ -122,11 +139,12 @@ export const CORE_CATEGORIES: MenuCategory[] = [
     number: 4,
     emoji: '📝',
     title: 'Notas importantes',
-    short: 'Información suelta para guardar y consultar después - sin fecha ni hora.',
-    aliases: ['nota', 'notas'],
+    short: 'Tips clave para no olvidar: lo importante resumido en puntos cortos.',
+    aliases: ['nota', 'notas', 'tip', 'tips'],
     detail:
       `📝 *Notas importantes*\n\n` +
-      `- Guardar info suelta para consultar después: "anota que...", "guarda esta nota" (sin fecha ni hora - para eso son los recordatorios/tareas)\n` +
+      `- Guardar lo importante como tips clave: "anota que el carro necesita aceite 5W-30 y cambio cada 5.000 km" queda en puntos cortos\n` +
+      `- Si hay algo que hacer "en algún momento", además te lo agendo en un espacio libre y te digo la hora\n` +
       `- Buscarlas por categoría o por texto\n` +
       `- Editar o eliminar`,
   },
@@ -142,7 +160,20 @@ export const CORE_CATEGORIES: MenuCategory[] = [
       `- Guardar por categoría\n` +
       `- Buscar, o pedir uno al azar de una categoría\n` +
       `- Editar o eliminar\n` +
-      `- Crear y gestionar tus propias categorías`,
+      `- Cuando creas una rutina o pides una receta, te sugiero los links que ya tienes sobre eso`,
+  },
+  {
+    key: 'categorias',
+    emoji: '📁',
+    title: 'Categorías',
+    short: 'Generales: una misma categoría agrupa links, notas, recordatorios, tareas y recetas.',
+    aliases: ['categoria', 'categorias', 'categoría', 'categorías'],
+    detail:
+      `📁 *Categorías*\n\n` +
+      `- Son generales, no solo de links: "Salud" puede tener links, notas, recordatorios, tareas y recetas\n` +
+      `- Ver cuánto tiene cada una: "qué categorías tengo"\n` +
+      `- Crear, renombrar o borrar: "crea la categoría Viajes" (al borrarla, lo que tenía no se pierde)\n` +
+      `- Guardar algo en una: "anota en Viajes que...", "recuérdame en Salud..."`,
   },
   {
     key: 'contactos',
@@ -162,11 +193,14 @@ export const CORE_CATEGORIES: MenuCategory[] = [
     number: 7,
     emoji: '🍽️',
     title: 'Comidas',
-    short: 'Planea qué comer por fecha y tipo de comida (desayuno/almuerzo/cena).',
+    short: 'Ideas y plan de desayuno, onces, almuerzo, media tarde y cena.',
     aliases: ['comida', 'comidas'],
     detail:
       `🍽️ *Comidas*\n\n` +
-      `- Planear qué comer por fecha y tipo de comida (desayuno/almuerzo/cena)\n` +
+      `- Ideas para todo el día: "qué como hoy" - desayuno, onces, almuerzo, media tarde y cena\n` +
+      `- Con lo que tienes: "tengo huevos, arroz y tomate, ¿qué hago de almuerzo?"\n` +
+      `- Cada idea queda guardada en tus recetas, con lo que ya tenías guardado sobre eso (recetas y links)\n` +
+      `- Planear qué comer por fecha: "ponlas en mi plan de mañana"\n` +
       `- Editar el plan`,
   },
   // Separada de "comidas" (antes vivían juntas) a pedido explícito del usuario - dos conceptos
@@ -182,9 +216,10 @@ export const CORE_CATEGORIES: MenuCategory[] = [
     aliases: ['receta', 'recetas'],
     detail:
       `📖 *Recetas*\n\n` +
-      `- Guardar y consultar tus recetas\n` +
-      `- Pedir una sugerencia según ingredientes que tengas\n` +
-      `- Editar o eliminar`,
+      `- Dime qué ingredientes tienes y te doy recetas: "tengo pollo, papa y cebolla"\n` +
+      `- Las recetas que te sugiero quedan guardadas aquí solas\n` +
+      `- Te muestro también las recetas y links de comida que ya tenías sobre eso\n` +
+      `- Guardar las tuyas, consultarlas, editarlas o eliminarlas`,
   },
   {
     key: 'premios',
@@ -195,7 +230,9 @@ export const CORE_CATEGORIES: MenuCategory[] = [
     aliases: ['premio', 'premios', 'castigo', 'castigos'],
     detail:
       `🏆 *Premios y castigos*\n\n` +
-      `- Registrar los que te pongas, ligados a tus hábitos/rutinas\n` +
+      `- Registrar los que te pongas, ligados a tus hábitos/rutinas: "si cumplo el gym toda la semana me premio con pizza"\n` +
+      `- Te los recuerdo: en tu agenda del día ves el premio en juego y cómo vas\n` +
+      `- En el resumen semanal te digo si te ganaste el premio o te toca el castigo\n` +
       `- Consultar el historial`,
   },
   {

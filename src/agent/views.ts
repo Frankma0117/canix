@@ -5,6 +5,7 @@ import { footnote, keycap, progressBar, timeChip } from '../util/wa-format.js';
 import { LIST_KINDS, LIST_KIND_INFO, listKindOf, type ListKind } from '../util/list-kinds.js';
 import { describeSchedule, scheduleOf } from './routine-schedule.js';
 import type { Category, Checklist, ChecklistItem, Contact, Exercise, Link, MealPlan, Note, Reminder, Todo } from '../types/index.js';
+import type { CategoryUsage } from '../db/repositories/categories.repo.js';
 
 /**
  * How every "show me my ..." list looks on WhatsApp - one place, so links, contacts, notes, lists,
@@ -114,13 +115,19 @@ export function contactsView(contacts: Contact[]): string {
 export function notesView(notes: Note[], categories: Category[], opts: { filter?: string } = {}): string {
   const { shown, more } = capped(notes, 'búscalas por categoría o por texto');
   const nameOf = (id: number | null) => categories.find((c) => c.id === id)?.name ?? 'Sin categoría';
+  // Notes are kept as key tips ("• ..." one per line): up to three shown per note, each on its own line.
   const line = (n: Note) => {
-    const body = n.content.replace(/\s+/g, ' ').trim();
-    const preview = body.length > 110 ? `${body.slice(0, 109)}…` : body;
-    return n.title ? `📝 *${n.title.replace(/\*/g, '')}* ${idChip(n.id)}\n> ${preview}` : `📝 ${preview} ${idChip(n.id)}`;
+    const tips = n.content
+      .split('\n')
+      .map((t) => t.replace(/^\s*[•\-*·]\s*/, '').trim())
+      .filter(Boolean);
+    const shownTips = tips.slice(0, 3).map((t) => `> • ${t.length > 90 ? `${t.slice(0, 89)}…` : t}`);
+    if (tips.length > 3) shownTips.push(`> _+${tips.length - 3} tip${tips.length - 3 === 1 ? '' : 's'} más_`);
+    const head = n.title ? `💡 *${n.title.replace(/\*/g, '')}*` : '💡';
+    return [`${head} ${idChip(n.id)}`, ...shownTips].join('\n');
   };
   return [
-    `📝 *Tus notas*${opts.filter ? ` · ${opts.filter}` : ''} · ${notes.length}`,
+    `💡 *Tus notas · tips clave*${opts.filter ? ` · ${opts.filter}` : ''} · ${notes.length}`,
     ...grouped(shown, (n) => nameOf(n.category_id), (name, c) => `📁 *${name}* · ${c}`, line),
     ...more,
   ].join('\n');
@@ -218,25 +225,35 @@ export function routinesView(routines: Todo[]): string {
 
 /** With `linkCounts` (category id -> links saved there) each one says how many links it holds, so
  *  "¿en cuál tengo algo?" is answered from the list itself. */
-export function categoriesView(categories: Category[], linkCounts?: Map<number, number>): string {
+/** Categories are shared by every module - each row says what it groups ("🔗 3 links · ⏰ 1 recordatorio"). */
+export function categoriesView(categories: Category[], usage: Map<number, CategoryUsage>): string {
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const count = (c: Category) => {
-    if (!linkCounts) return '';
-    const n = linkCounts.get(c.id) ?? 0;
-    return ` · ${n === 0 ? 'sin links' : `${n} link${n === 1 ? '' : 's'}`}`;
+    const u = usage.get(c.id);
+    const parts = [
+      u?.links ? `🔗 ${plural(u.links, 'link', 'links')}` : '',
+      u?.notes ? `💡 ${plural(u.notes, 'nota', 'notas')}` : '',
+      u?.reminders ? `⏰ ${plural(u.reminders, 'recordatorio', 'recordatorios')}` : '',
+      u?.todos ? `✅ ${plural(u.todos, 'tarea', 'tareas')}` : '',
+      u?.recipes ? `📖 ${plural(u.recipes, 'receta', 'recetas')}` : '',
+    ].filter(Boolean);
+    return parts.length ? parts.join(' · ') : 'vacía';
   };
   return [
     `📁 *Tus categorías* · ${categories.length}`,
+    '> Sirven para todo: links, notas, recordatorios, tareas y recetas',
     '',
-    ...categories.map((c) => `📁 *${c.name.replace(/\*/g, '')}*${count(c)} ${idChip(c.id)}${c.description ? `\n> ${c.description}` : ''}`),
+    ...categories.map((c) => `📁 *${c.name.replace(/\*/g, '')}* ${idChip(c.id)}\n> ${count(c)}${c.description ? `\n> _${c.description}_` : ''}`),
   ].join('\n');
 }
 
-const MEAL_ICON: Record<string, string> = { desayuno: '🍳', almuerzo: '🍽️', onces: '☕', cena: '🌙' };
-const MEAL_ORDER = ['desayuno', 'almuerzo', 'onces', 'cena'];
+export const MEAL_ICON: Record<string, string> = { desayuno: '🍳', onces: '🍎', almuerzo: '🍽️', media_tarde: '☕', cena: '🌙' };
+export const MEAL_LABEL: Record<string, string> = { desayuno: 'Desayuno', onces: 'Onces', almuerzo: 'Almuerzo', media_tarde: 'Media tarde', cena: 'Cena' };
+export const MEAL_ORDER = ['desayuno', 'onces', 'almuerzo', 'media_tarde', 'cena'];
 
 export function mealPlanView(plans: MealPlan[]): string {
   const sorted = [...plans].sort((a, b) => a.plan_date.localeCompare(b.plan_date) || MEAL_ORDER.indexOf(a.meal_slot) - MEAL_ORDER.indexOf(b.meal_slot));
-  const line = (p: MealPlan) => `${MEAL_ICON[p.meal_slot] ?? '🍴'} *${p.meal_slot.charAt(0).toUpperCase()}${p.meal_slot.slice(1)}:* ${p.title} ${idChip(p.id)}${p.notes ? `\n> ${p.notes}` : ''}`;
+  const line = (p: MealPlan) => `${MEAL_ICON[p.meal_slot] ?? '🍴'} *${MEAL_LABEL[p.meal_slot] ?? p.meal_slot}:* ${p.title} ${idChip(p.id)}${p.notes ? `\n> ${p.notes}` : ''}`;
   return ['🍽️ *Plan de comidas*', ...grouped(sorted, (p) => p.plan_date, (date) => `*${dayLabel(date)}*`, line)].join('\n');
 }
 
@@ -268,10 +285,10 @@ export function exercisesBlock(exercises: Exercise[], opts: { title?: string; wi
 /** Tools whose result is already a designed message (see above) rather than data to phrase. */
 const DESIGNED_TOOLS = new Set([
   'get_today_agenda', 'get_week_report', 'list_links', 'list_contacts', 'list_notes', 'list_lists', 'view_list',
-  'list_reminders', 'list_todos', 'list_categories', 'list_meal_plan', 'list_recipes', 'list_exercises',
+  'list_reminders', 'list_todos', 'list_categories', 'list_meal_plan', 'list_recipes', 'list_exercises', 'suggest_recipes', 'find_saved',
   'list_appointments', 'list_my_appointments', 'list_available_slots', 'list_scheduling_clients', 'list_my_professionals', 'view_availability',
 ]);
-const LIST_ROW_RE = /^(?:[-•]\s|`|\d+[.)]\s|[0-9]\uFE0F?\u20E3|#\d|[⬜☑✅🔗👤📝📋])/u;
+const LIST_ROW_RE = /^(?:[-•]\s|`|\d+[.)]\s|[0-9]\uFE0F?\u20E3|#\d|[⬜☑✅🔗👤📝📋💡])/u;
 
 /**
  * The model is told to pass a designed list through untouched, and mostly does - but sometimes it

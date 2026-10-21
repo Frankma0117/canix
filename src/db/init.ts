@@ -188,7 +188,7 @@ export function initSchema(): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       plan_date TEXT NOT NULL,
-      meal_slot TEXT NOT NULL CHECK (meal_slot IN ('desayuno', 'almuerzo', 'cena', 'onces')),
+      meal_slot TEXT NOT NULL CHECK (meal_slot IN ('desayuno', 'onces', 'almuerzo', 'media_tarde', 'cena')),
       title TEXT NOT NULL,
       notes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -566,6 +566,35 @@ export function initSchema(): void {
   // Classification by the vision LLM (see fashion/review.ts): how many times it was tried on a
   // garment that couldn't be read, and the questions it left for the person to answer in the portal.
   ensureColumn('garments', 'llm_attempts', 'llm_attempts INTEGER NOT NULL DEFAULT 0');
+  // The last day ('YYYY-MM-DD') the person said they wore it - a garment worn this week (since
+  // Monday) steps out of outfit suggestions until next week (see fashion/worn.ts).
+  ensureColumn('garments', 'worn_on', 'worn_on TEXT');
+
+  // meal_plans' CHECK used to allow only desayuno/almuerzo/cena/onces - 'media_tarde' (the
+  // afternoon snack) was added later, and SQLite can't alter a CHECK in place: rebuild once.
+  const mealSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'meal_plans'").get() as { sql: string } | undefined)?.sql ?? '';
+  if (mealSql && !mealSql.includes('media_tarde')) {
+    // same as the categories/contacts rebuild below: an orphaned old row must not block the boot
+    const fkWasOn = (db.pragma('foreign_keys', { simple: true }) as number) === 1;
+    if (fkWasOn) db.pragma('foreign_keys = OFF');
+    db.exec(`
+      CREATE TABLE meal_plans_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        plan_date TEXT NOT NULL,
+        meal_slot TEXT NOT NULL CHECK (meal_slot IN ('desayuno', 'onces', 'almuerzo', 'media_tarde', 'cena')),
+        title TEXT NOT NULL,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO meal_plans_new (id, user_id, plan_date, meal_slot, title, notes, created_at)
+        SELECT id, user_id, plan_date, meal_slot, title, notes, created_at FROM meal_plans;
+      DROP TABLE meal_plans;
+      ALTER TABLE meal_plans_new RENAME TO meal_plans;
+      CREATE INDEX IF NOT EXISTS idx_meal_plans_user_date ON meal_plans(user_id, plan_date);
+    `);
+    if (fkWasOn) db.pragma('foreign_keys = ON');
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS garment_questions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

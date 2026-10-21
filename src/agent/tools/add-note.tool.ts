@@ -9,12 +9,18 @@ export const addNoteTool: Tool = {
     'Guarda una nota importante: información que quiero poder recuperar después (una idea, un dato, algo que me ' +
     'dijeron, instrucciones) - NO es una tarea ni un recordatorio, no tiene fecha ni hora ni se marca como cumplida. ' +
     'Úsala cuando pidan "anota que...", "guarda esta nota/dato", "que no se me olvide esto" sin que sea algo ' +
-    'accionable en una fecha/hora concreta (para eso usa add_todo/schedule_reminder en vez de esta).',
+    'accionable en una fecha/hora concreta (para eso usa add_todo/schedule_reminder en vez de esta). ' +
+    'Las notas se guardan como TIPS CLAVE: resume lo que me dijeron en puntos cortos y concretos (datos, cifras, ' +
+    'nombres, pasos), sin relleno ni perder nada importante. Si además hay algo que hacer "en algún momento", ' +
+    'usa schedule_free_slot_reminder con note_tips en vez de esta.',
   parameters: {
     type: 'object',
     properties: {
-      content: { type: 'string', description: 'El contenido de la nota.' },
-      title: { type: 'string', description: 'Título corto opcional.' },
+      content: {
+        type: 'string',
+        description: 'Los tips clave, una línea por tip empezando con "• " (ej. "• Aceite 5W-30\\n• Cambio cada 5.000 km").',
+      },
+      title: { type: 'string', description: 'Título corto del tema (ej. "Mantenimiento del carro"). Ponlo siempre.' },
       category: { type: 'string', description: 'Categoría opcional.' },
       target_user: {
         type: 'string',

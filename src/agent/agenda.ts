@@ -9,6 +9,8 @@ import type { Reminder } from '../types/index.js';
 import { nightFarewellMessage } from '../util/motivational.js';
 import { occursOn, scheduleOf } from './routine-schedule.js';
 import { dayAppointmentsBlock } from '../scheduling/views.js';
+import { schedRepo } from '../scheduling/repo.js';
+import { rewardsAgendaLines } from './rewards-progress.js';
 import { progressBar, shortTime, timeChip } from '../util/wa-format.js';
 import { env } from '../config/env.js';
 
@@ -77,6 +79,9 @@ export function buildAgendaMessage(userId: number): string {
     lines.push('', 'Sin hora fija:');
     for (const t of todosToday) lines.push(`- #${t.id} ${t.title}`);
   }
+
+  // premios/castigos de la semana, para que pueda recordarlos y motivar con ellos
+  lines.push(...rewardsAgendaLines(userId));
 
   return lines.join('\n');
 }
@@ -230,7 +235,68 @@ export function agendaView(userId: number, date: string = todayLocal(), opts: { 
     lines.push('', `📌 *Pendientes sin hora* · ${todos.length}`, ...todos.slice(0, AGENDA_MAX_ROWS).map((t) => `⬜ ${withIcon(t.title, '')}`.replace('⬜  ', '⬜ ')));
     if (todos.length > AGENDA_MAX_ROWS) lines.push(`_… y ${todos.length - AGENDA_MAX_ROWS} más_`);
   }
+  if (isToday && personal) lines.push(...rewardsAgendaLines(userId));
   return { text: lines.join('\n'), unmarked: isToday ? unmarked.length : 0 };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Free time - "recuérdame X en algún momento" lands in a gap of the person's day instead of a
+// vague "some time": the first stretch with nothing scheduled, inside waking hours.
+
+const toMin = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+const toHHMM = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+/** What already takes time on `date`, as [start, end) minutes: routines (their duration, 30 min by
+ *  default), pending reminders (15 min around each) and appointments. */
+function busyOn(userId: number, date: string): [number, number][] {
+  const busy: [number, number][] = [];
+  for (const r of todosRepo.list(userId, { scope: 'routine' })) {
+    if (!r.reminder_time || !occursOn(scheduleOf(r), date)) continue;
+    const start = toMin(scheduleOf(r).time);
+    busy.push([start, start + (r.duration_minutes ?? 30)]);
+  }
+  for (const rem of remindersRepo.listAll(userId, 'pending')) {
+    if (rem.kind !== 'reminder' && rem.kind !== 'important_date' && rem.kind !== 'flexible') continue;
+    const time = reminderTimeOn(rem, date);
+    if (time) busy.push([toMin(time) - 5, toMin(time) + 15]);
+  }
+  const from = `${date} 00:00:00`;
+  const to = `${date} 23:59:59`;
+  const appointments = [
+    ...(schedRepo.getProfessional(userId) ? schedRepo.listForProfessional(userId, from, to, ['pending', 'confirmed']) : []),
+    ...schedRepo.listForClient(userId, from).filter((a) => a.start_at <= to && ['pending', 'confirmed'].includes(a.status)),
+  ];
+  for (const a of appointments) busy.push([toMin(a.start_at.slice(11, 16)), toMin(a.end_at.slice(11, 16)) || 24 * 60]);
+  return busy.sort((a, b) => a[0] - b[0]);
+}
+
+/**
+ * The first free stretch of `minutes` between windowStart and windowEnd ('HH:mm'), starting today
+ * (never in the past - at least 15 minutes from now) and looking up to `days` days ahead. Times
+ * land on a quarter hour. Returns 'YYYY-MM-DD HH:mm:00', or null if every day is full.
+ */
+export function findFreeSlot(
+  userId: number,
+  opts: { minutes?: number; windowStart?: string; windowEnd?: string; fromDate?: string; days?: number } = {},
+): string | null {
+  const minutes = Math.max(5, opts.minutes ?? 30);
+  const windowStart = toMin(opts.windowStart ?? '08:00');
+  const windowEnd = toMin(opts.windowEnd ?? '21:00');
+  const today = todayLocal();
+  const nowMin = toMin(nowLocal().slice(11, 16));
+  let date = opts.fromDate && opts.fromDate > today ? opts.fromDate : today;
+
+  for (let d = 0; d < (opts.days ?? 7); d++, date = addDays(date, 1).slice(0, 10)) {
+    let cursor = windowStart;
+    if (date === today) cursor = Math.max(cursor, Math.ceil((nowMin + 15) / 15) * 15);
+    for (const [start, end] of busyOn(userId, date)) {
+      if (end <= cursor) continue;
+      if (start - cursor >= minutes) break; // the gap before this one fits
+      cursor = Math.max(cursor, Math.ceil(end / 15) * 15);
+    }
+    if (cursor + minutes <= windowEnd) return `${date} ${toHHMM(cursor)}:00`;
+  }
+  return null;
 }
 
 export function renderAgenda(userId: number, date?: string): string {

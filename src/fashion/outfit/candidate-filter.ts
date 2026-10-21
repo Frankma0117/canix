@@ -2,6 +2,7 @@ import { formalityIndex, GARMENT_TYPES } from '../taxonomy.js';
 import type { GarmentType } from '../taxonomy.js';
 import type { Garment } from '../../types/index.js';
 import { garmentFormality, recentPenalty } from './sense.js';
+import { wornThisWeek } from '../worn.js';
 
 export interface OutfitContext {
   occasion?: string;
@@ -123,6 +124,9 @@ export function filterCandidates(all: Garment[], ctx: OutfitContext, maxPerGroup
     ACCESSORY: [],
   };
 
+  // Worn this week (see fashion/worn.ts): set aside, and only used for a role nothing else can fill.
+  const worn: Record<GarmentType, ScoredGarment[]> = { TOP: [], BOTTOM: [], FULL_BODY: [], OUTERWEAR: [], FOOTWEAR: [], ACCESSORY: [] };
+
   for (const garment of all) {
     const type = garment.type as GarmentType;
     if (!GARMENT_TYPES.includes(type)) continue;
@@ -130,10 +134,14 @@ export function filterCandidates(all: Garment[], ctx: OutfitContext, maxPerGroup
     const asked = (ctx.mustHave ?? []).some((m) => m.category === garment.category) && !ctx.excludeCategories?.includes(garment.category);
     if (garment.id !== ctx.requiredGarmentId && !asked && isHardExcluded(garment, ctx)) continue;
     const variation = vary === undefined ? 0 : Math.random() * 0.9 - recentPenalty(vary, garment.id);
-    byType[type].push({ garment, score: garment.id === ctx.requiredGarmentId ? Infinity : score(garment, ctx) + variation });
+    const scored = { garment, score: garment.id === ctx.requiredGarmentId ? Infinity : score(garment, ctx) + variation };
+    if (garment.id !== ctx.requiredGarmentId && !asked && wornThisWeek(garment)) worn[type].push(scored);
+    else byType[type].push(scored);
   }
 
   for (const type of GARMENT_TYPES) {
+    // only the roles an outfit can't go without - a worn jacket or dress is simply left out
+    if (byType[type].length === 0 && (type === 'TOP' || type === 'BOTTOM' || type === 'FOOTWEAR')) byType[type] = worn[type];
     byType[type].sort((a, b) => b.score - a.score);
     byType[type] = byType[type].slice(0, maxPerGroup);
   }

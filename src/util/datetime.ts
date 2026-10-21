@@ -170,6 +170,12 @@ export function todayLocal(): string {
   return nowLocal().slice(0, 10);
 }
 
+/** Monday of the week `date` ('YYYY-MM-DD', default today) falls in, 'YYYY-MM-DD'. */
+export function weekStartOf(date: string = todayLocal()): string {
+  const day = parseWall(`${date} 12:00:00`).getUTCDay(); // 0 = Sunday
+  return addDays(`${date} 12:00:00`, -((day + 6) % 7)).slice(0, 10);
+}
+
 const WEEKDAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 
 /** Human-readable description of the current moment for the LLM prompt. */

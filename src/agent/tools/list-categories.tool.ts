@@ -1,14 +1,14 @@
 import { categoriesView } from '../views.js';
 import type { Tool } from '../tool-registry.js';
 import { categoriesRepo } from '../../db/repositories/categories.repo.js';
-import { linksRepo } from '../../db/repositories/links.repo.js';
 import { resolveActingUser } from './act-on-behalf.js';
 
 export const listCategoriesTool: Tool = {
   name: 'list_categories',
   description:
-    'Lista todas las categorías existentes (para links, tareas y recordatorios) con cuántos links tiene guardados cada una. ' +
-    'Úsala para "qué categorías hay" y para "en cuál tengo algo/links" (no list_links, que suelta todos los links). ' +
+    'Lista todas mis categorías. Son GENERALES: una misma categoría agrupa links, notas, recordatorios, tareas y ' +
+    'recetas, y la lista dice cuánto de cada cosa tiene. Úsala para "qué categorías hay", "en cuál tengo algo/links" ' +
+    '(no list_links, que suelta todos los links) y antes de guardar algo en una categoría. ' +
     'Devuelve la lista ya diseñada para WhatsApp: envíala TAL CUAL.',
   parameters: {
     type: 'object',
@@ -27,10 +27,6 @@ export const listCategoriesTool: Tool = {
 
     const categories = categoriesRepo.listAll(acting.userId);
     if (categories.length === 0) return 'Todavía no tienes categorías creadas.';
-    const linkCounts = new Map<number, number>();
-    for (const link of linksRepo.listByCategory(acting.userId)) {
-      if (link.category_id != null) linkCounts.set(link.category_id, (linkCounts.get(link.category_id) ?? 0) + 1);
-    }
-    return categoriesView(categories, linkCounts);
+    return categoriesView(categories, categoriesRepo.usage(acting.userId));
   },
 };

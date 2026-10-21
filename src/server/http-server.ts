@@ -129,7 +129,7 @@ export function createServer(bot: BotManager): Express {
   );
 
   // ---------- Permission gates for the per-module routes below ----------
-  app.use('/api/categories', requirePermission('links.manage', 'reminders.manage', 'notes.manage'));
+  app.use('/api/categories', requirePermission('links.manage', 'reminders.manage', 'notes.manage', 'todos.manage', 'recipes.manage'));
   app.use('/api/links', requirePermission('links.manage'));
   app.use('/api/contacts', requirePermission('contacts.manage'));
   app.use('/api/reminders', requirePermission('reminders.manage'));
@@ -190,7 +190,15 @@ export function createServer(bot: BotManager): Express {
   );
 
   // ---------- Categories ----------
-  app.get('/api/categories', h((req, res) => res.json(categoriesRepo.listAll(userId(req)))));
+  app.get(
+    '/api/categories',
+    h((req, res) => {
+      // Shared by every module: each one comes with what it groups (see categoriesRepo.usage).
+      const usage = categoriesRepo.usage(userId(req));
+      const empty = { links: 0, notes: 0, reminders: 0, todos: 0, recipes: 0 };
+      res.json(categoriesRepo.listAll(userId(req)).map((c) => ({ ...c, usage: usage.get(c.id) ?? empty })));
+    }),
+  );
   app.post(
     '/api/categories',
     h((req, res) => {

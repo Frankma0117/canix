@@ -17,7 +17,7 @@ import { requirePermission } from './auth.js';
 import { h, userId, str, int } from './http-helpers.js';
 import type { MealSlot } from '../types/index.js';
 
-const MEAL_SLOTS: MealSlot[] = ['desayuno', 'almuerzo', 'cena', 'onces'];
+const MEAL_SLOTS: MealSlot[] = ['desayuno', 'onces', 'almuerzo', 'media_tarde', 'cena'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Web routes for modules the portal didn't cover before: notes, meals, recipes, lists, wardrobe. */

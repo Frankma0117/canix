@@ -4,7 +4,7 @@ import { normalizeDate } from '../../util/datetime.js';
 import { resolveActingUser } from './act-on-behalf.js';
 import type { MealSlot } from '../../types/index.js';
 
-const SLOTS: MealSlot[] = ['desayuno', 'almuerzo', 'cena', 'onces'];
+const SLOTS: MealSlot[] = ['desayuno', 'onces', 'almuerzo', 'media_tarde', 'cena'];
 
 export const editMealPlanTool: Tool = {
   name: 'edit_meal_plan',

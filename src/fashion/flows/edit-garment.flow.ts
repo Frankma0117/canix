@@ -6,6 +6,8 @@ import type { FashionSessionData } from '../types.js';
 import type { FashionRouterContext, FashionRouterResult } from '../router-types.js';
 import { HOME_MENU } from './home.flow.js';
 import { garmentLabel } from '../look.js';
+import { WORN_TAG, wornThisWeek } from '../worn.js';
+import { todayLocal } from '../../util/datetime.js';
 
 const EDITABLE_FIELDS = ['type', 'category', 'color', 'material', 'fit', 'favorite'] as const;
 type EditableField = (typeof EDITABLE_FIELDS)[number];
@@ -49,7 +51,17 @@ export function showGarmentDetail(userId: number, garmentId: number): string {
     lines.push('> Algunos datos son una estimación: corrígelos con *Editar* si no coinciden');
   }
 
-  lines.push('', `1️⃣  ${garment.favorite ? '🤍 Quitar de favoritos' : '❤️ Marcar favorito'}`, '2️⃣  ✏️ Editar', '3️⃣  🗑️ Eliminar', '4️⃣  ↩️ Volver al armario');
+  if (wornThisWeek(garment)) lines.push(`> ${WORN_TAG}: no te la sugiero hasta el lunes, salvo que la pidas`);
+
+  lines.push(
+    '',
+    `1️⃣  ${garment.favorite ? '🤍 Quitar de favoritos' : '❤️ Marcar favorito'}`,
+    '2️⃣  ✏️ Editar',
+    '3️⃣  🗑️ Eliminar',
+    '4️⃣  ↩️ Volver al armario',
+    '5️⃣  ✨ Armar un outfit con esta prenda',
+    `6️⃣  ${wornThisWeek(garment) ? '🔄 Quitar "usada esta semana"' : '👕 Ya la usé esta semana'}`,
+  );
 
   return lines.join('\n');
 }
@@ -84,6 +96,17 @@ export async function handleGarmentDetail(ctx: FashionRouterContext): Promise<Fa
   if (text === '4' || /^volver/i.test(text)) {
     const { enterWardrobeList } = await import('./list-garments.flow.js');
     return { consumed: true, reply: enterWardrobeList(ctx.userId, data.filter ?? {}) };
+  }
+
+  if (text === '5' || /^(outfit|arma|armar)\b/i.test(text)) {
+    const { enterOutfitWithGarment } = await import('./outfit.flow.js');
+    return { consumed: true, reply: await enterOutfitWithGarment(ctx, garmentId) };
+  }
+
+  if (text === '6' || /^(usada|ya la use|ya la usé|la use|la usé|me la puse)\b/i.test(text)) {
+    const garment = garmentsRepo.getById(ctx.userId, garmentId)!;
+    garmentsRepo.setWorn(ctx.userId, [garmentId], wornThisWeek(garment) ? null : todayLocal());
+    return { consumed: true, reply: showGarmentDetail(ctx.userId, garmentId) };
   }
 
   return { consumed: true, reply: showGarmentDetail(ctx.userId, garmentId) };

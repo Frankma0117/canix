@@ -68,10 +68,13 @@ const MODE_TOOLS: Record<ModeKey, string[]> = {
   // MANAGEMENT tools (add/list/edit/delete) live behind this mode. Sending a message shouldn't
   // require first typing "contactos" and leaving whatever mode you're actually in.
   contactos: ['add_contact', 'list_contacts', 'edit_contact', 'delete_contact'],
-  comidas: ['plan_meal', 'list_meal_plan', 'delete_meal_plan', 'edit_meal_plan'],
+  // Medicamentos y belleza son recordatorios (siempre disponibles, ver ALWAYS_ON_TOOLS) filed under
+  // their own category - the section adds no tools of its own.
+  medicamentos: [],
+  comidas: ['plan_meal', 'list_meal_plan', 'delete_meal_plan', 'edit_meal_plan', 'suggest_recipes'],
   // Separado de "comidas" a pedido explícito del usuario (ver menu.ts's RECETAS category comment) -
   // mismas tools de siempre, solo agrupadas en su propio modo con entrada/salida propia.
-  recetas: ['save_recipe', 'list_recipes', 'get_recipe', 'delete_recipe'],
+  recetas: ['save_recipe', 'list_recipes', 'get_recipe', 'delete_recipe', 'suggest_recipes'],
   premios: ['register_reward_punishment', 'list_rewards_punishments', 'delete_reward_punishment'],
   resumenes: ['get_today_agenda', 'get_week_report'],
   // send_sticker (the proactive USE of a sticker) stays in ALWAYS_ON_TOOLS below - only the
@@ -94,6 +97,8 @@ export const ALWAYS_ON_TOOLS = [
   'schedule_important_date',
   'schedule_flexible_reminder',
   'schedule_interval_reminder',
+  'schedule_free_slot_reminder',
+  'find_saved',
   'schedule_call_reminder',
   'list_call_reminders',
   'edit_call_reminder',

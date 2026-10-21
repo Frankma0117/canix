@@ -4,12 +4,12 @@ import { normalizeDate } from '../../util/datetime.js';
 import { resolveActingUser } from './act-on-behalf.js';
 import type { MealSlot } from '../../types/index.js';
 
-const SLOTS: MealSlot[] = ['desayuno', 'almuerzo', 'cena', 'onces'];
+const SLOTS: MealSlot[] = ['desayuno', 'onces', 'almuerzo', 'media_tarde', 'cena'];
 
 export const planMealTool: Tool = {
   name: 'plan_meal',
   description:
-    'Programa qué comer en una fecha y comida específica (desayuno, almuerzo, cena u onces). Para planear varios días ' +
+    'Programa qué comer en una fecha y comida específica (desayuno, onces, almuerzo, media_tarde o cena). Para planear varios días ' +
     'o varias comidas, llama esta tool una vez por cada fecha+comida.',
   parameters: {
     type: 'object',

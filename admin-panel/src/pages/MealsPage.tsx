@@ -11,8 +11,9 @@ import { addDaysISO, todayISO, formatDayLong } from '../lib/dates.ts';
 
 const SLOTS: { id: MealSlot; label: string; emoji: string }[] = [
   { id: 'desayuno', label: 'Desayuno', emoji: '🍳' },
+  { id: 'onces', label: 'Onces', emoji: '🍎' },
   { id: 'almuerzo', label: 'Almuerzo', emoji: '🍲' },
-  { id: 'onces', label: 'Onces', emoji: '☕' },
+  { id: 'media_tarde', label: 'Media tarde', emoji: '☕' },
   { id: 'cena', label: 'Cena', emoji: '🍽️' },
 ];
 
