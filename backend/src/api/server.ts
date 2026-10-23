@@ -30,6 +30,7 @@ import { registerListRoutes } from './routes/lists.routes.js';
 import { registerWardrobeRoutes } from './routes/wardrobe.routes.js';
 import { registerLibraryRoutes } from './routes/library.routes.js';
 import { registerMedicationRoutes } from './routes/medications.routes.js';
+import { registerWorkoutRoutes } from './routes/workouts.routes.js';
 import { registerCalendarRoutes } from './routes/calendar.routes.js';
 import { registerStickerRoutes } from './routes/stickers.routes.js';
 import type { User } from '../entities/index.js';
@@ -123,7 +124,7 @@ export function createServer(bot: BotManager): Express {
   app.use('/api/rewards', requirePermission('rewards.manage'));
   app.use('/api/routines', requirePermission('routines.manage'));
   app.use('/api/voices', requirePermission('voice.premium'));
-  app.use('/api/reminder-responses', requirePermission('reminders.manage', 'routines.manage'));
+  app.use('/api/reminder-responses', requirePermission('reminders.manage', 'routines.manage', 'workouts.manage'));
 
   registerConnectionRoutes(app, bot);
   registerCategoryRoutes(app);
@@ -142,6 +143,7 @@ export function createServer(bot: BotManager): Express {
   registerWardrobeRoutes(app);
   registerLibraryRoutes(app);
   registerMedicationRoutes(app);
+  registerWorkoutRoutes(app);
   registerCalendarRoutes(app);
   registerStickerRoutes(app);
   registerSchedulingRoutes(app);

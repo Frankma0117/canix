@@ -10,7 +10,7 @@ import { matchesMust, type OutfitContext } from '../outfit/candidate-filter.js';
 import { readOutfitEdit, type OutfitEdit } from '../outfit/edit-commands.js';
 import { GARMENT_TYPE_LABELS } from '../taxonomy.js';
 import { refineContext } from '../outfit/request.js';
-import { categoryEmoji, categoryLabel, colorFor, describeRequest, garmentLabel, humanize, isPluralGarment } from '../look.js';
+import { categoryEmoji, categoryLabel, colorFor, describeRequest, garmentLabel, garmentWords, humanize, isPluralGarment } from '../look.js';
 
 const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 import { spacesStorageService } from '../storage/spaces-storage.service.js';
@@ -30,7 +30,8 @@ import { readFollowUp, wardrobeQuery } from '../follow-up.js';
  * Showing and editing an outfit. Every garment goes out as its own photo, so the person can act on
  * one piece by reacting to it - 👎 change just that one, ❤️ build another outfit around it, 🗑️ it's
  * no longer in the wardrobe, 👍 keep it fixed - and the summary comes last with the options for the
- * whole outfit (👍 save · 👎 another option). Everything can also be said in words ("cambia la
+ * whole outfit (👍 save · 👎 another option). Each photo's caption lists its own options, and a
+ * quoted reply to a photo ("cambiar", "fija"...) works like the reaction. Everything can also be said in words ("cambia la
  * camiseta", "deja solo el pantalón", "ya no tengo esos zapatos"). Reactions are handled in
  * fashion-reactions.ts, which calls back into the functions exported here.
  */
@@ -39,11 +40,31 @@ const USER_GENDER_TO_GARMENT_GENDER: Record<string, string> = { male: 'hombre', 
 
 const RESULT_OPTIONS = '1️⃣  💾 Guardar este outfit\n2️⃣  🔄 Dame otra opción\n3️⃣  ↩️ Volver\n4️⃣  👕 Me lo puse (no me lo sugieras esta semana)';
 const PHOTO_HELP = footnote(
-  '*Reacciona a una foto*',
-  '👎 Cambiar solo esa  ·  ❤️ Armar otro con esa',
-  '🗑️ Ya no la tengo  ·  👍 Dejarla fija',
-  '*O a este mensaje:* 👍 Guardar  ·  👎 Otra opción',
+  '👆 *Cada foto tiene sus opciones:* reacciona o respóndela para cambiar solo esa prenda',
+  '*A este mensaje:* 👍 Guardar  ·  👎 Otra opción  ·  👕 Me lo puse',
 );
+
+/**
+ * The caption under each garment photo: what it is, where it sits in the outfit, and what each
+ * reaction (or a quoted reply) does to THAT piece - so the options are right on the photo, never
+ * something to scroll back to the summary for.
+ */
+function photoCaption(garment: Garment, position: number, total: number, pinned: boolean): string {
+  const w = garmentWords(garment.category);
+  const name = garmentLabel({ ...garment, favorite: 0 });
+  const [emoji, ...rest] = name.split(' ');
+  return [
+    `${emoji} *${rest.join(' ')}*${pinned ? ' 📌' : ''}${total > 1 ? `  ·  ${position}/${total}` : ''}`,
+    '',
+    `👎  Cambiar solo ${w.this}`,
+    `❤️  Armar otro outfit con ${w.this}`,
+    `👍  Dejar${w.it} ${w.fixed}`,
+    `🗑️  Ya no ${w.it} tengo`,
+    '',
+    footnote(`Reacciona a esta foto, o respóndela con *cambiar*, *armar otro*, *fija* o *ya no ${w.it} tengo*`),
+  ].join('\n');
+}
+
 const WORDS_HELP = '> También escribiendo: "cambia la camiseta", "deja solo el pantalón", "sin chaqueta", "más formal"';
 const WORN_RE = /^(me lo puse|me la puse|lo use|lo usé|ya lo use|ya lo usé|usado|usada|marcar usad[oa]s?)\b/i;
 const YES_RE = /^(1|s[ií]+|dale|claro|elim[ií]nala|elim[ií]nalo|borra(la|lo)?|ok)\b/i;
@@ -123,8 +144,10 @@ export function presentOutfit(
       const garments = draft.picks.map((p) => garmentsModel.getById(userId, p.garmentId)).filter((g): g is Garment => !!g);
       const toShow = opts.onlyPhotosOf ? garments.filter((g) => opts.onlyPhotosOf!.includes(g.id)) : garments;
       // One at a time with a small gap: a burst of media in the same instant looks scripted.
+      const pinned = draft.context.requiredGarmentIds ?? [];
       for (const garment of toShow) {
-        const msgId = await wa.sendImage(jid, garment.image_url, garmentLabel({ ...garment, favorite: 0 })).catch(() => null);
+        const caption = photoCaption(garment, garments.indexOf(garment) + 1, garments.length, pinned.includes(garment.id));
+        const msgId = await wa.sendImage(jid, garment.image_url, caption).catch(() => null);
         fashionMessageRefsModel.save(userId, msgId, 'garment', garment.id, draft);
         await sleep(350);
       }

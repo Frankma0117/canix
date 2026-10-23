@@ -1,6 +1,6 @@
 import type { ComponentType, ReactNode } from 'react';
 import {
-  CalendarClock, CalendarDays, Clapperboard, CalendarSearch, ListTodo, ListChecks, Repeat, Link2, Tags, Users, Smartphone, Trophy, PhoneCall, StickyNote, UtensilsCrossed, BookOpen, Shirt, CalendarRange, CalendarCheck, ShieldCheck, Package, ScrollText, Building2, UserCog, Home, Grid3x3, BarChart3, LineChart, FlaskConical, Smile, Pill, Megaphone, } from 'lucide-react';
+  CalendarClock, CalendarDays, Clapperboard, CalendarSearch, ListTodo, ListChecks, Repeat, Link2, Tags, Users, Smartphone, Trophy, PhoneCall, StickyNote, UtensilsCrossed, BookOpen, Shirt, CalendarRange, CalendarCheck, ShieldCheck, Package, ScrollText, Building2, UserCog, Home, Grid3x3, BarChart3, LineChart, FlaskConical, Smile, Pill, Megaphone, Dumbbell, } from 'lucide-react';
 import type { StickerName } from '../components/atoms/Sticker.tsx';
 import { HomePage } from '../pages/HomePage.tsx';
 import { AccessMatrixPage } from '../pages/admin/AccessMatrixPage.tsx';
@@ -22,6 +22,7 @@ import { CalendarPage } from '../pages/CalendarPage.tsx';
 import { ListsPage } from '../pages/ListsPage.tsx';
 import { MealsPage } from '../pages/MealsPage.tsx';
 import { MedicationsPage } from '../pages/MedicationsPage.tsx';
+import { WorkoutsPage } from '../pages/WorkoutsPage.tsx';
 import { RecipesPage } from '../pages/RecipesPage.tsx';
 import { WardrobePage } from '../pages/WardrobePage.tsx';
 import { AccountPage } from '../pages/AccountPage.tsx';
@@ -55,13 +56,14 @@ export interface SectionDef {
  */
 const SECTIONS: SectionDef[] = [
   { id: 'home', label: 'Inicio', group: 'General', icon: Home, render: () => <HomePage /> },
-  { id: 'calendar', description: 'Tu semana por horas: rutinas, recordatorios, tareas, comidas, medicamentos y citas.', sticker: 'agendado', label: 'Calendario', group: 'Mi día', icon: CalendarSearch, perms: ['routines.manage', 'reminders.manage', 'todos.manage', 'meals.manage', 'medications.manage', 'reminders.calls', 'scheduling.professional', 'scheduling.client'], render: () => <CalendarPage /> },
+  { id: 'calendar', description: 'Tu semana por horas: rutinas, recordatorios, tareas, comidas, medicamentos y citas.', sticker: 'agendado', label: 'Calendario', group: 'Mi día', icon: CalendarSearch, perms: ['routines.manage', 'reminders.manage', 'todos.manage', 'meals.manage', 'medications.manage', 'workouts.manage', 'reminders.calls', 'scheduling.professional', 'scheduling.client'], render: () => <CalendarPage /> },
   { id: 'today', description: 'Lo que tienes que hacer hoy, para ir marcando.', sticker: 'tareas', label: 'Hoy', group: 'Mi día', icon: CalendarDays, perms: ['todos.manage'], render: () => <TodosPage scope="today" title="Pendientes de hoy" /> },
   { id: 'later', description: 'Pendientes sin fecha fija.', sticker: 'idea', label: 'Para después', group: 'Mi día', icon: ListTodo, perms: ['todos.manage'], render: () => <TodosPage scope="later" title="Para después" /> },
   { id: 'lists', description: 'Listas de compras, películas, ideas…', sticker: 'compras', label: 'Listas', group: 'Mi día', icon: ListChecks, perms: ['todos.manage'], render: () => <ListsPage /> },
   { id: 'reminders', description: 'Recordatorios puntuales, recurrentes y fechas importantes.', sticker: 'agendado', label: 'Recordatorios', group: 'Mi día', icon: CalendarClock, perms: ['reminders.manage'], render: () => <RemindersPage /> },
   { id: 'call-reminders', description: 'Llamadas reales como recordatorio o alarma.', sticker: 'llamada', label: 'Llamadas', group: 'Mi día', icon: PhoneCall, perms: ['reminders.calls'], render: () => <CallRemindersPage /> },
   { id: 'routines', description: 'Hábitos con hora fija, rachas e historial.', sticker: 'rutina', label: 'Rutinas', group: 'Hábitos', icon: Repeat, perms: ['routines.manage'], render: () => <RoutinesPage /> },
+  { id: 'workouts', description: 'Boxeo, zumba, gym, correr, yoga… con su horario, sesiones y minutos de la semana y tu racha.', sticker: 'vamos', label: 'Ejercicios', group: 'Hábitos', icon: Dumbbell, perms: ['workouts.manage'], render: () => <WorkoutsPage /> },
   { id: 'rewards', description: 'Premios y castigos ligados a tus rutinas.', sticker: 'premio', label: 'Premios y castigos', group: 'Hábitos', icon: Trophy, perms: ['rewards.manage'], render: () => <RewardsPage /> },
   { id: 'meals', description: 'Desayuno, onces, almuerzo, media tarde y cena.', sticker: 'listo', label: 'Comidas', group: 'Hábitos', icon: UtensilsCrossed, perms: ['meals.manage'], render: () => <MealsPage /> },
   { id: 'medications', description: 'Medicamentos, vitaminas, cremas, skincare, agua y cuidado corporal (faja…) con su hora: Canix te avisa cuándo toca.', sticker: 'agendado', label: 'Medicamentos y belleza', group: 'Hábitos', icon: Pill, perms: ['medications.manage'], render: () => <MedicationsPage /> },

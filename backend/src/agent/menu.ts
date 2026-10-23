@@ -34,7 +34,7 @@ const NAV_FOOTER = '\n\n> */menu* vuelve al menú principal';
  *  in the menu below without an import cycle - modes.ts imports THIS constant, not the reverse.
  *  'stickers' lives outside CORE_CATEGORIES (see STICKERS_CATEGORY below, admin-gated like fashion/
  *  admin) but is still a real mode key - modes.ts merges the two when resolving mode entry. */
-export const MODE_KEYS = ['rutinas', 'medicamentos', 'tareas', 'notas', 'contactos', 'comidas', 'recetas', 'premios', 'resumenes', 'stickers', 'agenda'] as const;
+export const MODE_KEYS = ['rutinas', 'ejercicios', 'medicamentos', 'tareas', 'notas', 'contactos', 'comidas', 'recetas', 'premios', 'resumenes', 'stickers', 'agenda'] as const;
 
 /**
  * Which permission(s) make each category visible/enterable (see services/permissions/catalog.ts) - any one
@@ -45,6 +45,7 @@ const CATEGORY_PERMISSIONS: Record<string, string[]> = {
   medicamentos: ['medications.manage'],
   categorias: ['links.manage', 'notes.manage', 'reminders.manage', 'todos.manage', 'recipes.manage'],
   rutinas: ['routines.manage'],
+  ejercicios: ['workouts.manage'],
   tareas: ['todos.manage'],
   notas: ['notes.manage'],
   links: ['links.manage'],
@@ -112,15 +113,31 @@ export const CORE_CATEGORIES: MenuCategory[] = [
     emoji: '🔁',
     title: 'Rutinas y hábitos',
     short: 'Hábitos con hora fija, racha e historial - márcalos cumplidos o no cada día.',
-    aliases: ['rutina', 'rutinas', 'habito', 'habitos', 'hábito', 'hábitos', 'ejercicio', 'ejercicios'],
+    aliases: ['rutina', 'rutinas', 'habito', 'habitos', 'hábito', 'hábitos'],
     detail:
       `🔁 *Rutinas y hábitos*\n\n` +
-      `- Crear con hora de aviso + duración: "crea rutina de ejercicio a las 7am, 30 minutos"\n` +
+      `- Crear con hora de aviso + duración: "crea rutina de leer a las 9pm, 20 minutos"\n` +
       `- Elegir cada cuánto: todos los días, "lunes y jueves", "cada 15 días", "cada mes el 5"\n` +
       `- Marcar cumplida o no reaccionando 👍/👎 al aviso; ver racha e historial\n` +
       `- Editar horario/frecuencia sin perder la racha\n` +
-      `- Pausar unos días (vacaciones, lesión) sin borrarla\n` +
-      `- Desglosar una rutina en ejercicios concretos (series/repeticiones/peso)`,
+      `- Pausar unos días (vacaciones, viaje) sin borrarla\n` +
+      `- El ejercicio (boxeo, zumba, gym...) tiene su propia sección: escribe *ejercicios*`,
+  },
+  {
+    key: 'ejercicios',
+    emoji: '🏋️',
+    title: 'Ejercicios',
+    short: 'Boxeo, zumba, gym, correr, yoga y cualquier deporte: aviso a la hora, sesiones de la semana y racha.',
+    aliases: ['ejercicio', 'ejercicios', 'entrenamiento', 'entrenamientos', 'entrenar', 'deporte', 'deportes', 'gym', 'gimnasio', 'workout', 'actividad fisica', 'actividad física'],
+    detail:
+      `🏋️ *Ejercicios*\n\n` +
+      `- Agregar con días, hora y duración: "boxeo los lunes y miércoles a las 7pm, 1 hora, en el gimnasio Body"\n` +
+      `- Cualquier actividad: "zumba los sábados a las 9am", "correr todos los días a las 6am, 30 minutos", "yoga martes y jueves"\n` +
+      `- A su hora te aviso; márcalo reaccionando 👍/👎 al aviso o dime "ya hice boxeo"\n` +
+      `- "mis ejercicios" te muestra cómo vas: sesiones y minutos de la semana y tu racha; también en el portal\n` +
+      `- Desglose para seguir en la clase: "agrégale a boxeo 3 rounds de 3 minutos de sombra" - sale en el aviso\n` +
+      `- Solo por hoy a otra hora: "hoy el boxeo a las 8pm"\n` +
+      `- Cambiar días u hora sin perder la racha, o pausarlo por lesión o viaje`,
   },
   {
     key: 'tareas',

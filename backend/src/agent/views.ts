@@ -6,6 +6,7 @@ import { LIST_KINDS, LIST_KIND_INFO, MEDIA_KIND_WORDS, isMediaKind, listKindOf, 
 import { describeSchedule, scheduleOf } from '../services/routines/routine-schedule.js';
 import type { Category, Checklist, ChecklistItem, Contact, Exercise, Link, MealPlan, Medication, Note, Reminder, Todo } from '../entities/index.js';
 import { MEDICATION_KINDS, adherence, timesOf, waterProgressLine } from '../services/medications/medications.service.js';
+import { WORKOUT_KINDS, minutesText, workoutWeek } from '../services/workouts/workouts.service.js';
 import type { CategoryUsage } from '../models/categories.model.js';
 import type { MediaItem } from '../models/checklists.model.js';
 
@@ -292,6 +293,30 @@ export function routinesView(routines: Todo[]): string {
   return [`🔁 *Tus rutinas* · ${routines.length}`, ...grouped(sorted, groupOf, (name, n) => `${name} · ${n}`, line)].join('\n');
 }
 
+/** Ejercicios: each one with its days, hour, place, this week's sessions, streak and how many exercises it has. */
+export function workoutsView(workouts: Todo[], exercisesOf: (id: number) => Exercise[]): string {
+  if (workouts.length === 0) return '🏋️ *Ejercicios*\n\nTodavía no tienes ninguno. Dime algo como "boxeo los lunes y miércoles a las 7pm, 1 hora" o "zumba los sábados a las 9am".';
+  const weeks = new Map(workouts.map((w) => [w.id, workoutWeek(w)]));
+  const total = [...weeks.values()].reduce((sum, w) => ({ done: sum.done + w.done, due: sum.due + w.due, minutes: sum.minutes + w.minutes }), { done: 0, due: 0, minutes: 0 });
+  const kindOf = (t: Todo) => WORKOUT_KINDS[t.workout_kind ?? 'other'] ?? WORKOUT_KINDS.other;
+  const row = (t: Todo) => {
+    const s = scheduleOf(t);
+    const week = weeks.get(t.id)!;
+    const exercises = exercisesOf(t.id);
+    const lines = [`${timeChip(s.time)} ${withIcon(t.title, kindOf(t).emoji)} ${idChip(t.id)}`];
+    lines.push(`> ${[describeSchedule(s), t.duration_minutes ? `${t.duration_minutes} min` : null, t.place ? `📍 ${t.place}` : null].filter(Boolean).join(' · ')}`);
+    const progress = [week.due ? `Esta semana ✅ ${week.done} de ${week.due}` : null, week.streak ? `🔥 racha ${week.streak}` : null].filter(Boolean);
+    if (progress.length) lines.push(`> ${progress.join(' · ')}`);
+    if (exercises.length) lines.push(`> 🏋️ ${exercises.length} ejercicio${exercises.length === 1 ? '' : 's'}: ${exercises.slice(0, 3).map((e) => e.name).join(', ')}${exercises.length > 3 ? '…' : ''}`);
+    if (t.notes) lines.push(`> ${t.notes.replace(/\s+/g, ' ').slice(0, 120)}`);
+    return lines.join('\n');
+  };
+  const sorted = [...workouts].sort((a, b) => scheduleOf(a).time.localeCompare(scheduleOf(b).time));
+  const head = [`🏋️ *Tus ejercicios* · ${workouts.length}`];
+  if (total.due) head.push(`> Esta semana: ${total.done} de ${total.due} sesiones ${progressBar(total.done, total.due)}${total.minutes ? ` · ${minutesText(total.minutes)}` : ''}`);
+  return [...head, ...grouped(sorted, (t) => `${kindOf(t).emoji} *${kindOf(t).label}*`, (k, n) => `${k} · ${n}`, row)].join('\n');
+}
+
 /** With `linkCounts` (category id -> links saved there) each one says how many links it holds, so
  *  "¿en cuál tengo algo?" is answered from the list itself. */
 /** Categories are shared by every module - each row says what it groups ("🔗 3 links · ⏰ 1 recordatorio"). */
@@ -355,7 +380,7 @@ export function exercisesBlock(exercises: Exercise[], opts: { title?: string; wi
 /** Tools whose result is already a designed message (see above) rather than data to phrase. */
 const DESIGNED_TOOLS = new Set([
   'get_today_agenda', 'get_week_report', 'list_links', 'list_contacts', 'list_notes', 'list_lists', 'view_list',
-  'list_reminders', 'list_todos', 'list_categories', 'list_meal_plan', 'list_recipes', 'list_exercises', 'suggest_recipes', 'find_saved',
+  'list_reminders', 'list_todos', 'list_categories', 'list_meal_plan', 'list_recipes', 'list_exercises', 'list_workouts', 'suggest_recipes', 'find_saved',
   'list_appointments', 'list_my_appointments', 'list_available_slots', 'list_scheduling_clients', 'list_my_professionals', 'view_availability',
 ]);
 const LIST_ROW_RE = /^(?:[-•]\s|`|\d+[.)]\s|[0-9]\uFE0F?\u20E3|#\d|[⬜☑✅🔗👤📝📋💡])/u;
@@ -401,6 +426,8 @@ const LIST_WORDS: Record<string, string> = {
   categorias: 'list_categories',
   recetas: 'list_recipes',
   rutinas: 'list_todos',
+  ejercicios: 'list_workouts',
+  entrenamientos: 'list_workouts',
 };
 const LIST_ASK_RE = new RegExp(
   `^(?:(?:muestrame|mostrame|dime|dame|ver|listar|lista|listame|cuales son|que|quiero ver|a ver|enviame|mandame)\\s+)?(?:(?:todos|todas)\\s+)?(?:mis|los|las)?\\s*(${Object.keys(LIST_WORDS).join('|')})(?:\\s+(?:tengo|que tengo|hay|guardados|guardadas|pendientes|activos|programados))?$`,

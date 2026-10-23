@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useApi, errMsg } from '../../../services/api.ts';
-import type { Category, Routine } from '../../../types/index.ts';
+import type { Category, Routine, WorkoutKind, WorkoutsResponse } from '../../../types/index.ts';
 import { WEEKDAY_NAMES, WEEKDAY_SHORT } from '../../../utils/dates.ts';
 import { Notice } from '../../molecules/Notice.tsx';
 import { Button } from '../../atoms/Button.tsx';
-import { Input, Label, Select, Hint } from '../../atoms/Input.tsx';
+import { Input, Label, Select, Textarea, Hint } from '../../atoms/Input.tsx';
 import { Modal } from '../Modal.tsx';
 import { Draft, Mode, WEEK_ORDER, clockText, joinDays, modeOf, scheduleOfDraft } from '../../../utils/routines.ts';
 
@@ -39,12 +39,15 @@ export function RoutineForm({
   categories,
   onClose,
   onSaved,
+  workoutKinds,
 }: {
   initial: Draft;
   original: Routine | null;
   categories: Category[];
   onClose: () => void;
   onSaved: () => Promise<void>;
+  /** Given = it's an Ejercicios form: asks for the kind, place and notes and saves to /api/workouts. */
+  workoutKinds?: WorkoutsResponse['kinds'];
 }) {
   const api = useApi();
   const [d, setD] = useState<Draft>(initial);
@@ -65,10 +68,16 @@ export function RoutineForm({
     setSaving(true);
     setError(null);
     const schedule = scheduleOfDraft(d);
-    const basics = { title: d.title.trim(), category_id: d.categoryId ? Number(d.categoryId) : null, duration_minutes: Number(d.duration) };
+    const basics = {
+      title: d.title.trim(),
+      category_id: d.categoryId ? Number(d.categoryId) : null,
+      duration_minutes: Number(d.duration),
+      ...(workoutKinds ? { workout_kind: d.workoutKind ?? 'other', place: d.place?.trim() ?? '', notes: d.notes?.trim() ?? '' } : {}),
+    };
+    const base = workoutKinds ? '/api/workouts' : '/api/todos';
     try {
       if (!original) {
-        await api.post('/api/todos', { scope: 'routine', ...basics, reminder_time: d.time, ...schedule });
+        await api.post(base, { scope: 'routine', ...basics, reminder_time: d.time, ...schedule });
       } else {
         // The days/frequency are only sent when they really changed: re-sending them makes the
         // server re-anchor the routine, which could move an every-two-weeks one to the other week.
@@ -77,7 +86,7 @@ export function RoutineForm({
           schedule.recurrence_interval === original.interval &&
           (!needsDays || schedule.weekdays.join() === original.weekdays.join()) &&
           (d.mode !== 'monthly' || schedule.month_day === original.month_day);
-        await api.put(`/api/todos/${original.id}`, {
+        await api.put(`${base}/${original.id}`, {
           ...basics,
           ...(d.time !== original.reminder_time ? { reminder_time: d.time } : {}),
           ...(sameSchedule ? {} : schedule),
@@ -93,13 +102,32 @@ export function RoutineForm({
   }
 
   return (
-    <Modal title={original ? 'Editar rutina' : 'Nueva rutina'} onClose={onClose} size="md">
+    <Modal title={workoutKinds ? (original ? 'Editar ejercicio' : 'Nuevo ejercicio') : original ? 'Editar rutina' : 'Nueva rutina'} onClose={onClose} size="md">
       {error && <Notice tone="error">{error}</Notice>}
       <div className="space-y-5">
-        <div>
-          <Label htmlFor="routine-title">¿Qué rutina es?</Label>
-          <Input id="routine-title" value={d.title} onChange={(e) => set({ title: e.target.value })} autoFocus placeholder="Ej. Ejercicio, leer, tomar la pastilla" />
-        </div>
+        {workoutKinds ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="workout-title">¿Qué ejercicio es?</Label>
+              <Input id="workout-title" value={d.title} onChange={(e) => set({ title: e.target.value })} autoFocus placeholder="Boxeo, Zumba, Gym - pierna, Correr" />
+            </div>
+            <div>
+              <Label htmlFor="workout-kind">Tipo</Label>
+              <Select id="workout-kind" value={d.workoutKind ?? 'other'} onChange={(e) => set({ workoutKind: e.target.value as WorkoutKind })}>
+                {Object.entries(workoutKinds).map(([id, k]) => (
+                  <option key={id} value={id}>
+                    {k.emoji} {k.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <Label htmlFor="routine-title">¿Qué rutina es?</Label>
+            <Input id="routine-title" value={d.title} onChange={(e) => set({ title: e.target.value })} autoFocus placeholder="Ej. Leer, meditar, tomar la pastilla" />
+          </div>
+        )}
 
         <fieldset>
           <legend className="mb-1.5 block text-sm font-semibold text-ink dark:text-white/85">¿Cada cuánto?</legend>
@@ -187,6 +215,19 @@ export function RoutineForm({
           </div>
         </div>
 
+        {workoutKinds && (
+          <>
+            <div>
+              <Label htmlFor="workout-place">¿Dónde? (opcional)</Label>
+              <Input id="workout-place" value={d.place ?? ''} onChange={(e) => set({ place: e.target.value })} placeholder="Gimnasio, academia, parque, casa" />
+            </div>
+            <div>
+              <Label htmlFor="workout-notes">Notas (opcional)</Label>
+              <Textarea id="workout-notes" rows={2} value={d.notes ?? ''} onChange={(e) => set({ notes: e.target.value })} placeholder="Profesor, qué llevar (guantes, toalla), objetivo…" />
+            </div>
+          </>
+        )}
+
         <div>
           <Label htmlFor="routine-cat">Categoría (opcional)</Label>
           <Select id="routine-cat" value={d.categoryId} onChange={(e) => set({ categoryId: e.target.value })}>
@@ -200,7 +241,7 @@ export function RoutineForm({
         </div>
 
         <p className="rounded-xl bg-secondary px-3.5 py-3 text-sm text-primary-dark dark:bg-primary/15 dark:text-white" aria-live="polite">
-          {summaryOf(d)} El aviso llega con una encuesta de <strong>Sí / No</strong> para marcarla con un toque cuando termines.
+          {summaryOf(d)} Lo marcas reaccionando <strong>👍 / 👎</strong> al aviso cuando termines.
         </p>
 
         <div className="flex justify-end gap-2">
@@ -208,7 +249,7 @@ export function RoutineForm({
             Cancelar
           </Button>
           <Button onClick={save} loading={saving} disabled={!valid}>
-            {original ? 'Guardar cambios' : 'Crear rutina'}
+            {original ? 'Guardar cambios' : workoutKinds ? 'Agregar ejercicio' : 'Crear rutina'}
           </Button>
         </div>
       </div>

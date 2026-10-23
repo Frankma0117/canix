@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Trash2, Flame, Pencil, Check, X, History, Clock, Timer, CalendarDays, PauseCircle, ChevronDown } from 'lucide-react';
 import { useApi, errMsg } from '../../../services/api.ts';
 import type { Routine } from '../../../types/index.ts';
@@ -19,12 +19,15 @@ export function RoutineCard({
   onChanged,
   onEdit,
   onError,
+  children,
 }: {
   routine: Routine;
   categoryName: string;
   onChanged: () => Promise<void>;
   onEdit: (r: Routine) => void;
   onError: (msg: string) => void;
+  /** Extra detail under the main row (Ejercicios: place, week, exercises). */
+  children?: ReactNode;
 }) {
   const api = useApi();
   const [busy, setBusy] = useState<'yes' | 'no' | null>(null);
@@ -166,6 +169,8 @@ export function RoutineCard({
           </div>
         </div>
       </div>
+
+      {children}
 
       {showHistory && (
         <div className="mt-4 border-t border-gray-medium/70 pt-4 dark:border-white/10">

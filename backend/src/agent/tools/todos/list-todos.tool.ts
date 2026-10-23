@@ -45,7 +45,14 @@ export const listTodosTool: Tool = {
     // Routines aren't tasks: they only show when asked for by name (scope "routine").
     const wanted = args.scope ? todos : todos.filter((t) => t.scope !== 'routine');
     if (wanted.length === 0) return args.scope === 'routine' ? 'No tienes rutinas creadas.' : 'No tienes tareas que coincidan.';
-    if (args.scope === 'routine') return routinesView(wanted);
+    if (args.scope === 'routine') {
+      // Boxeo, zumba, gym... live in Ejercicios (list_workouts): only named here so they aren't missed.
+      const plain = wanted.filter((t) => !t.workout_kind);
+      const workouts = wanted.filter((t) => t.workout_kind);
+      const pointer = workouts.length ? `> Tus ejercicios (${workouts.map((t) => t.title).join(', ')}) están en *Ejercicios*: escribe *ejercicios* para verlos` : '';
+      if (!plain.length) return `No tienes rutinas aparte de tus ejercicios.\n${pointer}`;
+      return [routinesView(plain), pointer].filter(Boolean).join('\n\n');
+    }
     return todosView(wanted, (id) => linksModel.getById(userId, id)?.url, { done: args.status === 'done' });
   },
 };

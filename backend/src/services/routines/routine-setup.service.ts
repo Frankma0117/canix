@@ -13,7 +13,8 @@ import {
   type RoutineFreq,
   type RoutineSchedule,
 } from './routine-schedule.js';
-import type { RecurrenceFreq, Reminder, Todo } from '../../entities/index.js';
+import { guessWorkoutKind } from '../workouts/workouts.service.js';
+import type { RecurrenceFreq, Reminder, Todo, WorkoutKind } from '../../entities/index.js';
 
 /** What a caller (chat tool or web portal) may say about when a routine happens. */
 export interface RoutineScheduleInput {
@@ -104,6 +105,8 @@ function storedFreq(freq: RoutineFreq): RecurrenceFreq {
  * duration_minutes later, only sent if that poll couldn't go out. Both linked to the routine
  * (todo_id) so deleting it cascades and removes them too. Shared by the create_routine chat tool
  * and the portal's routine form, so routines behave the same wherever they're created.
+ * A routine about exercise ("boxeo", "zumba", "gym") lands in Ejercicios on its own unless
+ * workoutKind says otherwise (null = keep it a plain routine).
  */
 export function createRoutineWithReminders(
   userId: number,
@@ -113,6 +116,9 @@ export function createRoutineWithReminders(
     categoryId: number | null;
     reminderTime: string;
     durationMinutes: number;
+    workoutKind?: WorkoutKind | null;
+    place?: string | null;
+    notes?: string | null;
   } & RoutineScheduleInput,
 ): number {
   const draft = completeSchedule(fields, fields.reminderTime);
@@ -131,6 +137,8 @@ export function createRoutineWithReminders(
     monthDay: schedule.monthDay,
     startDate: schedule.startDate,
   });
+  const workoutKind = fields.workoutKind === undefined ? guessWorkoutKind(fields.title) : fields.workoutKind;
+  if (workoutKind || fields.place || fields.notes) todosModel.setWorkout(userId, id, { kind: workoutKind, place: fields.place ?? null, notes: fields.notes ?? null });
 
   const reminderRunAt = nextOccurrence(schedule, nowLocal()) ?? `${schedule.startDate} ${schedule.time}:00`;
   const base = {

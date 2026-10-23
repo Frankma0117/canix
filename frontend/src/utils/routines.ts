@@ -1,4 +1,4 @@
-import type { Routine, RoutineFreq } from '../types/index.ts';
+import type { Routine, RoutineFreq, WorkoutKind } from '../types/index.ts';
 import { WEEKDAY_NAMES } from './dates.ts';
 
 /** Monday first - how a week is read here. */
@@ -46,6 +46,10 @@ export interface Draft {
   monthEvery: string;
   time: string;
   duration: string;
+  /** Only in Ejercicios. */
+  workoutKind?: WorkoutKind;
+  place?: string;
+  notes?: string;
 }
 
 export function modeOf(r: Routine): Mode {

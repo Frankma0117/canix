@@ -55,6 +55,13 @@ export function isPluralGarment(category: string): boolean {
   return PLURAL.has(category);
 }
 
+/** How a garment is pointed at in a sentence: "esta / la / fija" for a camisa, "estos / los / fijos" for tenis. */
+export function garmentWords(category: string): { this: string; it: string; fixed: string } {
+  const fem = FEMININE.has(category);
+  const s = PLURAL.has(category) ? 's' : '';
+  return fem ? { this: `esta${s}`, it: `la${s}`, fixed: `fija${s}` } : { this: s ? 'estos' : 'este', it: `lo${s}`, fixed: `fijo${s}` };
+}
+
 /** The color the way it's said next to that garment: "camisa blanca", "zapatos negros", "botas rojas". */
 export function colorFor(category: string, color: string): string {
   const [first, ...rest] = humanize(color).split(' ');

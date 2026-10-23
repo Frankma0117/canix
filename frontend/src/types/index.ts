@@ -438,6 +438,8 @@ export interface Routine {
   title: string;
   /** Emoji that fits what the routine is about (picked by the server from its title). */
   icon?: string;
+  /** Set when it belongs to Ejercicios (boxeo, zumba...) instead of Rutinas. */
+  workout_kind?: WorkoutKind | null;
   category_id: number | null;
   reminder_time: string;
   duration_minutes: number | null;
@@ -458,6 +460,35 @@ export interface Routine {
   /** false = its notices were cancelled or are missing: it's listed but never says anything. */
   notifying: boolean;
   paused_until: string | null;
+}
+
+export type WorkoutKind = 'combat' | 'dance' | 'strength' | 'cardio' | 'flexibility' | 'sport' | 'other';
+
+/** One exercise of a workout or routine: rounds/sets, reps or seconds, weight. */
+export interface Exercise {
+  id: number;
+  todo_id: number;
+  name: string;
+  sets: number | null;
+  reps: number | null;
+  seconds: number | null;
+  weight_kg: number | null;
+  order_index: number;
+}
+
+/** Ejercicios - one row of GET /api/workouts: the routine view plus place, notes, the week and its exercises. */
+export interface Workout extends Routine {
+  workout_kind: WorkoutKind;
+  place: string | null;
+  notes: string | null;
+  week: { done: number; due: number; minutes: number; streak: number };
+  exercises: Exercise[];
+}
+
+export interface WorkoutsResponse {
+  kinds: Record<WorkoutKind, { label: string; emoji: string }>;
+  summary: { done: number; due: number; minutes: number; minutes_text: string };
+  items: Workout[];
 }
 
 export interface PromptResponse {

@@ -9,9 +9,10 @@ import { relatedLinks } from '../../../services/search/related.service.js';
 export const createRoutineTool: Tool = {
   name: 'create_routine',
   description:
-    'Crea un hábito/rutina recurrente (ej. "ejercicio", "leer 20 minutos") para hacerle seguimiento: todos los días, ' +
+    'Crea un hábito/rutina recurrente (ej. "leer 20 minutos", "meditar") para hacerle seguimiento: todos los días, ' +
     'ciertos días de la semana, cada 15 días o cada mes. Toda rutina necesita una hora de aviso y una duración: el bot ' +
-    'avisa a esa hora con una encuesta de Sí/No para marcarla cuando se termine.',
+    'avisa a esa hora con una encuesta de Sí/No para marcarla cuando se termine. Para EJERCICIO (boxeo, zumba, gym, correr, ' +
+    'yoga, deportes) usa add_workout, no esta.',
   parameters: {
     type: 'object',
     properties: {

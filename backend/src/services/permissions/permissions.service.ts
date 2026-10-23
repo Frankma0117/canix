@@ -125,6 +125,17 @@ export function grantMedicationsToReminderUsers(): void {
   permissionsModel.setMeta(flag, new Date().toISOString());
 }
 
+/**
+ * Ejercicios grew out of Rutinas (boxeo, zumba... were routines): whoever had routines keeps the
+ * new module. Runs once.
+ */
+export function grantWorkoutsToRoutineUsers(): void {
+  const flag = 'workouts_permission_v1';
+  if (permissionsModel.getMeta(flag)) return;
+  permissionsModel.extendGrants('routines.manage', 'workouts.manage');
+  permissionsModel.setMeta(flag, new Date().toISOString());
+}
+
 /** Human summary used by chat tools and the menu: "Recordatorios, Rutinas y hábitos, ...". */
 export function describePermissions(keys: Iterable<string>): string {
   const labels = [...keys].map((k) => PERMISSIONS.find((p) => p.key === k)?.label ?? k);

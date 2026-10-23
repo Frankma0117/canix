@@ -75,8 +75,10 @@ function dates(from: string, to: string): string[] {
 export function calendarEvents(userId: number, from: string, to: string, can: (permission: string) => boolean): CalendarEvent[] {
   const events: CalendarEvent[] = [];
 
-  if (can('routines.manage')) {
+  if (can('routines.manage') || can('workouts.manage')) {
     for (const routine of todosModel.list(userId, { scope: 'routine' })) {
+      // Workouts (boxeo, zumba...) come with Ejercicios, plain routines with Rutinas.
+      if (!can(routine.workout_kind ? 'workouts.manage' : 'routines.manage')) continue;
       const schedule = scheduleOf(routine);
       for (const date of dates(from, to)) {
         if (!occursOn(schedule, date)) continue;

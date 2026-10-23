@@ -1,6 +1,6 @@
 import { db } from '../database/connection.js';
 import { nowLocal } from '../shared/utils/datetime.js';
-import type { RecurrenceFreq, Todo, TodoScope, TodoStatus } from '../entities/index.js';
+import type { RecurrenceFreq, Todo, TodoScope, TodoStatus, WorkoutKind } from '../entities/index.js';
 
 export const todosModel = {
   list(userId: number, filters: { scope?: TodoScope; status?: TodoStatus; categoryId?: number } = {}): Todo[] {
@@ -82,6 +82,19 @@ export const todosModel = {
       fields.categoryId === undefined ? current.category_id : fields.categoryId,
       fields.dueDate === undefined ? current.due_date : fields.dueDate,
       fields.linkId === undefined ? current.link_id : fields.linkId,
+      id,
+      userId,
+    );
+  },
+
+  /** A routine's Ejercicios fields (kind, place, notes) - only those given change; kind null = back to a plain routine. */
+  setWorkout(userId: number, id: number, fields: { kind?: WorkoutKind | null; place?: string | null; notes?: string | null }): void {
+    const current = this.getById(userId, id);
+    if (!current) return;
+    db.prepare('UPDATE todos SET workout_kind = ?, place = ?, notes = ? WHERE id = ? AND user_id = ?').run(
+      fields.kind === undefined ? current.workout_kind : fields.kind,
+      fields.place === undefined ? current.place : fields.place,
+      fields.notes === undefined ? current.notes : fields.notes,
       id,
       userId,
     );

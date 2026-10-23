@@ -16,7 +16,8 @@ import { ensureWeeklyReportReminder } from './services/agenda/weekly-report.serv
 import { ensureDailyResetReminder } from './services/conversation/daily-reset.service.js';
 import { ensureDailyDedupReminder, dedupeAllUsers } from './services/maintenance/dedup.service.js';
 import { permissionsModel } from './models/permissions.model.js';
-import { migrateLegacyAccess, grantLibraryToListUsers, grantMedicationsToReminderUsers } from './services/permissions/permissions.service.js';
+import { migrateLegacyAccess, grantLibraryToListUsers, grantMedicationsToReminderUsers, grantWorkoutsToRoutineUsers } from './services/permissions/permissions.service.js';
+import { migrateExerciseRoutinesToWorkouts } from './services/workouts/workouts-migration.service.js';
 import { migrateCategoryRemindersToMedications, migrateWaterReminders } from './services/medications/medications-migration.service.js';
 import { installProcessGuards } from './shared/utils/process-guards.js';
 import { setSchedulingNotifier } from './services/scheduling/scheduling.service.js';
@@ -45,6 +46,8 @@ async function main() {
   grantMedicationsToReminderUsers();
   migrateCategoryRemindersToMedications();
   migrateWaterReminders();
+  grantWorkoutsToRoutineUsers();
+  migrateExerciseRoutinesToWorkouts();
   const movedBillable = permissionsModel.moveBillableOutOfPackages();
   if (movedBillable) console.log('[ACCESS] Moved %d paid permission(s) from packages to direct grants (review them under Users).', movedBillable);
 

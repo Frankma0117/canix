@@ -56,6 +56,7 @@ export function RoutinesPage() {
   const api = useApi();
   const [categories, setCategories] = useState<Category[]>([]);
   const [routines, setRoutines] = useState<Routine[] | null>(null);
+  const [workouts, setWorkouts] = useState<string[]>([]);
   const [view, setView] = useState<View>('today');
   const [day, setDay] = useState<number>(() => weekday(todayISO()));
   const [form, setForm] = useState<{ draft: Draft; original: Routine | null } | null>(null);
@@ -65,7 +66,9 @@ export function RoutinesPage() {
     try {
       const [cats, items] = await Promise.all([api.get<Category[]>('/api/categories').catch(() => [] as Category[]), api.get<Routine[]>('/api/routines')]);
       setCategories(cats);
-      setRoutines(items);
+      // Boxeo, zumba, gym... are routines too, but they're shown in Ejercicios.
+      setRoutines(items.filter((r) => !r.workout_kind));
+      setWorkouts(items.filter((r) => r.workout_kind).map((r) => r.title));
       setError(null);
     } catch (e) {
       setError(errMsg(e));
@@ -122,6 +125,11 @@ export function RoutinesPage() {
       }
     >
       {error && <Notice tone="error">{error}</Notice>}
+      {workouts.length > 0 && (
+        <Notice tone="info">
+          Tus ejercicios ({workouts.join(', ')}) ahora están en la sección <strong>Ejercicios</strong>, con sus sesiones, minutos y desglose.
+        </Notice>
+      )}
 
       {!routines && !error && (
         <div className="space-y-3">

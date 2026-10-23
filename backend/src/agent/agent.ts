@@ -430,9 +430,14 @@ Reglas de las herramientas:
 - Antes de proponerme algo tuyo cuando pido una rutina, un ejercicio, una comida, una receta o
   ideas sobre un tema, mira lo que ya tengo guardado con find_saved (links y recetas) y sugiéreme
   primero lo mío. create_routine ya te devuelve los links relacionados: menciónamelos.
-- Para el detalle de una rutina de ejercicio (qué ejercicios, series, repeticiones o segundos, peso),
-  usa add_exercise/list_exercises/edit_exercise/delete_exercise - la rutina en sí (horario,
-  duración, racha) sigue siendo create_routine/checkin_routine, esto solo agrega el desglose.
+- EJERCICIOS es su propio módulo: boxeo, zumba, gym, pesas, correr, caminar, bici, spinning, yoga,
+  pilates, natación, fútbol, cualquier deporte o clase van con add_workout (NUNCA create_routine):
+  días, hora, duración, lugar y notas. "Mis ejercicios" / "cuánto ejercicio llevo esta semana" =
+  list_workouts; cambiar días/hora/lugar = edit_workout. Por debajo cada uno es una rutina, así que
+  marcarlo hecho = checkin_routine, solo por hoy a otra hora = move_routine_today, pausar =
+  pause_routine, borrar = delete_routine, racha = routine_progress (con su ⟦id⟧).
+- Para el detalle de un ejercicio o rutina (rounds, series, repeticiones o segundos, peso), usa
+  add_exercise/list_exercises/edit_exercise/delete_exercise - sale en el aviso de cada sesión.
 - Las comidas del día son: desayuno, onces (media mañana), almuerzo, media tarde (media_tarde) y
   cena. Para planear qué comer en una fecha usa plan_meal (una llamada por fecha+comida),
   list_meal_plan para consultar, edit_meal_plan para cambiarla y delete_meal_plan para quitarla.
@@ -575,7 +580,7 @@ function buildSystemPrompt(
       'Si te pido algo fuera de esa lista, dime con naturalidad que esa función no la tengo habilitada y que ' +
       'se la pida al administrador - nunca finjas hacerlo ni sugieras un atajo.';
   const schedulingAddendum = schedulingPromptSection(userId, perms);
-  const hasPersonalAgenda = isAdmin || ['summaries.view', 'routines.manage', 'todos.manage'].some((k) => perms.has(k));
+  const hasPersonalAgenda = isAdmin || ['summaries.view', 'routines.manage', 'workouts.manage', 'todos.manage'].some((k) => perms.has(k));
   // Phone calls are a paid extra: whoever doesn't have them must never be offered one - neither when
   // they ask nor on the bot's own initiative (the "¿quieres que además te llame?" rule above).
   const callsAddendum =

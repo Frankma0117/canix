@@ -1,5 +1,7 @@
 import type { RecurrenceFreq } from './reminder.entity.js';
 
+export type WorkoutKind = 'combat' | 'dance' | 'strength' | 'cardio' | 'flexibility' | 'sport' | 'other';
+
 export type TodoScope = 'today' | 'later' | 'routine';
 
 export type TodoStatus = 'pending' | 'done' | 'skipped';
@@ -25,6 +27,11 @@ export interface Todo {
   recurrence_interval: number;
   month_day: number | null;
   start_date: string | null; // 'YYYY-MM-DD'
+  // Only for routines in Ejercicios (see services/workouts/workouts.service.ts): what kind of
+  // exercise it is ('combat', 'dance'...), where it's done and free notes. NULL = a plain routine.
+  workout_kind: WorkoutKind | null;
+  place: string | null;
+  notes: string | null;
   status: TodoStatus;
   completed_at: string | null;
   created_at: string;

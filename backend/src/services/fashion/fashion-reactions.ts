@@ -23,6 +23,8 @@ import type { FashionSessionData, OutfitDraft } from './fashion.types.js';
  *   on "¿la elimino?"    👍 yes · 👎 no
  * The message is looked up in fashion_message_refs, so a reaction works even after the chat moved
  * on. Returns null when the reaction isn't on one of these messages, or means nothing here.
+ * A quoted reply to one of them ("cambiar", "fija", "ya no la tengo", "guardar") is read as the
+ * matching reaction - see handleFashionQuotedReply.
  */
 type Action = 'swap' | 'keep_only' | 'delete' | 'pin' | 'yes' | 'no' | 'worn';
 
@@ -98,4 +100,22 @@ export async function handleFashionReaction(input: { userId: number; jid: string
     return { consumed: true, reply: action === 'worn' ? markWorn(userId, draft) : saveOutfit(userId, draft, { wa, jid }) };
   }
   return null;
+}
+
+// What a quoted reply says, as the reaction it stands for. Short answers only: a longer sentence
+// quoting the photo is a normal message ("cambia la camiseta por una polo" goes through the flow).
+const REPLY_AS_EMOJI: Array<[RegExp, string]> = [
+  [/^(🗑️?|ya no (la|lo|las|los) tengo|ya no (la|lo|las|los) uso|elimin(ar|a|ala|alo|alas|alos)|borr(ar|a|ala|alo|alas|alos)|quitar del armario)$/, '🗑'],
+  [/^(❤️?|armar otro( outfit)?( con (esta|este|estas|estos|ella|ellos))?|arma otro( outfit)?( con (esta|este|estas|estos|ella|ellos))?|con (esta|este|estas|estos)|otro con (esta|este|estas|estos)|me encanta)$/, '❤'],
+  [/^(👎|cambiar|cambia|c[aá]mbia(la|lo|las|los)|cambiar (esta|este|estas|estos)|otra|otro|otra opci[oó]n|no me gusta|esa no|ese no|no)$/, '👎'],
+  [/^(👍|fija|fijo|fijas|fijos|d[eé]ja(la|lo|las|los)( fij[oa]s?)?|dejar fij[oa]s?|me gusta|s[ií]|ok|dale|guardar|guarda(lo)?)$/, '👍'],
+  [/^(👕|me lo puse|me la puse|lo us[eé]|usado|usada)$/, '👕'],
+];
+
+/** A text reply that quotes one of Fashion Mode's messages: handled like the reaction it means, or null. */
+export async function handleFashionQuotedReply(input: { userId: number; jid: string; quotedId: string; text: string; wa: WaManager }): Promise<FashionRouterResult | null> {
+  const said = input.text.trim().toLowerCase().replace(/[.!¡¿?]+/g, '').replace(/\s+/g, ' ');
+  const match = REPLY_AS_EMOJI.find(([re]) => re.test(said));
+  if (!match) return null;
+  return handleFashionReaction({ userId: input.userId, jid: input.jid, targetId: input.quotedId, emoji: match[1], wa: input.wa });
 }

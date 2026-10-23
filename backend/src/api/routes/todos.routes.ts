@@ -9,16 +9,19 @@ import type { RecurrenceFreq, TodoScope, TodoStatus } from '../../entities/index
 
 /**
  * /api/todos serves both one-off tasks (todos.manage) and routines (routines.manage) - the scope
- * comes from the query/body, or from the existing row for /:id routes.
+ * comes from the query/body, or from the existing row for /:id routes. A routine that belongs to
+ * Ejercicios (workout_kind) also opens with workouts.manage - its check-in, history and delete are
+ * the routine ones.
  */
 function todoPermissionGate(req: Request, res: Response, next: NextFunction): void {
   const perms = req.panelPermissions!;
   if (req.panelUser?.role === 'admin') return next();
   let scope = String(req.query.scope ?? req.body?.scope ?? '');
   const idMatch = /^\/(\d+)/.exec(req.path);
-  if (!scope && idMatch) scope = todosModel.getById(req.panelUser!.id, Number(idMatch[1]))?.scope ?? '';
+  const row = idMatch ? todosModel.getById(req.panelUser!.id, Number(idMatch[1])) : undefined;
+  if (!scope && row) scope = row.scope;
   const needed = scope === 'routine' ? 'routines.manage' : scope ? 'todos.manage' : null;
-  const ok = needed ? perms.has(needed) : perms.has('todos.manage') || perms.has('routines.manage');
+  const ok = (needed ? perms.has(needed) : perms.has('todos.manage') || perms.has('routines.manage')) || (!!row?.workout_kind && perms.has('workouts.manage'));
   if (ok) return next();
   res.status(403).json({ error: 'No tienes habilitado este módulo. Pídeselo al administrador.' });
 }

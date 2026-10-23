@@ -11,7 +11,7 @@ import type { PromptAnswer, PromptSource, ReminderPrompt } from '../../entities/
 import { jidNormalizedUser, downloadMediaMessage, type WAMessage } from 'baileys';
 import { WaManager } from './wa-manager.js';
 import { handleFashionMessage } from '../../services/fashion/fashion.router.js';
-import { handleFashionReaction } from '../../services/fashion/fashion-reactions.js';
+import { handleFashionQuotedReply, handleFashionReaction } from '../../services/fashion/fashion-reactions.js';
 import type { FashionRouterResult } from '../../services/fashion/fashion-router.types.js';
 import { usersModel } from '../../models/users.model.js';
 import { messagesModel } from '../../models/messages.model.js';
@@ -395,6 +395,15 @@ export class BotManager {
         if (prompt && quotedAnswer) {
           await this.recordPromptAnswer(jid, prompt, quotedAnswer, 'reply');
           return;
+        }
+        // A short reply quoting an outfit photo or summary ("cambiar", "fija"): same as reacting to it.
+        if (env.fashion.enabled && can(botUser, 'fashion.use')) {
+          const result = await handleFashionQuotedReply({ userId: user.id, jid, quotedId, text, wa: this.wa });
+          if (result) {
+            console.log('[FASHION] User #%d replied "%s" to an outfit message.', user.id, text);
+            await this.sendFashionResult(user.id, jid, text, result);
+            return;
+          }
         }
       }
 

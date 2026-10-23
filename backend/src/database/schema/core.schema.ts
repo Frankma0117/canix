@@ -119,6 +119,10 @@ export function createCoreTables(db: Database.Database): void {
       start_date TEXT,
       reminder_time TEXT,
       duration_minutes INTEGER,
+      -- Set on a routine that belongs to Ejercicios (boxeo, zumba, gym...) - see services/workouts/.
+      workout_kind TEXT,
+      place TEXT,
+      notes TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
       completed_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
