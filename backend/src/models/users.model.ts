@@ -1,0 +1,155 @@
+import { randomBytes } from 'node:crypto';
+import { db } from '../database/connection.js';
+import type { User, UserRole } from '../entities/index.js';
+
+export const usersModel = {
+  getById(id: number): User | undefined {
+    return db.prepare('SELECT * FROM users WHERE id = ?').get(id) as User | undefined;
+  },
+
+  /** Finds a user by jid OR lid - WhatsApp may route the same person's messages through either. */
+  getByJidOrLid(jidOrLid: string): User | undefined {
+    return db
+      .prepare('SELECT * FROM users WHERE jid = ? OR lid = ?')
+      .get(jidOrLid, jidOrLid) as User | undefined;
+  },
+
+  findByNameOrPhone(query: string): User[] {
+    const digits = query.replace(/\D/g, '');
+    if (digits.length >= 6) {
+      return db
+        .prepare(`SELECT * FROM users WHERE jid LIKE ? ORDER BY created_at`)
+        .all(`${digits}%`) as User[];
+    }
+    return db
+      .prepare('SELECT * FROM users WHERE name LIKE ? COLLATE NOCASE ORDER BY created_at')
+      .all(`%${query}%`) as User[];
+  },
+
+  listAll(): User[] {
+    return db.prepare('SELECT * FROM users ORDER BY created_at').all() as User[];
+  },
+
+  getAdmin(): User | undefined {
+    return db.prepare(`SELECT * FROM users WHERE role = 'admin' ORDER BY id LIMIT 1`).get() as User | undefined;
+  },
+
+  isAdmin(userId: number): boolean {
+    return this.getById(userId)?.role === 'admin';
+  },
+
+  /** True once at least one user exists (fresh installs bootstrap the first contact as admin). */
+  hasAny(): boolean {
+    return (db.prepare('SELECT COUNT(*) AS c FROM users').get() as { c: number }).c > 0;
+  },
+
+  /** Grants access. Idempotent: re-granting an already-registered jid just returns the existing user. */
+  create(fields: { jid: string; name: string | null; role?: UserRole; username?: string | null }): User {
+    db.prepare(
+      `INSERT INTO users (jid, name, role, username) VALUES (?, ?, ?, ?) ON CONFLICT(jid) DO NOTHING`,
+    ).run(fields.jid, fields.name, fields.role ?? 'user', fields.username ?? null);
+    return this.getByJidOrLid(fields.jid)!;
+  },
+
+  /**
+   * Replaces a user's stored identity with their real phone jid - for people first registered
+   * under their WhatsApp @lid (privacy id) because the phone number wasn't known yet. The old lid
+   * is kept in `lid` so lookups by either keep working. Refuses (returns false) if that phone jid
+   * already belongs to someone else.
+   */
+  setPhoneJid(id: number, phoneJid: string): boolean {
+    const user = this.getById(id);
+    if (!user) return false;
+    const other = db.prepare('SELECT id FROM users WHERE jid = ? AND id != ?').get(phoneJid, id);
+    if (other) return false;
+    const lid = user.lid ?? (user.jid.endsWith('@lid') ? user.jid : null);
+    db.prepare('UPDATE users SET jid = ?, lid = ? WHERE id = ?').run(phoneJid, lid, id);
+    return true;
+  },
+
+  setLid(jid: string, lid: string): void {
+    db.prepare('UPDATE users SET lid = ? WHERE jid = ?').run(lid, jid);
+  },
+
+  setUsername(id: number, username: string | null): void {
+    db.prepare('UPDATE users SET username = ? WHERE id = ?').run(username, id);
+  },
+
+  /** Pauses (or clears, with null) every scheduled notification for this user - see
+   *  pause-notifications.tool.ts / task-scheduler.ts. */
+  setPausedUntil(id: number, until: string | null): void {
+    db.prepare('UPDATE users SET paused_until = ? WHERE id = ?').run(until, id);
+  },
+
+  /** Restricts a user to only the given tool names, or pass null to clear the restriction (full access). */
+  setAllowedTools(id: number, tools: string[] | null): void {
+    db.prepare('UPDATE users SET allowed_tools = ? WHERE id = ?').run(tools ? JSON.stringify(tools) : null, id);
+  },
+
+  /** Switches this user's active special mode (see agent/modes.ts), or pass null to return to the
+   *  default mode (recordatorios). */
+  setActiveMode(id: number, mode: string | null): void {
+    db.prepare('UPDATE users SET active_mode = ? WHERE id = ?').run(mode, id);
+  },
+
+  /** Stores this person's gender once known (see set-user-gender.tool.ts) - handed back to the AI
+   *  in every turn's system prompt so it addresses them correctly without re-guessing each time. */
+  setGender(id: number, gender: 'male' | 'female'): void {
+    db.prepare('UPDATE users SET gender = ? WHERE id = ?').run(gender, id);
+  },
+
+  /** Stores this person's preferred TTS voice for voice-note replies (see set-voice-gender.tool.ts
+   *  and services/audio/tts.ts) - independent from setGender() above, which is grammatical, not audio. */
+  setVoiceGender(id: number, voiceGender: 'male' | 'female'): void {
+    // A specific voice chosen earlier (see setVoice) only survives if it's of that same gender.
+    db.prepare(
+      `UPDATE users SET voice_gender = ?,
+         voice_id = CASE WHEN voice_id LIKE ? THEN voice_id ELSE NULL END
+       WHERE id = ?`,
+    ).run(voiceGender, voiceGender === 'female' ? 'M%' : 'H%', id);
+  },
+
+  /** Stores the natural voice this person picked (a key of services/audio/voices.ts's catalog) together
+   *  with its gender, so the free local voice follows the same choice. */
+  setVoice(id: number, voiceKey: string, voiceGender: 'male' | 'female'): void {
+    db.prepare('UPDATE users SET voice_id = ?, voice_gender = ? WHERE id = ?').run(voiceKey, voiceGender, id);
+  },
+
+  /** Parses a user's allowed_tools column. Null means unrestricted (every tool available). */
+  getAllowedTools(user: User): string[] | null {
+    if (!user.allowed_tools) return null;
+    try {
+      const parsed = JSON.parse(user.allowed_tools);
+      return Array.isArray(parsed) ? (parsed as string[]) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  /** Turns the administrator's test mode on (JSON, see services/permissions/test-mode.service.ts) or off (null). */
+  setTestMode(id: number, testMode: string | null): void {
+    db.prepare(`UPDATE users SET test_mode = ? WHERE id = ? AND role = 'admin'`).run(testMode, id);
+  },
+
+  getByPanelToken(token: string): User | undefined {
+    return db.prepare('SELECT * FROM users WHERE panel_token = ?').get(token) as User | undefined;
+  },
+
+  setPanelToken(id: number, token: string): void {
+    db.prepare('UPDATE users SET panel_token = ? WHERE id = ?').run(token, id);
+  },
+
+  /** Returns this user's panel token, generating one on the fly if they don't have one yet
+   *  (e.g. an account created before the per-client panel feature existed). */
+  ensurePanelToken(id: number): string {
+    const user = this.getById(id);
+    if (user?.panel_token) return user.panel_token;
+    const token = randomBytes(24).toString('hex');
+    this.setPanelToken(id, token);
+    return token;
+  },
+
+  remove(id: number): void {
+    db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  },
+};

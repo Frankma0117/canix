@@ -1,6 +1,6 @@
 """
 Extracts embedded raster images (garment photos) from a PDF, for Fashion Mode's "send a PDF full
-of garment photos" flow (see src/fashion/flows/add-garment-pdf.flow.ts on the Node side). Uses
+of garment photos" flow (see backend/src/services/fashion/flows/add-garment-pdf.flow.ts on the Node side). Uses
 PyMuPDF (fitz) to pull the actual embedded image objects straight out of the PDF's internal
 structure - it does NOT rasterize/render whole pages (which would need a much heavier pipeline and
 more RAM for no benefit here, since the garment photos are already raster images embedded in the
@@ -37,7 +37,7 @@ def extract_images(pdf_bytes: bytes, max_images: int, min_dimension: int = MIN_D
                 try:
                     extracted = doc.extract_image(xref)
                 except Exception as err:  # noqa: BLE001 - one corrupt image object shouldn't abort the whole PDF
-                    logger.warning("No se pudo extraer xref %s: %s", xref, err)
+                    logger.warning("Could not extract xref %s: %s", xref, err)
                     continue
 
                 raw = extracted["image"]

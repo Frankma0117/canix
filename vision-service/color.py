@@ -2,7 +2,7 @@
 Dominant-color extraction via plain Pillow pixel quantization - deliberately NOT the CLIP model
 (a pixel-based approach is simpler, faster, and more accurate for "what color is this" than asking
 a text-image model to pick a color label). Mapped to the nearest color in a fixed palette matching
-canix's src/fashion/taxonomy.ts COLORS list - if nothing dominates clearly, returns "multicolor"
+canix's backend/src/services/fashion/taxonomy.ts COLORS list - if nothing dominates clearly, returns "multicolor"
 instead of forcing a single (likely wrong) answer.
 """
 from PIL import Image
@@ -17,7 +17,7 @@ from PIL import Image
 # improvement on "the whole frame including background".
 _CROP_MARGIN_FRACTION = 0.18
 
-# Same taxonomy as src/fashion/taxonomy.ts's COLORS - keep these two lists in sync by hand (this
+# Same taxonomy as backend/src/services/fashion/taxonomy.ts's COLORS - keep these two lists in sync by hand (this
 # service never sends a color group to the /analyze caller that Node didn't ask for, so a mismatch
 # here would just mean an occasional slightly-off nearest-match, never an invented value).
 PALETTE: dict[str, tuple[int, int, int]] = {

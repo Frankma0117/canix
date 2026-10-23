@@ -1,0 +1,19 @@
+/** Domain entities: the shape of each persisted record, one file per aggregate. */
+export type * from './user.entity.js';
+export type * from './category.entity.js';
+export type * from './link.entity.js';
+export type * from './note.entity.js';
+export type * from './contact.entity.js';
+export type * from './reminder.entity.js';
+export type * from './reminder-prompt.entity.js';
+export type * from './todo.entity.js';
+export type * from './checklist.entity.js';
+export type * from './message.entity.js';
+export type * from './exercise.entity.js';
+export type * from './meal.entity.js';
+export type * from './fashion.entity.js';
+export type * from './ai-usage.entity.js';
+export type * from './call-reminder.entity.js';
+export type * from './sticker.entity.js';
+export type * from './reward.entity.js';
+export type * from './medication.entity.js';

@@ -1,0 +1,49 @@
+import { env } from '../../config/env.js';
+
+/**
+ * Normalizes a phone number (any format) into a WhatsApp JID: "300 123 4567" -> jid. WhatsApp
+ * jids need the *full* international number (country code included) to route correctly - a
+ * number typed/saved without it produces a jid nobody can actually be messaged at. If the digits
+ * look "local" (shorter than a full international number and not already starting with the
+ * configured default country code), prepend that default (see WA_SESSION's defaultCountryCode /
+ * DEFAULT_COUNTRY_CODE env var).
+ */
+export function phoneToJid(phone: string): string {
+  return `${normalizePhoneDigits(phone)}@s.whatsapp.net`;
+}
+
+/** Digit-only normalization step of phoneToJid, exposed on its own for callers that need the plain
+ *  number (e.g. to pass to sock.onWhatsApp()) rather than an already-built @s.whatsapp.net jid -
+ *  see send-message.tool.ts, which prefers the jid WhatsApp itself resolves over building one. */
+export function normalizePhoneDigits(phone: string): string {
+  const digitsOnly = phone.trim().replace(/\D/g, '');
+  return withCountryCode(digitsOnly);
+}
+
+function withCountryCode(digits: string): string {
+  const cc = env.wa.defaultCountryCode;
+  if (!cc || digits.startsWith(cc) || digits.length > 10) return digits;
+  return `${cc}${digits}`;
+}
+
+/** Extracts the phone number from a phone-addressed JID. LIDs ("...@lid") don't carry the phone, so they return null. */
+export function jidToPhone(jid: string): string | null {
+  return jid.endsWith('@s.whatsapp.net') ? jid.slice(0, -'@s.whatsapp.net'.length) : null;
+}
+
+/**
+ * How to show/identify a person: their real number when known, otherwise their WhatsApp @lid
+ * digits as an "access code" (WhatsApp hides some people's number behind a lid until it shares
+ * the mapping - see bot-manager.ts, which swaps in the real number as soon as it arrives).
+ */
+export function describeIdentity(jid: string): { phone: string | null; code: string; label: string } {
+  const phone = jidToPhone(jid);
+  const code = jid.split('@')[0];
+  return { phone, code, label: phone ? `+${phone}` : `código ${code} (número aún no registrado)` };
+}
+
+/** True if the string already looks like a JID (has an "@" domain part). */
+export function isJid(value: string): boolean {
+  return value.includes('@');
+}
+

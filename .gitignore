@@ -1,45 +1,36 @@
+# Dependencies and build output
 node_modules/
 dist/
+*.tsbuildinfo
+
+# Secrets and runtime state - never versioned
 .env
 auth_info/
 data/*.db
 data/*.db-journal
 data/*.db-shm
 data/*.db-wal
-# Lock de instancia única (lo escribe el bot al arrancar - ver util/single-instance.ts)
+# Single-instance lock written at boot (backend/src/shared/utils/single-instance.ts)
 data/canix.lock
-# Fechas de última modificación de las páginas públicas e IndexNow (ver src/growth/site.ts)
+# Public site last-modified dates and IndexNow state (backend/src/services/growth/site.service.ts)
 data/site-pages.json
-*.log
-npm-debug.log*
-*.tsbuildinfo
-.DS_Store
+data/stickers-export/
 
-# Panel admin (React/Vite): build generado
-public/assets/
-public/index.html
-# Copiados por Vite desde admin-panel/public (la fuente sí se versiona)
-public/stickers/
-public/favicon.svg
-public/og-canix.png
-public/logo-canix.png
-public/favicon.ico
-public/apple-touch-icon.png
-public/icon-*.png
-public/site.webmanifest
-public/conoce/
+# Built web assets: frontend/ builds the portal and the public site into /public
+/public/
 
-# Modelos/binarios de audio (se descargan aparte, ver README > Audio)
+# Audio models/binaries, downloaded on the server (deploy/ubuntu-04-setup-audio.sh)
 models/
 bin/
 
-# Microservicio de vision (Fashion Mode): venv de Python + cache de modelos, se generan en el
-# server (ver deploy/ubuntu-05-setup-vision.sh) - sin esto, deploy.sh los ve como "cambios sin
-# commitear" y se niega a hacer git pull en cualquier corrida futura.
+# Vision microservice: Python venv + model cache, created on the server (deploy/ubuntu-05-setup-vision.sh)
 vision-service/.venv/
 vision-service/.cache/
 vision-service/__pycache__/
-data/stickers-export/
 
-# Muestras de voz para elegir (generadas localmente)
+# Locally generated voice samples
 muestras-voz/
+
+*.log
+npm-debug.log*
+.DS_Store

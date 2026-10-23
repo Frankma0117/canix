@@ -1,20 +1,17 @@
 #!/usr/bin/env bash
-# Descarga y deja listo todo lo que canix necesita para transcribir notas de voz (Vosk) y
-# responder con audio (Piper) - ambos locales, sin IA/tokens - y escribe las 4 variables
-# resultantes directo en .env, sin pasos manuales. Descarga DOS voces de Piper (masculina por
-# defecto + femenina) para que set_voice_gender ("quiero voz de mujer") funcione sin pasos
-# manuales extra - ver README > Audio. Correr despues de ubuntu-02-deploy.sh (necesita /opt/canix
-# ya instalado, con .env ya creado). Seguro de re-correr: si algo ya esta descargado (o la variable
-# en .env ya tiene el valor correcto), lo omite.
+# Downloads everything Canix needs to transcribe voice notes (Vosk) and answer with audio (Piper) -
+# both local, no AI/tokens - and writes the 4 resulting variables straight into .env. Downloads TWO
+# Piper voices (male default + female) so set_voice_gender ("quiero voz de mujer") works with no
+# extra steps. Needs /opt/canix with a .env already created (the first ./deploy.sh does that).
+# Safe to re-run: whatever is already downloaded (or already correct in .env) is skipped.
 set -euo pipefail
 
-# unzip no viene instalado por defecto en varias imagenes minimas de Ubuntu (curl casi siempre
-# si, pero se revisa igual por si acaso).
+# unzip is missing from several minimal Ubuntu images (curl is almost always there, checked anyway).
 missing_pkgs=""
 command -v unzip >/dev/null 2>&1 || missing_pkgs="$missing_pkgs unzip"
 command -v curl >/dev/null 2>&1 || missing_pkgs="$missing_pkgs curl"
 if [ -n "$missing_pkgs" ]; then
-  echo "== Instalando dependencias que faltan:$missing_pkgs =="
+  echo "== Installing missing dependencies:$missing_pkgs =="
   sudo apt-get update
   sudo apt-get install -y $missing_pkgs
 fi
@@ -24,8 +21,8 @@ cd "$APP_DIR"
 
 ENV_FILE="$APP_DIR/.env"
 if [ ! -f "$ENV_FILE" ]; then
-  echo "No existe $ENV_FILE todavia - corre ./deploy.sh (sin flags) primero, o ./deploy/ubuntu-02-deploy.sh,"
-  echo "para que se cree desde .env.example. Sin .env no hay donde escribir las variables de audio."
+  echo "$ENV_FILE does not exist yet - run ./deploy.sh (no flags) first so it is created from"
+  echo ".env.example. Without .env there is nowhere to write the audio variables."
   exit 1
 fi
 
@@ -34,17 +31,15 @@ VOSK_MODEL_DIR="$APP_DIR/models/vosk-es"
 
 PIPER_VOICE="es_ES-davefx-medium"
 PIPER_VOICE_URL_BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/davefx/medium"
-# Voz femenina (español, Argentina - la voz femenina en español mejor valorada del catálogo de
-# Piper) para PIPER_VOICE_PATH_FEMALE - ver set-voice-gender.tool.ts / README > Audio. Si preferís
-# otro acento, cambiá estas dos variables por cualquier otra voz de
-# https://huggingface.co/rhasspy/piper-voices (carpeta es/) y volvé a correr el script.
+# Female voice (Spanish, Argentina - the best rated female Spanish voice in Piper's catalog) for
+# PIPER_VOICE_PATH_FEMALE. For another accent, swap these two variables for any other voice under
+# https://huggingface.co/rhasspy/piper-voices (es/ folder) and run the script again.
 PIPER_VOICE_FEMALE="es_AR-daniela-high"
 PIPER_VOICE_FEMALE_URL_BASE="https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_AR/daniela/high"
 PIPER_DIR="$APP_DIR/bin/piper"
 
-# Upsert de KEY=VALUE en .env - reemplaza la linea si ya existe (config manual previa, o un
-# re-run de este mismo script), la agrega si no. Delimitador '#' en el sed porque los valores son
-# rutas de archivo (llevan '/').
+# Upserts KEY=VALUE in .env - replaces the line when it exists (earlier manual config, or a re-run
+# of this script), appends it otherwise. '#' as the sed delimiter because values are file paths.
 set_env_var() {
   local key="$1" value="$2"
   if grep -q "^${key}=" "$ENV_FILE" 2>/dev/null; then
@@ -54,26 +49,26 @@ set_env_var() {
   fi
 }
 
-echo "== Modelo de Vosk (transcripcion de audios, espanol, ~40MB) =="
+echo "== Vosk model (voice-note transcription, Spanish, ~40MB) =="
 if [ -d "$VOSK_MODEL_DIR" ]; then
-  echo "Ya existe $VOSK_MODEL_DIR, omito descarga."
+  echo "$VOSK_MODEL_DIR already exists, skipping download."
 else
   mkdir -p "$APP_DIR/models"
   curl -fL -o /tmp/vosk-es.zip "$VOSK_MODEL_URL"
   unzip -q /tmp/vosk-es.zip -d "$APP_DIR/models"
   rm /tmp/vosk-es.zip
-  # el zip trae una carpeta con nombre versionado (vosk-model-small-es-0.42/) - normalizarla
+  # the zip holds a versioned folder (vosk-model-small-es-0.42/) - normalize its name
   extracted="$(find "$APP_DIR/models" -maxdepth 1 -type d -name 'vosk-model-small-es-*' | head -1)"
   mv "$extracted" "$VOSK_MODEL_DIR"
-  echo "Listo: $VOSK_MODEL_DIR"
+  echo "Done: $VOSK_MODEL_DIR"
 fi
 set_env_var VOSK_MODEL_PATH "$VOSK_MODEL_DIR"
 
 echo ""
-echo "== Binario de Piper (respuesta por voz, ultima version, linux x64) =="
+echo "== Piper binary (voice replies, latest release, linux x64) =="
 piper_ok=false
 if [ -d "$PIPER_DIR" ]; then
-  echo "Ya existe $PIPER_DIR, omito descarga."
+  echo "$PIPER_DIR already exists, skipping download."
   piper_ok=true
 else
   mkdir -p "$APP_DIR/bin"
@@ -81,13 +76,13 @@ else
     | grep -o '"browser_download_url": *"[^"]*piper_linux_x86_64\.tar\.gz"' \
     | grep -o 'https://[^"]*')"
   if [ -z "$piper_asset_url" ]; then
-    echo "No pude resolver la URL de Piper automaticamente (revisa tu conexion o descargalo a mano"
-    echo "de https://github.com/rhasspy/piper/releases y descomprimelo en $PIPER_DIR)."
+    echo "Could not resolve Piper's URL automatically (check the connection, or download it by hand"
+    echo "from https://github.com/rhasspy/piper/releases and extract it into $PIPER_DIR)."
   else
     curl -fL -o /tmp/piper.tar.gz "$piper_asset_url"
-    tar -xzf /tmp/piper.tar.gz -C "$APP_DIR/bin"   # extrae directo a bin/piper/ (trae sus .so junto al binario, no lo muevas suelto)
+    tar -xzf /tmp/piper.tar.gz -C "$APP_DIR/bin"   # extracts to bin/piper/ (its .so files sit next to the binary - don't move it alone)
     rm /tmp/piper.tar.gz
-    echo "Listo: $PIPER_DIR/piper"
+    echo "Done: $PIPER_DIR/piper"
     piper_ok=true
   fi
 fi
@@ -96,40 +91,40 @@ if [ "$piper_ok" = true ]; then
 fi
 
 echo ""
-echo "== Voz en español de Piper ($PIPER_VOICE) =="
+echo "== Piper Spanish voice ($PIPER_VOICE) =="
 mkdir -p "$APP_DIR/models/piper-voices"
 voice_path="$APP_DIR/models/piper-voices/$PIPER_VOICE.onnx"
 if [ -f "$voice_path" ]; then
-  echo "Ya existe la voz, omito descarga."
+  echo "Voice already present, skipping download."
 else
   curl -fL -o "$voice_path" "$PIPER_VOICE_URL_BASE/$PIPER_VOICE.onnx"
   curl -fL -o "$voice_path.json" "$PIPER_VOICE_URL_BASE/$PIPER_VOICE.onnx.json"
-  echo "Listo: $voice_path"
+  echo "Done: $voice_path"
 fi
 set_env_var PIPER_VOICE_PATH "$voice_path"
 
 echo ""
-echo "== Voz femenina de Piper ($PIPER_VOICE_FEMALE) =="
+echo "== Piper female voice ($PIPER_VOICE_FEMALE) =="
 voice_female_path="$APP_DIR/models/piper-voices/$PIPER_VOICE_FEMALE.onnx"
 if [ -f "$voice_female_path" ]; then
-  echo "Ya existe la voz, omito descarga."
+  echo "Voice already present, skipping download."
 else
   curl -fL -o "$voice_female_path" "$PIPER_VOICE_FEMALE_URL_BASE/$PIPER_VOICE_FEMALE.onnx"
   curl -fL -o "$voice_female_path.json" "$PIPER_VOICE_FEMALE_URL_BASE/$PIPER_VOICE_FEMALE.onnx.json"
-  echo "Listo: $voice_female_path"
+  echo "Done: $voice_female_path"
 fi
 set_env_var PIPER_VOICE_PATH_FEMALE "$voice_female_path"
 
 echo ""
-echo "== .env actualizado (VOSK_MODEL_PATH, PIPER_BIN_PATH$([ "$piper_ok" = true ] || echo ' [omitido, ver arriba]'), PIPER_VOICE_PATH, PIPER_VOICE_PATH_FEMALE) =="
+echo "== .env updated (VOSK_MODEL_PATH, PIPER_BIN_PATH$([ "$piper_ok" = true ] || echo ' [skipped, see above]'), PIPER_VOICE_PATH, PIPER_VOICE_PATH_FEMALE) =="
 if [ "$piper_ok" = true ]; then
-  echo "Todo quedo configurado, con voz masculina (por defecto) y femenina listas. Reinicia el bot"
-  echo "para que tome los valores nuevos:"
-  echo "  sudo systemctl restart canix   # o: pm2 restart cania"
+  echo "All set, with the male (default) and female voices ready. Restart the bot so it picks up"
+  echo "the new values:"
+  echo "  sudo systemctl restart canix   # or: pm2 restart cania"
   echo ""
-  echo "Cada usuario elige su voz escribiendole al bot algo como \"quiero que me hables con voz de"
-  echo "mujer\" (usa la tool set_voice_gender) - no hace falta tocar el .env de nuevo para eso."
+  echo "Each user picks their voice by telling the bot something like \"quiero que me hables con voz"
+  echo "de mujer\" (set_voice_gender tool) - no need to touch .env again for that."
 else
-  echo "Falta el binario de Piper (ver arriba) - una vez que lo tengas en $PIPER_DIR, corre este"
-  echo "script de nuevo para que termine de escribir PIPER_BIN_PATH y reinicia el bot."
+  echo "The Piper binary is missing (see above) - once it is in $PIPER_DIR, run this script again so"
+  echo "it writes PIPER_BIN_PATH, then restart the bot."
 fi

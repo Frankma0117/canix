@@ -1,0 +1,47 @@
+import { LIST_KIND_INFO, inferListKind, normalizeListKind } from '../../../shared/utils/list-kinds.js';
+import type { Tool } from '../../tool-registry.js';
+import { checklistsModel } from '../../../models/checklists.model.js';
+import { resolveActingUser } from '../shared/act-on-behalf.js';
+
+export const createListTool: Tool = {
+  name: 'create_list',
+  description:
+    'Crea una lista nueva para ir marcando cosas de a poco - ej. "juegos de Mario que quiero", "películas por ver", ' +
+    '"libros pendientes", "cosas para comprar". Distinta de una tarea suelta (add_todo): es una colección a la que ' +
+    'luego se le agregan ítems (add_list_item) y se van marcando uno por uno (check_list_item), sin fecha ni hora. ' +
+    'Las de música, películas, series, libros y juegos quedan clasificadas como tales.',
+  parameters: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Nombre de la lista, ej. "Juegos de Mario".' },
+      kind: {
+        type: 'string',
+        enum: ['musica', 'peliculas', 'series', 'libros', 'juegos', 'compras', 'general'],
+        description: 'De qué es la lista. Si no lo pasas se deduce del nombre ("Películas por ver" -> peliculas).',
+      },
+      target_user: {
+        type: 'string',
+        description: 'Solo administrador: nombre o número de otra persona con acceso, para crearle la lista a ella en vez de a ti.',
+      },
+    },
+    required: ['name'],
+    additionalProperties: false,
+  },
+
+  async execute(args, ctx) {
+    const acting = resolveActingUser(ctx, args.target_user ? String(args.target_user) : undefined);
+    if ('error' in acting) return acting.error;
+    const { userId } = acting;
+
+    const name = String(args.name ?? '').trim();
+    if (!name) return 'Me falta el nombre de la lista.';
+
+    const existing = checklistsModel.findByName(userId, name).find((l) => l.name.toLowerCase() === name.toLowerCase());
+    if (existing) return `Ya tienes una lista llamada "${existing.name}" (⟦${existing.id}⟧) - usa add_list_item para agregarle cosas.`;
+
+    const kind = normalizeListKind(args.kind) ?? inferListKind(name);
+    const id = checklistsModel.create(userId, name, kind);
+    const info = LIST_KIND_INFO[kind];
+    return `Listo, creé la lista "${name}" (⟦${id}⟧) ${info.emoji}${kind === 'general' ? '' : ` como lista de ${info.label.toLowerCase()}`} - dime qué agregar y lo hago con add_list_item.`;
+  },
+};

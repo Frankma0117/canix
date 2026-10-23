@@ -9,13 +9,13 @@ WorkingDirectory=/opt/canix/vision-service
 ExecStart=/opt/canix/vision-service/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8008
 Restart=on-failure
 RestartSec=5
-# Reduce el pico de RAM de PyTorch a costa de inferencia un poco mas lenta - ver la seccion
-# "Uso de RAM" de vision-service/README.md antes de activar Fashion Mode en produccion.
+# Lowers PyTorch's peak RAM at the cost of slightly slower inference - see "RAM usage" in
+# docs/VISION_SERVICE.md before enabling Fashion Mode in production.
 Environment=OMP_NUM_THREADS=1
-# 'canix' es un usuario de sistema (useradd -r, ver ubuntu-06-setup-vision-service.sh) sin carpeta
-# home creada - sin esto, HOME cae en /home/canix (no existe, y 'canix' no puede crearla bajo
-# /home) y transformers falla al intentar cachear el modelo CLIP ahi (~/.cache/huggingface).
-# Se apunta a WorkingDirectory, que ya es de 'canix' (chown -R en el setup) y existe seguro.
+# 'canix' is a system user (useradd -r, see ubuntu-06-setup-vision-service.sh) without a home
+# folder - without this, HOME falls back to /home/canix (missing, and 'canix' cannot create it) and
+# transformers fails to cache the CLIP model there (~/.cache/huggingface). Points at
+# WorkingDirectory instead, which exists and already belongs to 'canix'.
 Environment=HOME=/opt/canix/vision-service
 StandardOutput=journal
 StandardError=journal

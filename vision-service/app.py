@@ -1,7 +1,7 @@
 """
 Fashion Mode's local vision microservice - a single POST /analyze endpoint that classifies a
 garment photo against a fixed candidate taxonomy sent from the Node bot (see
-src/fashion/taxonomy.ts / src/fashion/vision/http-vision.service.ts). Free, self-hosted, CPU-only -
+backend/src/services/fashion/taxonomy.ts / backend/src/services/fashion/vision/http-vision.service.ts). Free, self-hosted, CPU-only -
 no external API, no cost per call. If this process isn't running (or errors/times out), the Node
 side falls back to asking the user to tag the garment manually - this service is an enhancement,
 never a hard dependency for adding a garment.
@@ -55,14 +55,14 @@ async def analyze(image: UploadFile = File(...), labels: str = Form(...)) -> JSO
     try:
         groups = json.loads(labels)
     except json.JSONDecodeError:
-        return JSONResponse(status_code=400, content={"error": "labels debe ser JSON válido"})
+        return JSONResponse(status_code=400, content={"error": "labels must be valid JSON"})
 
     try:
         raw = await image.read()
         pil_image = Image.open(io.BytesIO(raw)).convert("RGB")
     except Exception as err:  # noqa: BLE001
-        logger.warning("Imagen inválida recibida: %s", err)
-        return JSONResponse(status_code=400, content={"error": "imagen inválida"})
+        logger.warning("Invalid image received: %s", err)
+        return JSONResponse(status_code=400, content={"error": "invalid image"})
 
     # Quality is assessed but never blocks classification - a flagged photo still often yields a
     # usable (if lower-confidence) result, and the caller decides what to do with the flag (see
@@ -70,7 +70,7 @@ async def analyze(image: UploadFile = File(...), labels: str = Form(...)) -> JSO
     # specific "la foto está borrosa" message instead of a generic "no pude analizarla").
     quality = assess_quality(pil_image)
     if not quality["ok"]:
-        logger.info("Calidad de foto cuestionable: %s", quality["issues"])
+        logger.info("Questionable photo quality: %s", quality["issues"])
 
     result: dict = {"quality": quality, "model": model.current_model_name()}
     for group_def in groups:
@@ -119,7 +119,7 @@ async def analyze(image: UploadFile = File(...), labels: str = Form(...)) -> JSO
 
     elapsed_ms = round((time.monotonic() - started) * 1000)
     logger.info(
-        "Análisis: grupos=%s tiempo=%dms calidad_ok=%s",
+        "Analysis: groups=%s time=%dms quality_ok=%s",
         [g.get("group") for g in groups if g.get("group")],
         elapsed_ms,
         quality["ok"],
@@ -135,14 +135,14 @@ async def extract_pdf(file: UploadFile = File(...), max_images: int = Form(MAX_P
     try:
         raw = await file.read()
     except Exception as err:  # noqa: BLE001
-        logger.warning("Error leyendo el PDF subido: %s", err)
-        return JSONResponse(status_code=400, content={"error": "no pude leer el archivo"})
+        logger.warning("Error reading the uploaded PDF: %s", err)
+        return JSONResponse(status_code=400, content={"error": "could not read the file"})
 
     try:
         found, images = extract_images(raw, max_images=max_images, min_dimension=MIN_PDF_IMAGE_DIMENSION)
     except Exception as err:  # noqa: BLE001 - covers a corrupt/non-PDF upload (fitz.open raising)
-        logger.warning("PDF inválido o no se pudo procesar: %s", err)
-        return JSONResponse(status_code=400, content={"error": "PDF inválido o dañado"})
+        logger.warning("Invalid PDF or could not process it: %s", err)
+        return JSONResponse(status_code=400, content={"error": "invalid or damaged PDF"})
 
     encoded = [base64.b64encode(img).decode("ascii") for img in images]
     return JSONResponse(content={"images": encoded, "totalFound": found})

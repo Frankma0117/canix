@@ -1,0 +1,364 @@
+import type { Express } from 'express';
+import { usersModel } from '../../models/users.model.js';
+import { permissionsModel, AccessError } from '../../models/permissions.model.js';
+import { PERMISSIONS, isPermissionKey } from '../../services/permissions/catalog.js';
+import { effectivePermissions, testModeOf } from '../../services/permissions/permissions.service.js';
+import { enterTestMode, exitTestMode } from '../../services/permissions/test-mode.service.js';
+import { issueTemporaryPassword, revokeAllSessions } from '../../services/auth/web-auth.service.js';
+import { phoneToJid, jidToPhone } from '../../shared/utils/jid.js';
+import { ensureWeeklyReportReminder } from '../../services/agenda/weekly-report.service.js';
+import { ensureDailyResetReminder } from '../../services/conversation/daily-reset.service.js';
+import { ensureDailyDedupReminder } from '../../services/maintenance/dedup.service.js';
+import { portalAccessMessage, healPhone } from '../../agent/tools/admin/set-web-password.tool.js';
+import { schedulingModel } from '../../models/scheduling.model.js';
+import { db } from '../../database/connection.js';
+import { aiUsageModel } from '../../models/ai-usage.model.js';
+import { requirePanelAdmin } from '../middleware/auth.middleware.js';
+import { registerGrowthAdminRoutes } from './growth.routes.js';
+import { h, userId, str, strArr, intArr, int } from '../http-helpers.js';
+import type { User } from '../../entities/index.js';
+import type { BotManager } from '../../channels/whatsapp/bot-manager.js';
+
+function userView(u: User) {
+  const overrides = permissionsModel.userOverrides(u.id);
+  return {
+    id: u.id,
+    name: u.name,
+    // Real number when known; for someone WhatsApp still only knows by their @lid, null - the panel
+    // then shows `whatsapp_id` as their access code and offers to look the number up / set it.
+    phone: jidToPhone(u.jid),
+    whatsapp_id: u.jid.split('@')[0],
+    lid: u.lid ?? (u.jid.endsWith('@lid') ? u.jid : null),
+    gender: u.gender,
+    voice_gender: u.voice_gender,
+    role: u.role,
+    created_at: u.created_at,
+    paused_until: u.paused_until,
+    has_password: !!u.password_hash,
+    must_change_password: !!u.must_change_password,
+    locked_until: u.locked_until,
+    packages: permissionsModel.userPackages(u.id).map((p) => ({ id: p.id, key: p.key, name: p.name })),
+    allow: overrides.filter((o) => o.effect === 'allow').map((o) => o.permission_key),
+    deny: overrides.filter((o) => o.effect === 'deny').map((o) => o.permission_key),
+    effective: [...effectivePermissions(u)],
+    is_professional: !!schedulingModel.getProfessional(u.id),
+    demo_status: u.demo_status,
+    demo_expires_at: u.demo_expires_at ? `${u.demo_expires_at.replace(' ', 'T')}Z` : null,
+  };
+}
+
+function loadNonAdmin(id: number): User {
+  const u = usersModel.getById(id);
+  if (!u) throw new AccessError('Ese usuario no existe.');
+  if (u.role === 'admin') throw new AccessError('El administrador siempre tiene acceso total; no se edita aquí.');
+  return u;
+}
+
+/**
+ * Administration API (/api/admin/*, admin only): users and their access, packages, the permission
+ * catalog, the audit trail and the scheduling "agendas generales". Every write goes through the
+ * transactional repositories (permissions.model.ts / scheduling repo), never raw SQL here.
+ */
+export function registerAdminRoutes(app: Express, bot: BotManager): void {
+  app.use('/api/admin', requirePanelAdmin);
+
+  registerGrowthAdminRoutes(app, userView as never);
+
+  app.get('/api/admin/permissions', h((_req, res) => res.json(PERMISSIONS.map(({ tools: _t, ...p }) => p))));
+
+  // The administrator tries the WhatsApp bot with one package's permissions, or a hand-picked set.
+  app.get('/api/admin/test-mode', h((req, res) => res.json({ testMode: testModeOf(req.panelUser) })));
+  app.post(
+    '/api/admin/test-mode',
+    h((req, res) => {
+      const packageId = int(req.body?.packageId);
+      const pkg = packageId !== undefined ? permissionsModel.getPackage(packageId) : undefined;
+      if (packageId !== undefined && !pkg) throw new AccessError('Ese paquete no existe.');
+      const testMode = enterTestMode(req.panelUser!, {
+        label: pkg?.name ?? str(req.body?.label, 80) ?? 'Personalizado',
+        permissions: pkg?.permissions ?? strArr(req.body?.permissions),
+      });
+      res.json({ testMode });
+    }),
+  );
+  app.delete(
+    '/api/admin/test-mode',
+    h((req, res) => {
+      exitTestMode(req.panelUser!);
+      res.json({ testMode: null });
+    }),
+  );
+
+  app.get('/api/admin/users', h((_req, res) => res.json(usersModel.listAll().map(userView))));
+
+  app.post(
+    '/api/admin/users',
+    h(async (req, res) => {
+      const phone = str(req.body?.phone, 30) ?? '';
+      const name = str(req.body?.name, 80) ?? '';
+      if (phone.replace(/\D/g, '').length < 7 || !name) throw new AccessError('Necesito un número completo (con indicativo) y un nombre.');
+      const jid = phoneToJid(phone);
+      if (usersModel.getByJidOrLid(jid)) throw new AccessError('Ese número ya tiene acceso.');
+      const user = usersModel.create({ jid, name, role: 'user' });
+      permissionsModel.setUserAccess(userId(req), user.id, {
+        packageIds: intArr(req.body?.packageIds),
+        allow: strArr(req.body?.allow),
+        deny: strArr(req.body?.deny),
+      });
+      ensureWeeklyReportReminder(user.id, user.jid);
+      ensureDailyResetReminder(user.id, user.jid);
+      ensureDailyDedupReminder(user.id, user.jid);
+      let notified = false;
+      if (req.body?.notify) {
+        try {
+          await bot.session.sendText(jid, `¡Hola ${name}! Soy Canix, tu asistente virtual 🤖 Ya tienes acceso. Escribe /menu para ver lo que puedo hacer por ti.`);
+          notified = true;
+        } catch (err) {
+          console.error('[ADMIN] Could not greet %s:', jid, (err as Error).message);
+        }
+      }
+      res.status(201).json({ user: userView(usersModel.getById(user.id)!), notified });
+    }),
+  );
+
+  app.put(
+    '/api/admin/users/:id',
+    h((req, res) => {
+      const u = usersModel.getById(Number(req.params.id));
+      if (!u) throw new AccessError('Ese usuario no existe.');
+      const name = str(req.body?.name, 80);
+      if (name) db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, u.id);
+      // Real WhatsApp number - mainly to fix someone registered under their @lid ("that's not my
+      // number"): the old lid stays stored, so the bot still recognizes them either way.
+      const phone = str(req.body?.phone, 30);
+      if (phone) {
+        const digits = phone.replace(/\D/g, '');
+        if (digits.length < 10) throw new AccessError('Escribe el número completo con indicativo (ej. 573001234567).');
+        const jid = phoneToJid(digits);
+        if (jid !== u.jid) {
+          if (!usersModel.setPhoneJid(u.id, jid)) throw new AccessError('Ese número ya pertenece a otra persona registrada.');
+          permissionsModel.recordAudit(userId(req), u.id, 'user.phone_set', { phone: digits });
+        }
+      }
+      res.json(userView(usersModel.getById(u.id)!));
+    }),
+  );
+
+  app.put(
+    '/api/admin/users/:id/access',
+    h((req, res) => {
+      const u = loadNonAdmin(Number(req.params.id));
+      permissionsModel.setUserAccess(userId(req), u.id, {
+        packageIds: intArr(req.body?.packageIds),
+        allow: strArr(req.body?.allow),
+        deny: strArr(req.body?.deny),
+      });
+      // Losing portal access ends their open web sessions right away.
+      if (!effectivePermissions(u).has('portal.access')) revokeAllSessions(u.id);
+      res.json(userView(usersModel.getById(u.id)!));
+    }),
+  );
+
+  /** Temporary password: shown ONCE to the admin and optionally sent to the person over WhatsApp. */
+  app.post(
+    '/api/admin/users/:id/temp-password',
+    h(async (req, res) => {
+      const u = usersModel.getById(Number(req.params.id));
+      if (!u) throw new AccessError('Ese usuario no existe.');
+      const target = await healPhone(u, (lid) => bot.session.resolveLidToPhoneJid(lid));
+      const pwd = await issueTemporaryPassword(target.id, userId(req));
+      let sent = false;
+      if (req.body?.sendWhatsApp) {
+        try {
+          await bot.session.sendText(target.jid, portalAccessMessage(target.jid, pwd));
+          sent = true;
+        } catch (err) {
+          console.error('[ADMIN] Could not send the password to %s:', target.jid, (err as Error).message);
+        }
+      }
+      res.json({ password: pwd, sent, loginId: jidToPhone(target.jid) ?? target.jid.split('@')[0], phoneKnown: !!jidToPhone(target.jid) });
+    }),
+  );
+
+  /** Asks WhatsApp for the real number of someone still stored under their @lid. */
+  app.post(
+    '/api/admin/users/:id/resolve-phone',
+    h(async (req, res) => {
+      const u = usersModel.getById(Number(req.params.id));
+      if (!u) throw new AccessError('Ese usuario no existe.');
+      const healed = await healPhone(u, (lid) => bot.session.resolveLidToPhoneJid(lid));
+      res.json({ found: healed.jid !== u.jid, user: userView(healed) });
+    }),
+  );
+
+  /** One permission for one person (the access matrix's click): 'allow' | 'deny' | null (= según paquete). */
+  app.put(
+    '/api/admin/users/:id/permissions/:key',
+    h((req, res) => {
+      const u = loadNonAdmin(Number(req.params.id));
+      const key = String(req.params.key);
+      if (!isPermissionKey(key)) throw new AccessError('Permiso desconocido.');
+      const effect = req.body?.effect === 'allow' || req.body?.effect === 'deny' ? req.body.effect : null;
+      permissionsModel.setOverride(userId(req), u.id, key, effect);
+      if (!effectivePermissions(u).has('portal.access')) revokeAllSessions(u.id);
+      res.json(userView(usersModel.getById(u.id)!));
+    }),
+  );
+
+  app.post(
+    '/api/admin/users/:id/unlock',
+    h((req, res) => {
+      const u = usersModel.getById(Number(req.params.id));
+      if (!u) throw new AccessError('Ese usuario no existe.');
+      db.prepare('UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = ?').run(u.id);
+      permissionsModel.recordAudit(userId(req), u.id, 'auth.unlocked');
+      res.json(userView(usersModel.getById(u.id)!));
+    }),
+  );
+
+  app.post(
+    '/api/admin/users/:id/logout-all',
+    h((req, res) => {
+      const u = usersModel.getById(Number(req.params.id));
+      if (!u) throw new AccessError('Ese usuario no existe.');
+      revokeAllSessions(u.id);
+      permissionsModel.recordAudit(userId(req), u.id, 'auth.sessions_revoked');
+      res.json({ ok: true });
+    }),
+  );
+
+  /** Removes the person and ALL their data (same as revoke_access) - requires confirm=name. */
+  app.delete(
+    '/api/admin/users/:id',
+    h((req, res) => {
+      const u = loadNonAdmin(Number(req.params.id));
+      if (String(req.query.confirm ?? '') !== String(u.id)) throw new AccessError('Falta la confirmación.');
+      permissionsModel.recordAudit(userId(req), null, 'user.removed', { id: u.id, name: u.name, phone: u.jid.split('@')[0], lid: u.lid });
+      usersModel.remove(u.id);
+      res.json({ ok: true });
+    }),
+  );
+
+  app.get('/api/admin/packages', h((_req, res) => res.json(permissionsModel.listPackages())));
+  app.post(
+    '/api/admin/packages',
+    h((req, res) => {
+      const pkg = permissionsModel.savePackage(userId(req), {
+        name: str(req.body?.name, 80) ?? '',
+        description: str(req.body?.description, 300) ?? '',
+        permissions: strArr(req.body?.permissions),
+      });
+      res.status(201).json(pkg);
+    }),
+  );
+  app.put(
+    '/api/admin/packages/:id',
+    h((req, res) => {
+      const existing = permissionsModel.getPackage(Number(req.params.id));
+      if (!existing) throw new AccessError('Ese paquete no existe.');
+      res.json(
+        permissionsModel.savePackage(userId(req), {
+          id: existing.id,
+          name: str(req.body?.name, 80) ?? existing.name,
+          description: str(req.body?.description, 300) ?? existing.description,
+          permissions: Array.isArray(req.body?.permissions) ? strArr(req.body.permissions) : existing.permissions,
+        }),
+      );
+    }),
+  );
+  app.delete(
+    '/api/admin/packages/:id',
+    h((req, res) => {
+      permissionsModel.deletePackage(userId(req), Number(req.params.id));
+      res.json({ ok: true });
+    }),
+  );
+
+  app.get(
+    '/api/admin/audit',
+    h((req, res) => {
+      const limit = Math.min(Math.max(int(req.query.limit) ?? 200, 1), 1000);
+      res.json(permissionsModel.listAudit(limit, int(req.query.userId)));
+    }),
+  );
+
+  // operation: 'chat' (LLM tokens in/out), 'voice.fish' / 'voice.fish.call' (characters spoken),
+  // 'call.twilio' (calls placed), plus Fashion Mode's own operations.
+  app.get(
+    '/api/admin/usage',
+    h((req, res) => {
+      const days = Math.min(Math.max(int(req.query.days) ?? 30, 1), 366);
+      res.json({ days, rows: aiUsageModel.summaryByUser(days) });
+    }),
+  );
+
+  app.get(
+    '/api/admin/scheduling/professionals',
+    h((_req, res) =>
+      res.json(
+        usersModel
+          .listAll()
+          .filter((u) => effectivePermissions(u).has('scheduling.professional'))
+          .map((u) => {
+            const p = schedulingModel.getProfessional(u.id);
+            return { user_id: u.id, name: u.name, phone: u.jid.split('@')[0], profile: p ?? null };
+          }),
+      ),
+    ),
+  );
+
+  app.get(
+    '/api/admin/scheduling/groups',
+    h((_req, res) =>
+      res.json(
+        schedulingModel.listGroups().map((g) => ({
+          id: g.id,
+          name: g.name,
+          description: g.description,
+          members: schedulingModel.groupMemberIds(g.id),
+          clients: schedulingModel.clientsOfGroup(g.id).map((c) => ({ id: c.client_user_id, name: c.client_name, phone: c.client_jid.split('@')[0] })),
+        })),
+      ),
+    ),
+  );
+
+  app.post(
+    '/api/admin/scheduling/groups',
+    h((req, res) => {
+      const name = str(req.body?.name, 80);
+      if (!name) throw new AccessError('El grupo necesita un nombre.');
+      const id = schedulingModel.createGroup(name, str(req.body?.description, 300) ?? '');
+      permissionsModel.recordAudit(userId(req), null, 'scheduling.group_create', { id, name });
+      res.status(201).json({ id });
+    }),
+  );
+
+  app.put(
+    '/api/admin/scheduling/groups/:id',
+    h((req, res) => {
+      const g = schedulingModel.getGroup(Number(req.params.id));
+      if (!g) throw new AccessError('Ese grupo no existe.');
+      schedulingModel.updateGroup(g.id, str(req.body?.name, 80) ?? g.name, str(req.body?.description, 300) ?? g.description);
+      if (Array.isArray(req.body?.members)) {
+        const ids = intArr(req.body.members);
+        for (const id of ids) {
+          const u = usersModel.getById(id);
+          if (!u || !effectivePermissions(u).has('scheduling.professional')) throw new AccessError(`El usuario #${id} no es profesional de agenda.`);
+          if (!schedulingModel.getProfessional(id)) schedulingModel.createProfessional(id, u.name ?? 'Profesional');
+        }
+        schedulingModel.setGroupMembers(g.id, ids);
+      }
+      permissionsModel.recordAudit(userId(req), null, 'scheduling.group_update', { id: g.id });
+      res.json({ ok: true });
+    }),
+  );
+
+  app.delete(
+    '/api/admin/scheduling/groups/:id',
+    h((req, res) => {
+      schedulingModel.deleteGroup(Number(req.params.id));
+      permissionsModel.recordAudit(userId(req), null, 'scheduling.group_delete', { id: Number(req.params.id) });
+      res.json({ ok: true });
+    }),
+  );
+}

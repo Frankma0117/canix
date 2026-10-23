@@ -1,0 +1,208 @@
+import { fashionSessionsModel } from '../../models/fashion-sessions.model.js';
+import { enterHome, handleHome, HOME_MENU } from './flows/home.flow.js';
+import { enterAddGarment, handleWaitingImage, handleManualType, handleManualCategory, handleManualColor, handleConfirmation } from './flows/add-garment.flow.js';
+import { enterWardrobeList, handleWardrobeList, parseFilterText } from './flows/list-garments.flow.js';
+import { handleGarmentDetail, handleEditSelect, handleEditField } from './flows/edit-garment.flow.js';
+import { handleDeleteConfirm, enterDeleteAllConfirm, handleDeleteAllConfirm, DELETE_ALL_KEYWORDS } from './flows/delete-garment.flow.js';
+import { enterOutfitRequest, handleOutfitResult, enterMyOutfits, handleMyOutfitsList } from './flows/outfit.flow.js';
+import { enterPdfImport, handlePdfReview } from './flows/add-garment-pdf.flow.js';
+import { isPdfDocument } from './image/pdf-intake.js';
+import { revalidateWardrobe, REVALIDATE_KEYWORDS } from './flows/revalidate-garments.flow.js';
+import { llmVision } from './vision/llm-vision.service.js';
+import { queueReclassification } from './review.js';
+import { wardrobeUpkeep } from './upkeep.js';
+import { enterProfilePhoto, handleProfilePhotoWaiting, PROFILE_PHOTO_KEYWORDS } from './flows/profile-photo.flow.js';
+import type { FashionRouterContext, FashionRouterResult } from './fashion-router.types.js';
+import type { FashionState } from './fashion.types.js';
+
+const ENTRY_KEYWORDS = ['fashion', 'moda', 'outfit'];
+/** An outfit being asked for in plain words, wherever it falls in the sentence. */
+const OUTFIT_ASK_RE = /\b(outfit|outfits|una pinta|la pinta|que me pongo|que ponerme|que me puedo poner|como me visto|vestirme|que ropa (uso|me pongo|llevo)|armame (un|una) (look|conjunto)|un look para)\b/;
+/** How long a Fashion screen keeps waiting for its next step before the chat is just the chat again. */
+const SESSION_IDLE_MINUTES = 20;
+const WARDROBE_KEYWORDS = ['armario'];
+const EXIT_KEYWORDS = ['salir', 'salir fashion', 'exit fashion', 'cancelar'];
+
+/** First-word/whole-phrase match (not substring) against Fashion Mode's entry vocabulary - see
+ *  bot-manager.ts for where this gates whether the router is even consulted. */
+function matchFashionEntry(text: string): { matched: boolean; wardrobe: boolean; myOutfits: boolean; trailing: string } {
+  const trimmed = text.trim().toLowerCase();
+  if (trimmed === 'guardar ropa' || /^agregar prenda$/.test(trimmed)) return { matched: true, wardrobe: false, myOutfits: false, trailing: '' };
+  if (/^mis outfits$/.test(trimmed)) return { matched: true, wardrobe: false, myOutfits: true, trailing: '' };
+  if (/^mis prendas$/.test(trimmed)) return { matched: true, wardrobe: true, myOutfits: false, trailing: '' };
+
+  const firstWord = trimmed.split(/\s+/)[0] ?? '';
+  const rest = trimmed.slice(firstWord.length).trim();
+
+  if (WARDROBE_KEYWORDS.includes(firstWord)) return { matched: true, wardrobe: true, myOutfits: false, trailing: rest };
+  if (ENTRY_KEYWORDS.includes(firstWord)) return { matched: true, wardrobe: false, myOutfits: false, trailing: rest };
+
+  // Said in the middle of a normal sentence, from anywhere: "ármame un outfit para la discoteca",
+  // "qué me pongo para la oficina", "muéstrame mi armario" - no need to "enter" anything first.
+  const plain = trimmed.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/\b(mi armario|mis prendas|mi closet|mi ropa guardada)\b/.test(plain)) {
+    return { matched: true, wardrobe: true, myOutfits: false, trailing: plain.replace(/^.*\b(mi armario|mis prendas|mi closet|mi ropa guardada)\b/, '').trim() };
+  }
+  // Asking about the SAVED ones in any wording ("los outfits que guardé", "qué outfits tengo
+  // guardados", "mis looks") lists them - checked before OUTFIT_ASK_RE, which would otherwise
+  // read the word "outfits" as a request for a brand-new one.
+  if (
+    /\b(mis outfits|mis looks|outfits guardados|looks guardados)\b/.test(plain) ||
+    (/\b(outfits?|looks?|conjuntos?)\b/.test(plain) && /\b(guarde|guardado|guardados|guardaste|guardamos|tengo guardad\w*|salvad\w*)\b/.test(plain))
+  ) {
+    return { matched: true, wardrobe: false, myOutfits: true, trailing: '' };
+  }
+  if (OUTFIT_ASK_RE.test(plain)) return { matched: true, wardrobe: false, myOutfits: false, trailing: trimmed };
+
+  return { matched: false, wardrobe: false, myOutfits: false, trailing: '' };
+}
+
+/**
+ * Fashion Mode's entire routing surface - called from bot-manager.ts BEFORE the AI/tool-calling
+ * loop, entirely gated behind env.fashion.enabled. Pure state-machine dispatch, no LLM involved for
+ * the wizard steps (garment CRUD, menus) - the ONE place any Fashion flow spends AI tokens is the
+ * outfit-recommendation pipeline itself (see outfit/recommendation.service.ts), and even that only
+ * calls out when a local match/cache doesn't already cover it. Returns `consumed: false` when the
+ * text isn't Fashion-related at all (only possible when session state is already idle), letting
+ * bot-manager.ts fall through to the normal AI loop unchanged.
+ */
+export async function handleFashionMessage(ctx: FashionRouterContext): Promise<FashionRouterResult> {
+  let session = fashionSessionsModel.getOrIdle(ctx.userId);
+  const textLower = ctx.text.trim().toLowerCase();
+
+  // A screen left open a while ago shouldn't swallow today's "1" or "sí" meant for something else.
+  if (session.state !== 'FASHION_IDLE' && session.updated_at) {
+    const idleMs = Date.now() - new Date(`${session.updated_at.replace(' ', 'T')}Z`).getTime();
+    if (idleMs > SESSION_IDLE_MINUTES * 60_000 && !ctx.imageMessage && !ctx.documentMessage) {
+      fashionSessionsModel.clear(ctx.userId);
+      session = fashionSessionsModel.getOrIdle(ctx.userId);
+    }
+  }
+
+  if (session.state !== 'FASHION_IDLE' && EXIT_KEYWORDS.includes(textLower)) {
+    fashionSessionsModel.clear(ctx.userId);
+    // Same reasoning as agent/modes.ts's own mode-switch handling: a hard context boundary, so the
+    // AI's chat history (never used by Fashion's own state machine while inside it, but still very
+    // much read on the very next normal-chat turn) resets along with it - otherwise the first reply
+    // back in normal mode kept answering as if whatever was being discussed before Fashion Mode (or
+    // nothing at all, if the history was empty) were still the topic.
+    console.log('[FASHION] User #%d left Fashion Mode.', ctx.userId);
+    return { consumed: true, reply: '👋 Saliste de Fashion Mode.' };
+  }
+
+  // "Actualizar ropa" (or equivalent) re-runs vision on every already-saved garment, regardless of
+  // current state or even whether Fashion Mode was already entered - matches the user's own "cada
+  // que le diga actualizar ropa o algo similar" spec (an anytime command, not just a home-menu
+  // option). Session state is left untouched afterward; this is an out-of-band maintenance action,
+  // not a state transition.
+  if (REVALIDATE_KEYWORDS.includes(textLower)) {
+    // With the vision LLM the whole wardrobe goes back through it in the background (see review.ts).
+    if (llmVision.enabled()) {
+      const queued = queueReclassification(ctx.userId);
+      if (queued === 0) return { consumed: true, reply: 'Todavía no tienes prendas guardadas para revisar - agrega algunas primero.' };
+      void wardrobeUpkeep();
+      return {
+        consumed: true,
+        reply: `🔄 Voy a revisar tus ${queued} prenda(s) mirando cada foto. Te aviso cuando termine; lo que no logre definir te lo pregunto en el portal, en *Mi armario → Por revisar*.`,
+      };
+    }
+    return { consumed: true, reply: await revalidateWardrobe(ctx) };
+  }
+
+  // Saving a reference photo (see profile-photo.flow.ts) - same "works anytime" reasoning as
+  // revalidate above, and enters Fashion Mode from idle if it wasn't already active.
+  if (PROFILE_PHOTO_KEYWORDS.includes(textLower)) {
+    return { consumed: true, reply: enterProfilePhoto(ctx.userId) };
+  }
+
+  // Wiping the whole wardrobe (see delete-garment.flow.ts) - same "works anytime" reasoning, enters
+  // Fashion Mode from idle if needed so the confirmation step below has a session to live in.
+  if (DELETE_ALL_KEYWORDS.includes(textLower)) {
+    return { consumed: true, reply: enterDeleteAllConfirm(ctx.userId) };
+  }
+
+  // A PDF is unambiguous - nothing else in this bot does anything with one, so it's routed here
+  // regardless of current state (mirrors how a bare garment photo mid-flow is handled), even from
+  // idle. Any other document type is simply not this module's concern and falls through untouched.
+  if (ctx.documentMessage && isPdfDocument(ctx.documentMessage)) {
+    console.log('[FASHION] User #%d sent a PDF.', ctx.userId);
+    return { consumed: true, reply: await enterPdfImport(ctx) };
+  }
+
+  if (session.state === 'FASHION_IDLE') {
+    const entry = matchFashionEntry(ctx.text);
+    if (!entry.matched) return { consumed: false };
+
+    console.log('[FASHION] User #%d entered Fashion Mode.', ctx.userId);
+    if (entry.wardrobe) {
+      return { consumed: true, reply: enterWardrobeList(ctx.userId, parseFilterText(entry.trailing)) };
+    }
+    if (entry.myOutfits) {
+      return { consumed: true, reply: enterMyOutfits(ctx.userId) };
+    }
+    return entry.trailing.trim() ? routeHomeShortcut(ctx, entry.trailing.trim()) : { consumed: true, reply: enterHome(ctx.userId) };
+  }
+
+  // Already mid-flow: every message belongs to Fashion Mode until it exits, regardless of content
+  // (including a bare image, handled explicitly per-state below).
+  return dispatch(session.state as FashionState, ctx);
+}
+
+/** "fashion outfit boda"/"fashion armario"/"outfit boda"-style shortcuts typed on entry, straight
+ *  past the home menu - "outfit <algo>" runs the real recommendation pipeline directly. */
+async function routeHomeShortcut(ctx: FashionRouterContext, trailing: string): Promise<FashionRouterResult> {
+  if (/^armario/.test(trailing) || /^prendas/.test(trailing)) {
+    return { consumed: true, reply: enterWardrobeList(ctx.userId, parseFilterText(trailing.replace(/^(armario|prendas)\s*/, ''))) };
+  }
+  if (/^agregar/.test(trailing)) return { consumed: true, reply: enterAddGarment(ctx.userId) };
+  if (/^outfits?/.test(trailing)) return { consumed: true, reply: enterMyOutfits(ctx.userId) };
+  return enterOutfitRequest(ctx, trailing);
+}
+
+async function dispatch(state: FashionState, ctx: FashionRouterContext): Promise<FashionRouterResult> {
+  switch (state) {
+    case 'FASHION_HOME':
+      return handleHome(ctx);
+    case 'FASHION_ADD_GARMENT_WAITING_IMAGE':
+      return handleWaitingImage(ctx);
+    case 'FASHION_ADD_GARMENT_ANALYZING':
+      // A message arriving while still "analyzing" means the previous attempt crashed/hung before
+      // reaching confirmation (see add-garment.flow.ts / add-garment-pdf.flow.ts - analysis
+      // normally completes synchronously within one handler call, for both a single photo and a
+      // PDF batch) - treat it as stale and restart the wait instead of stranding the user in a
+      // dead state.
+      fashionSessionsModel.setState(ctx.userId, 'FASHION_ADD_GARMENT_WAITING_IMAGE', {});
+      return { consumed: true, reply: 'Tuve un problema procesando lo anterior - ¿me lo mandas de nuevo?' };
+    case 'FASHION_ADD_GARMENT_MANUAL_TYPE':
+      return handleManualType(ctx);
+    case 'FASHION_ADD_GARMENT_MANUAL_CATEGORY':
+      return handleManualCategory(ctx);
+    case 'FASHION_ADD_GARMENT_MANUAL_COLOR':
+      return handleManualColor(ctx);
+    case 'FASHION_ADD_GARMENT_CONFIRMATION':
+      return handleConfirmation(ctx);
+    case 'FASHION_ADD_GARMENT_PDF_REVIEW':
+      return handlePdfReview(ctx);
+    case 'FASHION_WARDROBE_LIST':
+      return handleWardrobeList(ctx);
+    case 'FASHION_GARMENT_DETAIL':
+      return handleGarmentDetail(ctx);
+    case 'FASHION_EDIT_GARMENT_SELECT':
+      return handleEditSelect(ctx);
+    case 'FASHION_EDIT_GARMENT_FIELD':
+      return handleEditField(ctx);
+    case 'FASHION_DELETE_CONFIRM':
+      return handleDeleteConfirm(ctx);
+    case 'FASHION_DELETE_ALL_CONFIRM':
+      return handleDeleteAllConfirm(ctx);
+    case 'FASHION_OUTFIT_RESULT':
+      return handleOutfitResult(ctx);
+    case 'FASHION_MY_OUTFITS_LIST':
+      return handleMyOutfitsList(ctx);
+    case 'FASHION_PROFILE_WAITING_PHOTO':
+      return handleProfilePhotoWaiting(ctx);
+    default:
+      fashionSessionsModel.setState(ctx.userId, 'FASHION_HOME', {});
+      return { consumed: true, reply: HOME_MENU };
+  }
+}

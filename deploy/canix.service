@@ -1,5 +1,5 @@
 [Unit]
-Description=Canix - asistente personal por WhatsApp
+Description=Canix - personal assistant on WhatsApp
 After=network-online.target
 Wants=network-online.target
 
@@ -7,8 +7,9 @@ Wants=network-online.target
 Type=simple
 User=canix
 WorkingDirectory=/opt/canix
-# Ajusta la ruta de node/npm si usas nvm o una version instalada aparte
-# (systemd no carga tu perfil de shell, asi que PATH puede no incluirla).
+# Adjust the node/npm path if you use nvm or a separately installed version
+# (systemd does not load your shell profile, so PATH may not include it).
+# `npm run start` at the repo root starts backend/ (see the root package.json).
 ExecStart=/usr/bin/npm run start
 Restart=on-failure
 RestartSec=5

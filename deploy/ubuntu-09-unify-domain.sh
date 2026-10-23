@@ -1,49 +1,49 @@
 #!/usr/bin/env bash
-# Deja TODO Canix en un solo dominio (ej. canix.cania.app: página de venta en "/", portal y
-# administración en "/app") y limpia el dominio viejo (ej. virtual-assistant.cania.app):
-#   - por defecto lo convierte en REDIRECCIÓN 301 al dominio nuevo (la raíz va a /app, porque los
-#     mensajes de contraseña que ya se enviaron apuntan ahí; cualquier otra ruta conserva su camino),
-#   - con --remove lo elimina por completo (sitio de nginx + certificado).
-# Actualiza PANEL_URL y LANDING_URL en .env y reinicia el bot. NO toca ningún otro sitio de nginx.
-# Antes de cambiar nada guarda copia en /root/nginx-backup-<fecha>/.
+# Moves ALL of Canix onto a single domain (e.g. canix.cania.app: sales page at "/", portal and
+# administration at "/app") and cleans up the old domain (e.g. virtual-assistant.cania.app):
+#   - by default turns it into a 301 REDIRECT to the new domain (the root goes to /app, because
+#     password messages already sent point there; any other path keeps its path),
+#   - with --remove deletes it completely (nginx site + certificate).
+# Updates PANEL_URL and LANDING_URL in .env and restarts the bot. Does NOT touch any other nginx
+# site. Before changing anything it saves a copy under /root/nginx-backup-<date>/.
 #
-# Uso:
+# Usage:
 #   sudo ./deploy/ubuntu-09-unify-domain.sh virtual-assistant.cania.app canix.cania.app
 #   sudo ./deploy/ubuntu-09-unify-domain.sh virtual-assistant.cania.app canix.cania.app --remove
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Necesita sudo: sudo $0 dominio-viejo dominio-nuevo [--remove]"
+  echo "Needs sudo: sudo $0 old-domain new-domain [--remove]"
   exit 1
 fi
 OLD="${1:-}"
 NEW="${2:-}"
 MODE="${3:-redirect}"
 if [ -z "$OLD" ] || [ -z "$NEW" ] || [ "$OLD" = "$NEW" ]; then
-  echo "Uso: sudo $0 dominio-viejo dominio-nuevo [--remove]"
+  echo "Usage: sudo $0 old-domain new-domain [--remove]"
   exit 1
 fi
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$APP_DIR/.env"
 
-# --- el dominio nuevo debe estar funcionando antes de tocar el viejo ---------------------------
+# --- the new domain must work before the old one is touched ------------------------------------
 CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$NEW/app" || true)"
 if [ "$CODE" != "200" ]; then
-  echo "https://$NEW/app no responde 200 (respondió '$CODE')."
-  echo "Primero despliega la versión nueva (sudo ./deploy.sh) y publica $NEW (ubuntu-08-setup-landing.sh)."
+  echo "https://$NEW/app does not answer 200 (answered '$CODE')."
+  echo "Deploy the new version first (sudo ./deploy.sh) and publish $NEW (ubuntu-08-setup-landing.sh)."
   exit 1
 fi
 
-# --- localizar el sitio del dominio viejo (solo ese) ------------------------------------------
+# --- find the old domain's site (only that one) ------------------------------------------------
 SITE_FILE="$(grep -lE "server_name[^;]*[[:space:]]$OLD[[:space:];]" /etc/nginx/sites-available/* 2>/dev/null | head -1 || true)"
 if [ -z "$SITE_FILE" ]; then
-  echo "No encontré un sitio de nginx con server_name $OLD en /etc/nginx/sites-available - nada que limpiar."
+  echo "No nginx site with server_name $OLD in /etc/nginx/sites-available - nothing to clean up."
 else
   SITE_NAME="$(basename "$SITE_FILE")"
   OTHER_NAMES="$(grep -hoE 'server_name[^;]+' "$SITE_FILE" | sed 's/server_name//' | tr ' ' '\n' | grep -v -e '^$' -e "^$OLD$" | sort -u || true)"
   if [ -n "$OTHER_NAMES" ]; then
-    echo "El sitio $SITE_NAME también atiende: $OTHER_NAMES - no lo toco para no afectar otros dominios."
+    echo "Site $SITE_NAME also serves: $OTHER_NAMES - not touching it so other domains are unaffected."
     exit 1
   fi
 
@@ -51,10 +51,10 @@ else
   mkdir -p "$BACKUP"
   cp -a "$SITE_FILE" "$BACKUP/"
   [ -e "/etc/nginx/sites-enabled/$SITE_NAME" ] && cp -a "/etc/nginx/sites-enabled/$SITE_NAME" "$BACKUP/$SITE_NAME.enabled-link" || true
-  echo "Respaldo de $SITE_NAME en $BACKUP"
+  echo "Backup of $SITE_NAME in $BACKUP"
 
   restore() {
-    echo "nginx -t falló - restauro la configuración anterior."
+    echo "nginx -t failed - restoring the previous configuration."
     cp -a "$BACKUP/$SITE_NAME" "$SITE_FILE"
     ln -sf "$SITE_FILE" "/etc/nginx/sites-enabled/$SITE_NAME"
     nginx -t && systemctl reload nginx
@@ -66,13 +66,13 @@ else
     nginx -t || restore
     systemctl reload nginx
     if command -v certbot >/dev/null 2>&1 && [ -d "/etc/letsencrypt/live/$OLD" ]; then
-      certbot delete --cert-name "$OLD" --non-interactive || echo "(no pude borrar el certificado de $OLD, no afecta nada)"
+      certbot delete --cert-name "$OLD" --non-interactive || echo "(could not delete the certificate of $OLD, harmless)"
     fi
-    echo "Eliminado: $OLD ya no está publicado. Recuerda borrar su registro DNS en Hostinger si quieres."
+    echo "Removed: $OLD is no longer published. Delete its DNS record at your provider if you want."
   else
     CERT="/etc/letsencrypt/live/$OLD"
     {
-      echo "# $OLD -> https://$NEW (Canix unificado en un solo dominio; ver deploy/ubuntu-09-unify-domain.sh)"
+      echo "# $OLD -> https://$NEW (Canix unified on a single domain; see deploy/ubuntu-09-unify-domain.sh)"
       echo "server {"
       echo "    listen 80;"
       echo "    listen [::]:80;"
@@ -97,25 +97,25 @@ else
     ln -sf "$SITE_FILE" "/etc/nginx/sites-enabled/$SITE_NAME"
     nginx -t || restore
     systemctl reload nginx
-    echo "Listo: $OLD ahora redirige a https://$NEW (la raíz al portal /app)."
+    echo "Done: $OLD now redirects to https://$NEW (the root to the /app portal)."
   fi
 fi
 
-# --- .env: todo apunta al dominio nuevo --------------------------------------------------------
+# --- .env: everything points at the new domain ---------------------------------------------------
 cp -a "$ENV_FILE" "${BACKUP:-/root}/env.backup-$(date +%Y%m%d-%H%M%S)" 2>/dev/null || true
 for kv in "PANEL_URL=https://$NEW" "LANDING_URL=https://$NEW"; do
   key="${kv%%=*}"
   if grep -q "^$key=" "$ENV_FILE"; then sed -i "s#^$key=.*#$kv#" "$ENV_FILE"; else echo "$kv" >> "$ENV_FILE"; fi
 done
-echo "PANEL_URL y LANDING_URL = https://$NEW"
+echo "PANEL_URL and LANDING_URL = https://$NEW"
 
 if systemctl cat canix.service >/dev/null 2>&1; then
   systemctl restart canix
-  echo "Bot reiniciado."
+  echo "Bot restarted."
 fi
 
 echo ""
-echo "== Verificación =="
+echo "== Verification =="
 sleep 4
 for u in "https://$NEW/" "https://$NEW/app" "https://$OLD/"; do
   printf '%-45s -> %s\n' "$u" "$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 8 "$u" || echo error)"

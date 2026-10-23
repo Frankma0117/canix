@@ -1,35 +1,36 @@
 #!/usr/bin/env bash
-# Pone Canix detras de nginx con HTTPS real (Let's Encrypt) para un dominio que ya apunte a este
-# servidor - necesario para que Twilio pueda avisar el estado de cada llamada (ver
-# src/server/twilio-webhook.ts) y, en general, para no exponer el panel por HTTP plano.
+# Puts Canix behind nginx with real HTTPS (Let's Encrypt) for a domain that already points to this
+# server - needed so Twilio can report each call's status (see
+# backend/src/api/routes/twilio-webhook.routes.ts) and, in general, so the portal is never served
+# over plain HTTP.
 #
-# Requisito PREVIO (fuera de este script): un registro DNS tipo A del dominio/subdominio hacia la
-# IP publica de este servidor, ya propagado - certbot falla si el dominio todavia no resuelve aqui.
+# PREREQUISITE (outside this script): a DNS A record from the domain/subdomain to this server's
+# public IP, already propagated - certbot fails while the domain does not resolve here yet.
 #
-# Uso (como root o con sudo):
-#   sudo ./deploy/ubuntu-07-setup-nginx.sh tu-dominio.com
+# Usage (as root or with sudo):
+#   sudo ./deploy/ubuntu-07-setup-nginx.sh your-domain.com
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Este script necesita sudo. Corre: sudo $0 tu-dominio.com"
+  echo "This script needs sudo. Run: sudo $0 your-domain.com"
   exit 1
 fi
 
 DOMAIN="${1:-}"
 if [ -z "$DOMAIN" ]; then
-  echo "Falta el dominio. Uso: sudo $0 tu-dominio.com"
+  echo "Missing the domain. Usage: sudo $0 your-domain.com"
   exit 1
 fi
 
-# Mismo puerto que PORT en .env (default 3000, ver src/config/env.ts) - la app sigue escuchando
-# solo en localhost, nginx es la unica cara publica.
+# Same port as PORT in .env (default 3000, see backend/src/config/env.ts) - the app keeps listening
+# on localhost only, nginx is the only public face.
 APP_PORT="${APP_PORT:-3000}"
 
-echo "== Instalando nginx + certbot =="
+echo "== Installing nginx + certbot =="
 apt-get update -qq
 apt-get install -y nginx certbot python3-certbot-nginx
 
-echo "== Configurando el server block para $DOMAIN -> 127.0.0.1:$APP_PORT =="
+echo "== Configuring the server block for $DOMAIN -> 127.0.0.1:$APP_PORT =="
 CONF_PATH="/etc/nginx/sites-available/cania.conf"
 cat > "$CONF_PATH" <<EOF
 server {
@@ -47,25 +48,25 @@ server {
 }
 EOF
 ln -sf "$CONF_PATH" /etc/nginx/sites-enabled/cania.conf
-# El server block "default" de nginx a veces choca con el nuestro en el puerto 80 - lo saca de
-# sites-enabled si sigue ahi, no lo borra (queda en sites-available por si se necesita despues).
+# nginx's "default" server block sometimes clashes with ours on port 80 - it is removed from
+# sites-enabled (not deleted: it stays in sites-available in case it is needed later).
 rm -f /etc/nginx/sites-enabled/default
 
 nginx -t
 systemctl reload nginx
 
-echo "== Pidiendo el certificado TLS con certbot (tambien deja el redirect http->https) =="
+echo "== Requesting the TLS certificate with certbot (also sets up the http->https redirect) =="
 certbot --nginx -d "$DOMAIN" --redirect --non-interactive --agree-tos -m "admin@$DOMAIN" || {
   echo ""
-  echo "certbot fallo - lo mas comun es que el DNS de $DOMAIN todavia no apunte a este servidor."
-  echo "Verifica con:  dig +short $DOMAIN   (debe devolver la IP de este servidor)"
+  echo "certbot failed - most often the DNS of $DOMAIN does not point to this server yet."
+  echo "Check with:  dig +short $DOMAIN   (must return this server's IP)"
   exit 1
 }
 
 echo ""
-echo "== Listo =="
-echo "Ahora pon esto en tu .env y vuelve a correr ./deploy.sh (o reinicia el bot):"
+echo "== Done =="
+echo "Now put this in your .env and run ./deploy.sh again (or restart the bot):"
 echo "  PANEL_URL=https://$DOMAIN"
 echo ""
-echo "Verifica que el panel cargue en https://$DOMAIN y que /webhooks/twilio/call-status responda"
-echo "(un GET normal dara 404, eso esta bien - solo Twilio le manda POST)."
+echo "Check that the portal loads at https://$DOMAIN and that /webhooks/twilio/call-status answers"
+echo "(a plain GET gives 404, that's fine - only Twilio sends it POSTs)."

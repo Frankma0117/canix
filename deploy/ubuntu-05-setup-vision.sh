@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Deja listo el microservicio de vision de Fashion Mode (clasificacion de fotos de prendas via
-# CLIP, 100% local, sin API paga) - crea su venv de Python, instala dependencias, y precarga el
-# modelo para detectar problemas de descarga/RAM ahora, no en medio del primer mensaje real de un
-# usuario. Correr despues de ubuntu-02-deploy.sh (necesita /opt/canix ya instalado). Seguro de
-# re-correr: si el venv ya existe, no lo recrea.
+# Prepares Fashion Mode's vision microservice (garment photo classification with CLIP, 100% local,
+# no paid API): creates its Python venv, installs dependencies and preloads the model to surface
+# download/RAM problems now, not in the middle of a user's first real message. Needs /opt/canix.
+# Safe to re-run: an existing, healthy venv is reused.
 set -euo pipefail
 
 APP_DIR="/opt/canix"
@@ -18,52 +17,50 @@ command -v python3 >/dev/null 2>&1 || missing_pkgs="$missing_pkgs python3"
 python3 -c "import ensurepip" >/dev/null 2>&1 || missing_pkgs="$missing_pkgs python3-venv"
 command -v pip3 >/dev/null 2>&1 || missing_pkgs="$missing_pkgs python3-pip"
 if [ -n "$missing_pkgs" ]; then
-  echo "== Instalando dependencias que faltan:$missing_pkgs =="
+  echo "== Installing missing dependencies:$missing_pkgs =="
   sudo apt-get update
   sudo apt-get install -y $missing_pkgs
 fi
 
 cd "$VISION_DIR"
 
-# No basta con revisar que la carpeta .venv exista - un intento anterior interrumpido (Ctrl+C, sin
-# espacio en disco, python3-venv faltante en ese momento) puede dejarla creada pero sin pip
-# adentro, y el resto del script fallaria mas abajo con un error confuso ("No such file or
-# directory") en vez de decir claramente que el venv esta roto. Se detecta por la presencia real
-# de .venv/bin/pip, no solo por la carpeta.
-# Tambien se exige pyvenv.cfg: sin ese archivo Python no reconoce la carpeta como venv, y
-# .venv/bin/pip termina actuando como el pip del sistema - en Ubuntu 24.04 eso falla con
-# "externally-managed-environment" (paso real en el servidor, 2026-10).
+# Checking that the .venv folder exists is not enough - an earlier interrupted attempt (Ctrl+C, no
+# disk space, python3-venv missing at the time) can leave it without pip inside, and the rest of
+# the script would fail further down with a confusing "No such file or directory". It is detected
+# by the actual .venv/bin/pip. pyvenv.cfg is required too: without it Python does not treat the
+# folder as a venv and .venv/bin/pip acts as the system pip - which on Ubuntu 24.04 fails with
+# "externally-managed-environment" (happened on the server, 2026-10).
 if [ -x .venv/bin/pip ] && [ -f .venv/pyvenv.cfg ]; then
-  echo "== Ya existe .venv (con pip), omito creacion =="
+  echo "== .venv already exists (with pip), skipping creation =="
 else
   if [ -d .venv ]; then
-    echo "== .venv existe pero esta incompleto o roto (sin pip o sin pyvenv.cfg) - lo borro y recreo =="
+    echo "== .venv exists but is incomplete or broken (no pip or no pyvenv.cfg) - recreating it =="
     rm -rf .venv
   fi
-  echo "== Creando entorno virtual =="
+  echo "== Creating the virtual environment =="
   python3 -m venv .venv
   if [ ! -x .venv/bin/pip ]; then
-    echo "== python3 -m venv no genero pip - reintentando con ensurepip =="
+    echo "== python3 -m venv did not produce pip - retrying with ensurepip =="
     .venv/bin/python -m ensurepip --upgrade || {
-      echo "No se pudo instalar pip dentro del venv. Asegurate de tener el paquete de venv que"
-      echo "corresponde a tu version de Python instalado (ej. 'sudo apt-get install -y python3-venv"
-      echo "python3-pip') y vuelve a correr este script."
+      echo "Could not install pip inside the venv. Make sure the venv package for your Python"
+      echo "version is installed (e.g. 'sudo apt-get install -y python3-venv python3-pip') and run"
+      echo "this script again."
       exit 1
     }
   fi
 fi
 
-echo "== Instalando dependencias de Python (puede tardar varios minutos: descarga torch CPU) =="
+echo "== Installing Python dependencies (may take several minutes: downloads CPU torch) =="
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements.txt
 
 echo ""
-echo "== Precargando el modelo (primera vez descarga ~300-400MB desde Hugging Face) =="
-.venv/bin/python -c "import model; model.load_model(); print('Modelo cargado OK.')"
+echo "== Preloading the model (the first time downloads ~300-400MB from Hugging Face) =="
+.venv/bin/python -c "import model; model.load_model(); print('Model loaded OK.')"
 
 echo ""
-echo "== RAM libre justo despues de cargar el modelo (servidor de 4GB - revisa que quede margen) =="
+echo "== Free RAM right after loading the model (4GB server - check there is headroom left) =="
 free -h
 
 echo ""
-echo "Listo. Siguiente paso: deploy/ubuntu-06-setup-vision-service.sh (para dejarlo como servicio systemd)"
+echo "Done. Next step: deploy/ubuntu-06-setup-vision-service.sh (to run it as a systemd service)"

@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
-# Publica la página de venta de Canix en su propio subdominio (ej. canix.cania.app) con HTTPS.
-# La misma app (puerto 3000) sirve la página en "/" cuando la visitan por ese dominio (ver
-# src/growth/routes.ts); el portal sigue igual en su dominio de siempre.
+# Publishes Canix's sales page on its own subdomain (e.g. canix.cania.app) with HTTPS. The same app
+# (port 3000) serves the page at "/" when visited through that domain (see
+# backend/src/api/routes/growth.routes.ts); the portal keeps working on its usual domain.
 #
-# Requisito PREVIO: un registro DNS tipo A del subdominio hacia la IP de este servidor, ya
-# propagado (verifícalo con: dig +short canix.cania.app). Sin eso certbot falla.
+# PREREQUISITE: a DNS A record from the subdomain to this server's IP, already propagated (check
+# with: dig +short canix.cania.app). certbot fails without it.
 #
-# Uso:
+# Usage:
 #   sudo ./deploy/ubuntu-08-setup-landing.sh canix.cania.app
 #
-# Seguro de re-correr. NO toca los server blocks que ya existan (portal, otros sitios).
+# Safe to re-run. Does NOT touch existing server blocks (portal, other sites).
 set -euo pipefail
 
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Este script necesita sudo. Corre: sudo $0 canix.tu-dominio.com"
+  echo "This script needs sudo. Run: sudo $0 canix.your-domain.com"
   exit 1
 fi
 
 DOMAIN="${1:-}"
 if [ -z "$DOMAIN" ]; then
-  echo "Falta el subdominio. Uso: sudo $0 canix.tu-dominio.com"
+  echo "Missing the subdomain. Usage: sudo $0 canix.your-domain.com"
   exit 1
 fi
 
@@ -28,23 +28,23 @@ APP_PORT="${APP_PORT:-3000}"
 CONF_NAME="canix-landing"
 CONF_PATH="/etc/nginx/sites-available/$CONF_NAME"
 
-echo "== Revisando DNS de $DOMAIN =="
+echo "== Checking DNS for $DOMAIN =="
 RESOLVED="$(getent hosts "$DOMAIN" | awk '{print $1}' | head -1 || true)"
 MYIP="$(curl -s --max-time 5 https://api.ipify.org || true)"
-echo "  $DOMAIN -> ${RESOLVED:-(no resuelve)}   este servidor: ${MYIP:-desconocida}"
+echo "  $DOMAIN -> ${RESOLVED:-(does not resolve)}   this server: ${MYIP:-unknown}"
 if [ -z "$RESOLVED" ]; then
-  echo "El subdominio todavía no resuelve. Crea el registro A ($DOMAIN -> ${MYIP:-IP del servidor}) y espera unos minutos."
+  echo "The subdomain does not resolve yet. Create the A record ($DOMAIN -> ${MYIP:-server IP}) and wait a few minutes."
   exit 1
 fi
 
 if ! command -v nginx >/dev/null 2>&1 || ! command -v certbot >/dev/null 2>&1; then
-  echo "== Instalando nginx + certbot =="
+  echo "== Installing nginx + certbot =="
   apt-get update -qq
   apt-get install -y nginx certbot python3-certbot-nginx
 fi
 
 if [ ! -f "$CONF_PATH" ]; then
-  echo "== Creando el server block $CONF_NAME ($DOMAIN -> 127.0.0.1:$APP_PORT) =="
+  echo "== Creating server block $CONF_NAME ($DOMAIN -> 127.0.0.1:$APP_PORT) =="
   cat > "$CONF_PATH" <<EOF
 server {
     listen 80;
@@ -65,29 +65,29 @@ EOF
   nginx -t
   systemctl reload nginx
 else
-  echo "== $CONF_PATH ya existe, lo dejo como está =="
+  echo "== $CONF_PATH already exists, leaving it as is =="
 fi
 
-echo "== Certificado HTTPS (Let's Encrypt) =="
+echo "== HTTPS certificate (Let's Encrypt) =="
 certbot --nginx -d "$DOMAIN" --redirect --non-interactive --agree-tos --register-unsafely-without-email || {
-  echo "certbot falló - revisa que $DOMAIN apunte a este servidor (dig +short $DOMAIN)."
+  echo "certbot failed - check that $DOMAIN points to this server (dig +short $DOMAIN)."
   exit 1
 }
 
-echo "== Guardando LANDING_URL en $APP_DIR/.env =="
+echo "== Saving LANDING_URL in $APP_DIR/.env =="
 ENV_FILE="$APP_DIR/.env"
 if grep -q '^LANDING_URL=' "$ENV_FILE" 2>/dev/null; then
   sed -i "s#^LANDING_URL=.*#LANDING_URL=https://$DOMAIN#" "$ENV_FILE"
 else
-  printf '\n# Página pública de venta (ver deploy/ubuntu-08-setup-landing.sh)\nLANDING_URL=https://%s\n' "$DOMAIN" >> "$ENV_FILE"
+  printf '\n# Public sales page (see deploy/ubuntu-08-setup-landing.sh)\nLANDING_URL=https://%s\n' "$DOMAIN" >> "$ENV_FILE"
 fi
 
 if systemctl list-unit-files canix.service >/dev/null 2>&1 && systemctl cat canix.service >/dev/null 2>&1; then
   systemctl restart canix
-  echo "Bot reiniciado para tomar LANDING_URL."
+  echo "Bot restarted to pick up LANDING_URL."
 fi
 
 echo ""
-echo "== Listo =="
-echo "Página de venta:  https://$DOMAIN"
-echo "Sitemap:          https://$DOMAIN/sitemap.xml   (envíalo en Google Search Console)"
+echo "== Done =="
+echo "Sales page:  https://$DOMAIN"
+echo "Sitemap:     https://$DOMAIN/sitemap.xml   (submit it in Google Search Console)"

@@ -1,14 +1,13 @@
 @echo off
-REM Deja listo y arranca el microservicio de vision de Fashion Mode en Windows, para probarlo en
-REM local antes de desplegarlo al servidor. Crea el venv la primera vez (si ya existe, lo reusa),
-REM instala/actualiza dependencias siempre (pip no reinstala lo que ya esta al dia), y arranca
-REM uvicorn con --reload. La primera vez descarga el modelo (~300-400MB) desde Hugging Face -
-REM necesita internet esa vez, despues queda cacheado localmente.
+REM Sets up and starts Fashion Mode's vision microservice on Windows, to try it locally before
+REM deploying. Creates the venv the first time (reuses it afterwards), always installs/updates the
+REM dependencies (pip skips what is already up to date) and starts uvicorn with --reload. The first
+REM run downloads the model (~300-400MB) from Hugging Face; after that it is cached locally.
 setlocal
 cd /d "%~dp0"
 
 if not exist .venv (
-  echo Creando entorno virtual...
+  echo Creating the virtual environment...
   python -m venv .venv
   if errorlevel 1 goto :error
 )
@@ -16,13 +15,13 @@ if not exist .venv (
 call .venv\Scripts\activate.bat
 if errorlevel 1 goto :error
 
-echo Instalando/actualizando dependencias...
+echo Installing/updating dependencies...
 pip install -r requirements.txt
 if errorlevel 1 goto :error
 
 echo.
-echo Arrancando en http://127.0.0.1:8008 (Ctrl+C para detener)...
-echo Probalo en otra terminal con: curl http://127.0.0.1:8008/health
+echo Starting on http://127.0.0.1:8008 (Ctrl+C to stop)...
+echo Try it from another terminal with: curl http://127.0.0.1:8008/health
 echo.
 uvicorn app:app --host 127.0.0.1 --port 8008 --reload
 endlocal
@@ -30,6 +29,6 @@ goto :eof
 
 :error
 echo.
-echo Algo fallo arriba. Revisa el error.
+echo Something failed above. Check the error.
 endlocal
 exit /b 1

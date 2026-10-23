@@ -1,0 +1,91 @@
+import type { Tool } from '../../tool-registry.js';
+import { nowLocal } from '../../../shared/utils/datetime.js';
+import { schedulingModel } from '../../../models/scheduling.model.js';
+import { bookableProfessionals, resolveBookableProfessional, slotsFor, requestAppointment, cancelAppointment, SchedulingError } from '../../../services/scheduling/scheduling.service.js';
+import { formatWhen } from '../../../services/scheduling/slots.js';
+import { schedTool, strOrNull } from './common.js';
+import { appointmentsView, professionalsView, slotsView } from '../../../services/scheduling/scheduling-views.js';
+
+const listMyProfessionalsTool = schedTool({
+  name: 'list_my_professionals',
+  description: 'Lista los profesionales con los que puedo agendar citas.',
+  parameters: { type: 'object', properties: {}, additionalProperties: false },
+  async run(_args, me) {
+    const list = bookableProfessionals(me.id);
+    return professionalsView(list);
+  },
+});
+
+const listSlotsTool = schedTool({
+  name: 'list_available_slots',
+  description:
+    'Muestra los espacios disponibles para pedir cita con un profesional (default: los próximos 7 días). Es la ÚNICA ' +
+    'fuente válida de horarios - nunca ofrezcas uno que no salga de aquí.',
+  parameters: {
+    type: 'object',
+    properties: {
+      professional: { type: 'string', description: 'Nombre del profesional (opcional si solo hay uno).' },
+      from_date: { type: 'string', description: "Desde 'YYYY-MM-DD' (default hoy)." },
+      days: { type: 'number', description: 'Cuántos días mirar (default 7, máx 31).' },
+    },
+    additionalProperties: false,
+  },
+  async run(args, me) {
+    const prof = resolveBookableProfessional(me.id, strOrNull(args.professional) ?? undefined);
+    const slots = slotsFor(prof, strOrNull(args.from_date) ?? undefined, Number(args.days) || 7);
+    return slotsView(prof, slots);
+  },
+});
+
+const requestAppointmentTool = schedTool({
+  name: 'request_appointment',
+  description:
+    'Pide una cita en un espacio disponible (sacado de list_available_slots). Queda pendiente hasta que el ' +
+    'profesional la confirme, salvo que él tenga auto-confirmación.',
+  parameters: {
+    type: 'object',
+    properties: {
+      professional: { type: 'string', description: 'Nombre del profesional (opcional si solo hay uno).' },
+      start: { type: 'string', description: "Inicio exacto 'YYYY-MM-DD HH:mm' de un espacio disponible." },
+      reason: { type: 'string', description: 'Motivo de la cita (opcional).' },
+    },
+    required: ['start'],
+    additionalProperties: false,
+  },
+  async run(args, me) {
+    const prof = resolveBookableProfessional(me.id, strOrNull(args.professional) ?? undefined);
+    const a = await requestAppointment(me, prof, String(args.start ?? ''), strOrNull(args.reason));
+    return a.status === 'confirmed'
+      ? `Listo, tu cita ⟦${a.id}⟧ con ${prof.display_name} quedó CONFIRMADA para el ${formatWhen(a.start_at)}. Te la recuerdo ese día.`
+      : `Listo, pedí tu cita ⟦${a.id}⟧ con ${prof.display_name} para el ${formatWhen(a.start_at)}. Queda PENDIENTE hasta que la confirme; te aviso apenas lo haga.`;
+  },
+});
+
+const listMyAppointmentsTool = schedTool({
+  name: 'list_my_appointments',
+  description: 'Lista mis próximas citas (como cliente) con su estado.',
+  parameters: { type: 'object', properties: {}, additionalProperties: false },
+  async run(_args, me) {
+    const list = schedulingModel.listForClient(me.id, nowLocal()).filter((a) => ['pending', 'confirmed'].includes(a.status));
+    return appointmentsView(list, 'client');
+  },
+});
+
+const cancelMyAppointmentTool = schedTool({
+  name: 'cancel_my_appointment',
+  description: 'Cancela una de mis citas (como cliente) por su número; le aviso al profesional.',
+  parameters: {
+    type: 'object',
+    properties: { id: { type: 'number' }, reason: { type: 'string' } },
+    required: ['id'],
+    additionalProperties: false,
+  },
+  async run(args, me) {
+    const appt = schedulingModel.getAppointment(Number(args.id));
+    if (!appt || appt.client_user_id !== me.id) throw new SchedulingError(`No encontré la cita ⟦${args.id}⟧ entre las tuyas.`);
+    const a = await cancelAppointment(me, appt.id, strOrNull(args.reason));
+    return `Listo, cancelé tu cita ⟦${a.id}⟧ del ${formatWhen(a.start_at)} y le avisé a ${a.professional_name}.`;
+  },
+});
+
+export const clientTools: Tool[] = [listMyProfessionalsTool, listSlotsTool, requestAppointmentTool, listMyAppointmentsTool, cancelMyAppointmentTool];

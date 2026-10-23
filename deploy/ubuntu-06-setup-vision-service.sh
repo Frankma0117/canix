@@ -1,46 +1,44 @@
 #!/usr/bin/env bash
-# Configura el microservicio de vision de Fashion Mode como servicio systemd (arranca solo, se
-# reinicia si falla, sobrevive a reinicios del servidor). Correr con sudo despues de
-# ubuntu-05-setup-vision.sh (necesita el venv ya instalado). Reusa el mismo usuario de servicio
-# 'canix' que ubuntu-03-setup-service.sh crea para el bot principal - si todavia no corriste ese
-# script, este lo crea igual.
+# Sets Fashion Mode's vision microservice up as a systemd service (starts on boot, restarts on
+# failure). Run with sudo after ubuntu-05-setup-vision.sh (needs its venv). Reuses the 'canix'
+# service user that ubuntu-03-setup-service.sh creates for the bot - creates it if missing.
 set -euo pipefail
 
 APP_DIR="/opt/canix"
 SERVICE_USER="canix"
 
 if [ "$(id -u)" -ne 0 ]; then
-  echo "Este script necesita sudo. Corre: sudo $0"
+  echo "This script needs sudo. Run: sudo $0"
   exit 1
 fi
 
-echo "== Creando usuario de servicio '$SERVICE_USER' (sin login) =="
+echo "== Creating service user '$SERVICE_USER' (no login) =="
 if ! id "$SERVICE_USER" &>/dev/null; then
   useradd -r -s /usr/sbin/nologin "$SERVICE_USER"
 fi
 
-echo "== Ajustando permisos de $APP_DIR/vision-service =="
+echo "== Fixing ownership of $APP_DIR/vision-service =="
 chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR/vision-service"
 
-echo "== Instalando unidad systemd =="
+echo "== Installing the systemd unit =="
 cp "$APP_DIR/deploy/canix-vision.service" /etc/systemd/system/canix-vision.service
 systemctl daemon-reload
 systemctl enable canix-vision
 
 echo ""
-echo "== Arrancando el servicio (la primera vez puede tardar unos segundos en cargar el modelo) =="
+echo "== Starting the service (the first time it can take a few seconds to load the model) =="
 systemctl restart canix-vision
 sleep 2
 systemctl --no-pager status canix-vision || true
 
 echo ""
-echo "== Listo. Comandos utiles: =="
-echo "  sudo systemctl restart canix-vision   # reiniciar"
-echo "  sudo systemctl stop canix-vision      # detener"
-echo "  sudo journalctl -u canix-vision -f    # ver logs en vivo"
+echo "== Done. Useful commands: =="
+echo "  sudo systemctl restart canix-vision   # restart"
+echo "  sudo systemctl stop canix-vision      # stop"
+echo "  sudo journalctl -u canix-vision -f    # live logs"
 echo ""
-echo "Verifica que responde:  curl http://127.0.0.1:8008/health"
+echo "Check that it answers:  curl http://127.0.0.1:8008/health"
 echo ""
-echo "Cuando /health responda {\"ok\":true,\"model_ready\":true}, activa el modulo en \$APP_DIR/.env:"
+echo "Once /health answers {\"ok\":true,\"model_ready\":true}, enable the module in \$APP_DIR/.env:"
 echo "  FASHION_MODE_ENABLED=true"
 echo "  sudo systemctl restart canix"
