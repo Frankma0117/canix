@@ -20,8 +20,8 @@ data/stickers-export/
 /public/
 
 # Audio models/binaries, downloaded on the server (deploy/ubuntu-04-setup-audio.sh)
-models/
-bin/
+/models/
+/bin/
 
 # Vision microservice: Python venv + model cache, created on the server (deploy/ubuntu-05-setup-vision.sh)
 vision-service/.venv/
