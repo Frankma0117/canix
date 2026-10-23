@@ -48,6 +48,7 @@ resolved from the repo root (`backend/src/config/paths.ts`), so `data/`, `auth_i
 | `deploy/ubuntu-07-setup-nginx.sh <domain>` | nginx + HTTPS for the portal (needs the DNS A record) |
 | `deploy/ubuntu-08-setup-landing.sh <subdomain>` | the public site on its own (sub)domain, sets `LANDING_URL` |
 | `deploy/ubuntu-09-unify-domain.sh <old> <new> [--remove]` | move everything to one domain (old one redirects 301 or is removed) |
+| `deploy/ubuntu-10-setup-promo.sh` | recording browser + emoji font for "Videos y publicidad" (deploy.sh runs it on every deploy) |
 
 With one domain (`LANDING_URL` = `PANEL_URL`), the public site is at `/` and the portal at `/app`.
 

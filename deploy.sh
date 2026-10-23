@@ -205,6 +205,11 @@ if [ "$WITH_VISION" = true ]; then
   fi
 fi
 
+# --- 7.2 Recording browser for the admin's "Videos y publicidad" (optional) --------
+# A failure here only leaves that section off (the portal says so); the bot is deployed anyway.
+step "Recording browser (Videos y publicidad)"
+bash ./deploy/ubuntu-10-setup-promo.sh || echo "WARNING: the recording browser failed to install - 'Videos y publicidad' stays off."
+
 # --- 7.5 Ownership for the service user (systemd only) ----------------------------
 # Under systemd the bot runs as the dedicated "canix" user, but everything above ran as whoever
 # connected over SSH, so new files (data/canix.lock, data/*.db, node_modules) get ANOTHER owner and

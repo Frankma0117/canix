@@ -15,6 +15,7 @@ import { db } from '../../database/connection.js';
 import { aiUsageModel } from '../../models/ai-usage.model.js';
 import { requirePanelAdmin } from '../middleware/auth.middleware.js';
 import { registerGrowthAdminRoutes } from './growth.routes.js';
+import { registerPromoRoutes } from './promo.routes.js';
 import { h, userId, str, strArr, intArr, int } from '../http-helpers.js';
 import type { User } from '../../entities/index.js';
 import type { BotManager } from '../../channels/whatsapp/bot-manager.js';
@@ -56,13 +57,14 @@ function loadNonAdmin(id: number): User {
 
 /**
  * Administration API (/api/admin/*, admin only): users and their access, packages, the permission
- * catalog, the audit trail and the scheduling "agendas generales". Every write goes through the
+ * catalog, the audit trail, the scheduling "agendas generales" and the advertising material (promo.routes.ts). Every write goes through the
  * transactional repositories (permissions.model.ts / scheduling repo), never raw SQL here.
  */
 export function registerAdminRoutes(app: Express, bot: BotManager): void {
   app.use('/api/admin', requirePanelAdmin);
 
   registerGrowthAdminRoutes(app, userView as never);
+  registerPromoRoutes(app);
 
   app.get('/api/admin/permissions', h((_req, res) => res.json(PERMISSIONS.map(({ tools: _t, ...p }) => p))));
 

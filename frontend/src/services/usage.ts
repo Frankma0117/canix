@@ -7,6 +7,8 @@ const OPERATIONS: Record<string, { label: string; unit: string; paid: boolean }>
   'voice.fish': { label: 'Notas de voz naturales', unit: 'caracteres', paid: true },
   'voice.fish.call': { label: 'Voz natural en llamadas', unit: 'caracteres', paid: true },
   'call.twilio': { label: 'Llamadas telefónicas', unit: 'llamadas', paid: true },
+  'voice.fish.promo': { label: 'Voz de los videos publicitarios', unit: 'caracteres', paid: true },
+  'promo.text': { label: 'Textos de la publicidad (IA)', unit: 'tokens', paid: false },
 };
 
 export function operationInfo(op: string) {
@@ -49,6 +51,7 @@ export function estimateCost(row: Pick<UsageRow, 'operation' | 'uses' | 'input_u
   switch (row.operation) {
     case 'voice.fish':
     case 'voice.fish.call':
+    case 'voice.fish.promo':
       return (row.input_units / 1e6) * r.fishPerMChars;
     case 'call.twilio':
       return row.uses * r.callEach;

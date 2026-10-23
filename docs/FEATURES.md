@@ -155,6 +155,26 @@ The administrator also has: people and access (packages + allow/deny), access ma
 audit trail, usage and costs, web analytics, test mode (try WhatsApp with a reduced permission
 set), scheduling groups, and the WhatsApp connection (QR, reconnect, switch number).
 
+### Videos y publicidad (administrator only)
+
+Advertising material for social media, made from the portal and reviewed before use
+(`services/promo/`, table `promo_items`):
+
+- **Videos** (vertical and horizontal): an ad, how Canix works, or one feature. The text model writes
+  the script following `promo-copy.ts` (only the real facts of `promo-catalog.ts`; a fixed template
+  without AI), Fish Audio narrates every scene with ONE voice chosen for all the videos, with
+  subtitles, soft "sent/received" sounds on the chats and optional background music generated once
+  with fal.ai. Typical length 25-55 s.
+- **Images** (square, story, horizontal) in three designs: with a chat, with three benefits, with
+  the mascot; 1-3 per request with different headlines. The texts can be corrected and the image is
+  drawn again without AI.
+- What is drawn: WhatsApp chats (typing dots, voice notes, blue ticks), the mascot's stickers, the
+  feature cards and the brand gradient - `frontend/public/promo/stage.*`, opened from disk.
+- Recording runs ONE at a time in a child process with low CPU priority (`promo-worker.ts`), so the
+  bot never slows down; a restart resumes what was half-made. Files go to Spaces under
+  `canix-promo/<id>/` (public-read) or `data/promo/` when Spaces isn't set.
+- Costs land in "Uso y costos" (`voice.fish.promo`, `promo.text`).
+
 ## Multi-user and permissions
 
 - The first sender is the administrator. Access is granted by the admin ("dale acceso a
