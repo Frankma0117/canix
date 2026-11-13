@@ -233,6 +233,50 @@ ep('post', '/api/lists/{id}/items', 'Lists', 'Add an item', 'todos.manage', [ID]
 ep('put', '/api/lists/items/{id}', 'Lists', 'Check / uncheck an item', 'todos.manage', [ID], body=OBJ({'checked': BOOL}, ['checked']), resp=S('Ok'))
 ep('delete', '/api/lists/items/{id}', 'Lists', 'Delete an item', 'todos.manage', [ID], resp=S('Ok'))
 
+# --- Order-taking assistant (Pedidos) ---
+SID = P('storeId', 'A business the signed-in person manages (any for the administrator).')
+ep('get', '/api/stores', 'Stores', 'Businesses the signed-in person manages', 'store.manage', resp=OBJ({'stores': ARR({'type': 'object'}), 'canCreate': BOOL, 'proofReading': BOOL}),
+   desc='Each store carries its WhatsApp connection state, orders waiting for confirmation and chats waiting for a person. proofReading=false when the server has no vision provider (receipts are kept, not read).')
+ep('post', '/api/stores', 'Stores', 'Create a business (administrator)', 'administrator', body=OBJ({'name': STR, 'business_type': STR}, ['name']), resp=S('Created'))
+ep('post', '/api/stores/demo', 'Stores', 'Create the demo business: catalog with real photos and daily promotions (administrator)', 'administrator', resp=S('Created'))
+ep('get', '/api/stores/{storeId}', 'Stores', 'One business', 'store.manage', [SID], resp={'type': 'object'})
+ep('patch', '/api/stores/{storeId}', 'Stores', 'Edit the business: attention instructions, hours, delivery, payments, assistant on/off', 'store.manage', [SID], body={'type': 'object'}, resp=S('Ok'),
+   desc='`active` only for the administrator. Money fields are whole pesos.')
+ep('delete', '/api/stores/{storeId}', 'Stores', 'Delete a business with everything it has, unlinking its number (administrator)', 'administrator', [SID], resp=S('Ok'))
+ep('get', '/api/stores/{storeId}/summary', 'Stores', 'Order counts and sales of today / last 7 days', 'store.manage', [SID], resp={'type': 'object'})
+ep('get', '/api/stores/{storeId}/members', 'Stores', 'People who manage the business', 'store.manage', [SID], resp=ARR({'type': 'object'}))
+ep('post', '/api/stores/{storeId}/members', 'Stores', 'Add a business administrator by WhatsApp number (administrator)', 'administrator', [SID], body=OBJ({'phone': STR, 'name': STR}, ['phone']),
+   resp=OBJ({'id': INT, 'created': BOOL, 'temporaryPassword': NULLSTR, 'loginId': STR}), desc='Creates the account when needed with store.manage + portal.access only; the temporary password is shown once.')
+ep('patch', '/api/stores/{storeId}/members/{userId}', 'Stores', 'Turn WhatsApp notices on/off (own, or anyone for the administrator)', 'store.manage', [SID, P('userId')], body=OBJ({'notify': BOOL}), resp=S('Ok'))
+ep('delete', '/api/stores/{storeId}/members/{userId}', 'Stores', 'Remove someone from the business (administrator)', 'administrator', [SID, P('userId')], resp=S('Ok'))
+ep('get', '/api/stores/{storeId}/connection', 'Stores', "State of the business' own WhatsApp session", 'store.manage', [SID], resp=OBJ({'connection': STR, 'connected': BOOL, 'hasQr': BOOL, 'banSuspected': BOOL, 'linked': BOOL, 'phone': NULLSTR}))
+ep('get', '/api/stores/{storeId}/connection/qr', 'Stores', 'QR (PNG) to link the number', 'store.manage', [SID], resp={'type': 'string', 'format': 'binary'})
+ep('post', '/api/stores/{storeId}/connection/connect', 'Stores', 'Start / re-establish the session (shows a QR when not linked)', 'store.manage', [SID], resp=S('Ok'))
+ep('post', '/api/stores/{storeId}/connection/unlink', 'Stores', 'Log the number out and delete its credentials', 'store.manage', [SID], resp=S('Ok'))
+ep('get', '/api/stores/{storeId}/catalog', 'Stores', "Categories, products (with today's price) and promotions", 'store.manage', [SID], resp=OBJ({'categories': ARR({'type': 'object'}), 'products': ARR({'type': 'object'}), 'promotions': ARR({'type': 'object'})}))
+for what, fields in (('categories', {'name': STR, 'position': INT}), ('products', {'name': STR, 'price': INT, 'category_id': NULLINT, 'description': NULLSTR, 'details': NULLSTR, 'available': BOOL, 'featured': BOOL}),
+                     ('promotions', {'title': STR, 'description': NULLSTR, 'product_id': NULLINT, 'promo_price': NULLINT, 'weekdays': ARR(INT), 'start_date': NULLSTR, 'end_date': NULLSTR, 'active': BOOL})):
+    ep('post', '/api/stores/{storeId}/' + what, 'Stores', 'Create (' + what + ')', 'store.manage', [SID], body=OBJ(fields), resp=S('Created'))
+    ep('patch', '/api/stores/{storeId}/' + what + '/{id}', 'Stores', 'Edit (' + what + ')', 'store.manage', [SID, ID], body=OBJ(fields), resp=S('Ok'))
+    ep('delete', '/api/stores/{storeId}/' + what + '/{id}', 'Stores', 'Delete (' + what + ')', 'store.manage', [SID, ID], resp=S('Ok'))
+ep('post', '/api/stores/{storeId}/products/{id}/image', 'Stores', 'Upload the product photo (multipart field "files", JPG/PNG/WEBP up to 6 MB)', 'store.manage', [SID, ID], resp=OBJ({'image_url': STR}))
+ep('delete', '/api/stores/{storeId}/products/{id}/image', 'Stores', 'Remove the product photo', 'store.manage', [SID, ID], resp=S('Ok'))
+ep('get', '/api/stores/{storeId}/orders', 'Stores', 'Orders the customers confirmed (carts are not listed)', 'store.manage', [SID, Q('status', 'Comma-separated: pending, confirmed, shipped, delivered, rejected, cancelled')], resp=OBJ({'orders': ARR({'type': 'object'}), 'counts': {'type': 'object'}}))
+ep('get', '/api/stores/{storeId}/orders/{id}', 'Stores', 'One order: items, delivery, payment with the receipt reading, history', 'store.manage', [SID, ID], resp={'type': 'object'})
+for action, summary in (('confirm', 'Confirm (pending -> confirmed); a receipt waiting for review becomes verified'), ('reject', 'Reject (pending), with an optional reason'),
+                        ('ship', 'Mark as sent / ready for pickup (confirmed -> shipped)'), ('deliver', 'Mark as delivered'), ('cancel', 'Cancel, with an optional reason'),
+                        ('payment', 'Verdict on the transfer receipt: {status: verified | rejected, reason}')):
+    ep('post', '/api/stores/{storeId}/orders/{id}/' + action, 'Stores', summary + '. The customer is told on WhatsApp.', 'store.manage', [SID, ID], body=OBJ({'reason': STR, 'status': STR}), resp={'type': 'object'})
+ep('get', '/api/stores/{storeId}/media/{file}', 'Stores', 'A photo a customer sent (payment receipt): only for the people of that business', 'store.manage', [SID, P('file', '', STR)], resp={'type': 'string', 'format': 'binary'})
+ep('get', '/api/stores/{storeId}/conversations', 'Stores', 'Chats of the business number, the ones waiting for a person first', 'store.manage', [SID], resp=ARR({'type': 'object'}))
+ep('get', '/api/stores/{storeId}/conversations/{customerId}/messages', 'Stores', 'Messages of a chat (after=<id> for new ones); typing=true while the assistant works', 'store.manage', [SID, P('customerId'), Q('after', '', INT)], resp={'type': 'object'})
+ep('post', '/api/stores/{storeId}/conversations/{customerId}/messages', 'Stores', 'A person writes to the customer (and takes the chat over)', 'store.manage', [SID, P('customerId')], body=OBJ({'text': STR}, ['text']), resp=S('Ok'))
+ep('post', '/api/stores/{storeId}/conversations/{customerId}/mode', 'Stores', "'human' takes the chat (assistant silent), 'bot' gives it back", 'store.manage', [SID, P('customerId')], body=OBJ({'mode': {'enum': ['bot', 'human']}}, ['mode']), resp=S('Ok'))
+ep('get', '/api/stores/{storeId}/simulator', 'Stores', 'The test chat of the signed-in person (they play the customer)', 'store.manage', [SID, Q('after', '', INT)], resp={'type': 'object'})
+ep('post', '/api/stores/{storeId}/simulator/message', 'Stores', 'Write in the test chat (JSON {text} or multipart with an image); answers right away, poll for the reply', 'store.manage', [SID], body=OBJ({'text': STR}), resp=OBJ({'ok': BOOL, 'customerId': INT}))
+ep('post', '/api/stores/{storeId}/simulator/handoff', 'Stores', 'Test the hand-off to a person (mode=bot gives it back)', 'store.manage', [SID], body=OBJ({'mode': STR}), resp=S('Ok'))
+ep('post', '/api/stores/{storeId}/simulator/reset', 'Stores', 'Start the test chat over (its test orders are deleted)', 'store.manage', [SID], resp=S('Ok'))
+
 # --- Wardrobe ---
 ep('get', '/api/garments', 'Wardrobe', 'Garments, paged', 'fashion.use', [Q('type'), Q('limit', '1-200, default 60', INT), Q('offset', '', INT)], resp=OBJ({'rows': ARR(S('GarmentCard')), 'total': INT}))
 ep('get', '/api/garments/taxonomy', 'Wardrobe', 'Types, categories and field options for editing', 'fashion.use', resp={'type': 'object'})
@@ -341,6 +385,7 @@ TAG_DOC = {
     'Rewards': 'Rewards and punishments, optionally tied to a routine.',
     'Notes': 'Free-text notes ("tips clave").',
     'Meals': 'Meal plan by date and slot; with a time it sends "hora del almuerzo" and, optionally, "toca preparar".',
+    'Stores': 'Order-taking assistant (Pedidos): businesses with their own WhatsApp number, catalog, daily promotions, orders confirmed by a person, conversations and the hand-off to a person. Public product photos are served at /media/store/{storeId}/{file}.',
     'Medications': 'Medicamentos y belleza: medicines, vitamins, creams, skincare, water and body care with their notice times and dose history.',
     'Recipes': 'Saved recipes.',
     'Lists': 'Lists ticked off item by item. Media-kind lists are also the Library.',

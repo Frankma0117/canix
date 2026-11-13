@@ -5,6 +5,8 @@ import { AuthError } from '../services/auth/web-auth.service.js';
 import { uploadErrorMessage } from '../services/files/uploads.service.js';
 import { stripInternalRefs } from '../shared/utils/wa-format.js';
 import { categoriesModel } from '../models/categories.model.js';
+import { StoreError } from '../services/store/store-orders.service.js';
+import { StoreMediaError } from '../services/store/store-media.service.js';
 
 /**
  * Wraps a route handler (sync or async). Known business errors (invalid permission key, slot not
@@ -18,7 +20,7 @@ export function h(fn: (req: Request, res: Response) => unknown) {
       .catch((err: unknown) => {
         if (res.headersSent) return;
         if (err instanceof AuthError) return void res.status(err.status).json({ error: stripInternalRefs(err.message) });
-        if (err instanceof AccessError || err instanceof SchedulingError) return void res.status(400).json({ error: stripInternalRefs(err.message) });
+        if (err instanceof AccessError || err instanceof SchedulingError || err instanceof StoreError || err instanceof StoreMediaError) return void res.status(400).json({ error: stripInternalRefs(err.message) });
         const up = uploadErrorMessage(err);
         if (up) return void res.status(up.status).json({ error: up.message });
         // SQLite constraint violations caused by bad input (e.g. a CHECK failing) are a 400, not a 500.

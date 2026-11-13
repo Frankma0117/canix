@@ -38,6 +38,7 @@ import { sleep, typingDelayMs, readingPauseMs, withWorkingUpdates } from '../../
 import { workingUpdateMessage } from '../../shared/utils/motivational.js';
 import { synthesizeVoiceNote } from '../../services/audio/tts.js';
 import { extractDemoCode, activateDemo, isDemoExpired, demoEndedMessage } from '../../services/growth/demo.service.js';
+import { handleStoreNoticeReaction } from '../../services/store/store-engine.js';
 
 /** How long a turn can run before the user gets a "still working on it" ping, and how many of
  *  those pings a single turn can rack up - see shared/utils/human-delay.ts's withWorkingUpdates(). Tuned
@@ -127,6 +128,9 @@ export class BotManager {
    * typed. Any other emoji, or a reaction to any other message, is just a reaction.
    */
   private async handleReaction({ jid, altJid, targetId, emoji }: { jid: string; altJid?: string; targetId: string; emoji: string }): Promise<void> {
+    // A 👍 / 👎 on an order notice of the order-taking assistant, when it went out from this number.
+    if (await handleStoreNoticeReaction(this.wa, jid, targetId, emoji)) return;
+
     const { phoneJid } = await this.resolveIncomingIdentity(jid, altJid);
     const user = usersModel.getByJidOrLid(phoneJid) ?? usersModel.getByJidOrLid(jid);
     if (!user) return;

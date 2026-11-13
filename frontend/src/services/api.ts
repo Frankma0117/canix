@@ -50,6 +50,8 @@ function buildApi(token: string | null, onUnauthorized: () => void, onMustChange
       files.forEach((f) => fd.append('files', f, f.name));
       return request<T>(path, { method: 'POST', body: fd });
     },
+    /** Multipart POST with files and text fields together. */
+    uploadForm: <T,>(path: string, form: FormData) => request<T>(path, { method: 'POST', body: form }),
     /** Fetches a protected file and returns a blob: URL to show/download it. */
     fileUrl: async (path: string) => {
       const res = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });

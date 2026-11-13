@@ -15,6 +15,8 @@ data/canix.lock
 # Public site last-modified dates and IndexNow state (backend/src/services/growth/site.service.ts)
 data/site-pages.json
 data/stickers-export/
+# Order-taking assistant: product photos and receipts customers send (backend/src/services/store/store-media.service.ts)
+data/store-media/
 
 # Built web assets: frontend/ builds the portal and the public site into /public
 /public/

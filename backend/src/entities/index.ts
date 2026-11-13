@@ -17,3 +17,4 @@ export type * from './call-reminder.entity.js';
 export type * from './sticker.entity.js';
 export type * from './reward.entity.js';
 export type * from './medication.entity.js';
+export type * from './store.entity.js';

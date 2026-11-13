@@ -60,9 +60,12 @@ export function Topbar({ current, onMenu }: { current?: SectionDef; onMenu: () =
           <p className="truncate text-xs font-semibold text-gray-dark">{current?.group ?? 'Canix'}</p>
           <p className="truncate font-display text-base font-extrabold leading-tight text-ink dark:text-white">{current?.label ?? 'Inicio'}</p>
         </div>
-        <span className="hidden items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-xs font-semibold text-emerald-700 md:inline-flex dark:text-emerald-300">
-          <MessageCircle size={13} /> También puedes pedírmelo por WhatsApp
-        </span>
+        {/* Canix's own WhatsApp: meaningless in the order assistant's sections (another number). */}
+        {!current?.id.startsWith('store-') && current?.id !== 'admin-stores' && (
+          <span className="hidden items-center gap-1.5 rounded-full bg-success/10 px-3 py-1 text-xs font-semibold text-emerald-700 md:inline-flex dark:text-emerald-300">
+            <MessageCircle size={13} /> También puedes pedírmelo por WhatsApp
+          </span>
+        )}
         <button
           onClick={() => setTheme(NEXT[theme])}
           className="rounded-xl p-2 text-gray-dark hover:bg-gray-medium/60 hover:text-ink dark:hover:bg-white/10 dark:hover:text-white"

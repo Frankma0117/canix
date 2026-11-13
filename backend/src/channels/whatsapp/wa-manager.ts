@@ -47,16 +47,34 @@ export type IncomingHandler = (msg: {
 /** Someone reacted to a message with an emoji (`targetId` = the message reacted to). */
 export type ReactionHandler = (reaction: { jid: string; altJid?: string; targetId: string; emoji: string }) => Promise<void>;
 
+/** A message written from the linked phone itself (or another linked device), not by this process. */
+export type OwnMessageHandler = (msg: { jid: string; altJid?: string; text: string }) => Promise<void>;
+
+export interface WaManagerOptions {
+  /**
+   * A business' own number (the order-taking assistant, see services/store/store-sessions.ts)
+   * rather than Canix's: whoever writes is a customer, not a Canix user, so nothing learned from
+   * this session's traffic is written to `users` / `contacts`.
+   */
+  business?: boolean;
+}
+
 /**
- * Manages the single WhatsApp session (this is a personal, single-user bot -
- * one dedicated WhatsApp number, unlike a multi-tenant setup): connection,
- * QR, automatic reconnection and sending messages.
+ * Manages ONE WhatsApp session: connection, QR, automatic reconnection and sending messages.
+ * Canix itself runs on one (bot-manager.ts); each business of the order-taking assistant runs on
+ * its own, with its own number and credentials folder (auth_info/<session>).
  */
 export class WaManager {
   private sock: WASocket | undefined;
   private handler: IncomingHandler | undefined;
   private reactionHandler: ReactionHandler | undefined;
+  private ownMessageHandler: OwnMessageHandler | undefined;
   private authDir: string;
+  private readonly business: boolean;
+  /** Log prefix: "[WA]" for Canix's own session, "[WA:<session>]" for a business'. */
+  private readonly tag: string;
+  /** Ids of the messages this process sent, to tell them apart from what a person typed on the phone. */
+  private sentIds = new Set<string>();
   private stopping = false;
   private reconnectAttempt = 0;
   /** Guards against two overlapping start() calls opening two sockets on the same session at once. */
@@ -80,8 +98,27 @@ export class WaManager {
   banSuspected = false;
   lastDisconnectCode: number | undefined;
 
-  constructor(private session: string) {
+  constructor(
+    private session: string,
+    options: WaManagerOptions = {},
+  ) {
     this.authDir = join(AUTH_DIR, session);
+    this.business = !!options.business;
+    this.tag = this.business ? `[WA:${session}]` : '[WA]';
+  }
+
+  /** Registers the callback for messages a person sends from the linked phone itself. */
+  onOwnMessage(handler: OwnMessageHandler): void {
+    this.ownMessageHandler = handler;
+  }
+
+  private rememberSent(id: string | null | undefined): void {
+    if (!id) return;
+    this.sentIds.add(id);
+    if (this.sentIds.size > 500) {
+      const oldest = this.sentIds.values().next().value;
+      if (oldest !== undefined) this.sentIds.delete(oldest);
+    }
   }
 
   /** Registers the callback that processes incoming messages. */
@@ -163,8 +200,8 @@ export class WaManager {
       const { connection, lastDisconnect, qr } = update;
       if (qr) {
         this.qr = qr;
-        console.log('[WA] Scan this QR with WhatsApp (Linked devices):');
-        qrcode.generate(qr, { small: true });
+        console.log('%s Scan this QR with WhatsApp (Linked devices)%s', this.tag, this.business ? ' - also shown in the portal.' : ':');
+        if (!this.business) qrcode.generate(qr, { small: true });
       }
       if (connection) this.connectionState = connection;
 
@@ -174,7 +211,7 @@ export class WaManager {
         this.reconnectAttempt = 0;
         this.banSuspected = false;
         recordFirstConnect(this.session, wasAlreadyLinked);
-        console.log('[WA] Connected to WhatsApp.');
+        console.log('%s Connected to WhatsApp.', this.tag);
       }
 
       if (connection === 'close') {
@@ -185,7 +222,7 @@ export class WaManager {
         this.lastDisconnectCode = code;
         const loggedOut = code === DisconnectReason.loggedOut;
         const forbidden = code === DisconnectReason.forbidden; // 403
-        console.log('[WA] Connection closed (code=%s).', code ?? '?');
+        console.log('%s Connection closed (code=%s).', this.tag, code ?? '?');
 
         if (loggedOut) {
           console.log('[WA] Session closed. Deleting credentials so a new QR can be generated.');
@@ -214,7 +251,7 @@ export class WaManager {
         } else {
           const delay = Math.min(60_000, 2_000 * 2 ** this.reconnectAttempt);
           this.reconnectAttempt += 1;
-          console.log('[WA] Retrying connection in %ds...', delay / 1000);
+          console.log('%s Retrying connection in %ds...', this.tag, delay / 1000);
           setTimeout(() => void this.start(), delay);
         }
       }
@@ -224,6 +261,7 @@ export class WaManager {
     // looked up on demand - persist every pairing as we learn it so sends/identity checks can
     // use it later (see contactsModel.sendTarget / bot-manager's user lookup).
     sock.ev.on('lid-mapping.update', ({ pn, lid }) => {
+      if (this.business) return; // a business' customers are not Canix users
       usersModel.setLid(pn, lid);
       contactsModel.setLidForPhoneJid(pn, lid);
     });
@@ -233,7 +271,21 @@ export class WaManager {
       for (const m of messages) {
         const jid = m.key.remoteJid;
         if (!jid || jid === 'status@broadcast' || jid.endsWith('@g.us')) continue; // ignore groups/status
-        if (m.key.fromMe) continue; // this bot uses a dedicated number, not a self-chat
+        if (m.key.fromMe) {
+          // The bot's number is a dedicated one, so its own messages are normally nothing to act on.
+          // On a business number, though, a person can answer a customer straight from the phone:
+          // that is told apart from what this process sent and handed over (see store-engine.ts).
+          if (this.ownMessageHandler && m.key.id && !this.sentIds.has(m.key.id)) {
+            const own = normalizeMessageContent(m.message);
+            const ownText = own?.conversation ?? own?.extendedTextMessage?.text ?? own?.imageMessage?.caption ?? (own?.imageMessage ? '📷 Imagen' : own?.audioMessage ? '🎤 Audio' : '');
+            if (ownText) {
+              await this.ownMessageHandler({ jid, altJid: m.key.remoteJidAlt ?? undefined, text: ownText }).catch((err) =>
+                console.error('%s Error processing an own message:', this.tag, (err as Error).message),
+              );
+            }
+          }
+          continue;
+        }
 
         if (m.key.id) {
           const dedupeKey = `${jid}:${m.key.id}`;
@@ -360,8 +412,10 @@ export class WaManager {
     try {
       const lid = await this.sock.signalRepository.lidMapping.getLIDForPN(jid);
       if (lid) {
-        usersModel.setLid(jid, lid);
-        contactsModel.setLidForPhoneJid(jid, lid);
+        if (!this.business) {
+          usersModel.setLid(jid, lid);
+          contactsModel.setLidForPhoneJid(jid, lid);
+        }
         return lid;
       }
     } catch (err) {
@@ -440,7 +494,8 @@ export class WaManager {
     if (!this.sock) throw new Error('WhatsApp no está conectado');
     await this.ensurePrivacyToken(jid);
     console.log('[WA] Sending text to %s', jid);
-    await this.sock.sendMessage(jid, { text: stripInternalRefs(text) });
+    const sent = await this.sock.sendMessage(jid, { text: stripInternalRefs(text) });
+    this.rememberSent(sent?.key.id);
   }
 
   /** Same as sendText, returning the sent message's id (null if WhatsApp didn't give one back) so
@@ -450,6 +505,7 @@ export class WaManager {
     await this.ensurePrivacyToken(jid);
     console.log('[WA] Sending text to %s', jid);
     const sent = await this.sock.sendMessage(jid, { text: stripInternalRefs(text) });
+    this.rememberSent(sent?.key.id);
     return sent?.key.id ?? null;
   }
 
@@ -458,7 +514,8 @@ export class WaManager {
     if (!this.sock) throw new Error('WhatsApp no está conectado');
     await this.ensurePrivacyToken(jid);
     console.log('[WA] Sending audio to %s', jid);
-    await this.sock.sendMessage(jid, { audio, mimetype: 'audio/ogg; codecs=opus', ptt: true });
+    const sent = await this.sock.sendMessage(jid, { audio, mimetype: 'audio/ogg; codecs=opus', ptt: true });
+    this.rememberSent(sent?.key.id);
   }
 
   /** Sends a WhatsApp sticker (static webp). Best-effort - a sticker send failing should never
@@ -467,7 +524,8 @@ export class WaManager {
     if (!this.sock) throw new Error('WhatsApp no está conectado');
     await this.ensurePrivacyToken(jid);
     console.log('[WA] Sending sticker to %s', jid);
-    await this.sock.sendMessage(jid, { sticker: webp });
+    const sent = await this.sock.sendMessage(jid, { sticker: webp });
+    this.rememberSent(sent?.key.id);
   }
 
   /** Sends an image by its public URL (Baileys/WhatsApp fetches it directly - no need to
@@ -481,7 +539,23 @@ export class WaManager {
     await this.ensurePrivacyToken(jid);
     console.log('[WA] Sending image to %s', jid);
     const sent = await this.sock.sendMessage(jid, { image: { url }, caption: caption === undefined ? undefined : stripInternalRefs(caption) });
+    this.rememberSent(sent?.key.id);
     return sent?.key.id ?? null;
+  }
+
+  /** Sends an image from its bytes (a product photo kept on this server) with an optional caption. */
+  async sendImageBuffer(jid: string, image: Buffer, caption?: string): Promise<string | null> {
+    if (!this.sock) throw new Error('WhatsApp no está conectado');
+    await this.ensurePrivacyToken(jid);
+    console.log('%s Sending image to %s', this.tag, jid);
+    const sent = await this.sock.sendMessage(jid, { image, caption: caption === undefined ? undefined : stripInternalRefs(caption) });
+    this.rememberSent(sent?.key.id);
+    return sent?.key.id ?? null;
+  }
+
+  /** Downloads the bytes of an incoming media message (image, document...). */
+  async downloadMedia(message: WAMessage): Promise<Buffer> {
+    return downloadMediaMessage(message, 'buffer', {});
   }
 
   /** This bot's own phone number (digits only), once connected - e.g. for "write to +57..." texts. */

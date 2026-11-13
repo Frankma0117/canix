@@ -44,6 +44,8 @@ tags:
     description: "Saved recipes."
   - name: "Lists"
     description: "Lists ticked off item by item. Media-kind lists are also the Library."
+  - name: "Stores"
+    description: "Order-taking assistant (Pedidos): businesses with their own WhatsApp number, catalog, daily promotions, orders confirmed by a person, conversations and the hand-off to a person. Public product photos are served at /media/store/{storeId}/{file}."
   - name: "Wardrobe"
     description: "Fashion Mode wardrobe. Adding garments (photos) happens on WhatsApp."
   - name: "Voice"
@@ -3261,6 +3263,2445 @@ paths:
           in: "path"
           required: true
           description: "Row id (only rows of the signed-in person are reachable)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores":
+    get:
+      tags:
+        - "Stores"
+      summary: "Businesses the signed-in person manages"
+      operationId: "getApiStores"
+      description: "Each store carries its WhatsApp connection state, orders waiting for confirmation and chats waiting for a person. proofReading=false when the server has no vision provider (receipts are kept, not read).\n\n**Permission:** `store.manage`"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+                properties:
+                  stores:
+                    type: "array"
+                    items:
+                      type: "object"
+                  canCreate:
+                    type: "boolean"
+                  proofReading:
+                    type: "boolean"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      tags:
+        - "Stores"
+      summary: "Create a business (administrator)"
+      operationId: "postApiStores"
+      description: "**Administrator only.**"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                name:
+                  type: "string"
+                business_type:
+                  type: "string"
+              required:
+                - "name"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Created"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/demo":
+    post:
+      tags:
+        - "Stores"
+      summary: "Create the demo business: catalog with real photos and daily promotions (administrator)"
+      operationId: "postApiStoresDemo"
+      description: "**Administrator only.**"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Created"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}":
+    get:
+      tags:
+        - "Stores"
+      summary: "One business"
+      operationId: "getApiStoresStoreid"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      tags:
+        - "Stores"
+      summary: "Edit the business: attention instructions, hours, delivery, payments, assistant on/off"
+      operationId: "patchApiStoresStoreid"
+      description: "`active` only for the administrator. Money fields are whole pesos.\n\n**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags:
+        - "Stores"
+      summary: "Delete a business with everything it has, unlinking its number (administrator)"
+      operationId: "deleteApiStoresStoreid"
+      description: "**Administrator only.**"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/summary":
+    get:
+      tags:
+        - "Stores"
+      summary: "Order counts and sales of today / last 7 days"
+      operationId: "getApiStoresStoreidSummary"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/members":
+    get:
+      tags:
+        - "Stores"
+      summary: "People who manage the business"
+      operationId: "getApiStoresStoreidMembers"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "array"
+                items:
+                  type: "object"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      tags:
+        - "Stores"
+      summary: "Add a business administrator by WhatsApp number (administrator)"
+      operationId: "postApiStoresStoreidMembers"
+      description: "Creates the account when needed with store.manage + portal.access only; the temporary password is shown once.\n\n**Administrator only.**"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                phone:
+                  type: "string"
+                name:
+                  type: "string"
+              required:
+                - "phone"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+                properties:
+                  id:
+                    type: "integer"
+                  created:
+                    type: "boolean"
+                  temporaryPassword:
+                    type:
+                      - "string"
+                      - "null"
+                  loginId:
+                    type: "string"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/members/{userId}":
+    patch:
+      tags:
+        - "Stores"
+      summary: "Turn WhatsApp notices on/off (own, or anyone for the administrator)"
+      operationId: "patchApiStoresStoreidMembersUserid"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "userId"
+          in: "path"
+          required: true
+          description: ""
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                notify:
+                  type: "boolean"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags:
+        - "Stores"
+      summary: "Remove someone from the business (administrator)"
+      operationId: "deleteApiStoresStoreidMembersUserid"
+      description: "**Administrator only.**"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "userId"
+          in: "path"
+          required: true
+          description: ""
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/connection":
+    get:
+      tags:
+        - "Stores"
+      summary: "State of the business' own WhatsApp session"
+      operationId: "getApiStoresStoreidConnection"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+                properties:
+                  connection:
+                    type: "string"
+                  connected:
+                    type: "boolean"
+                  hasQr:
+                    type: "boolean"
+                  banSuspected:
+                    type: "boolean"
+                  linked:
+                    type: "boolean"
+                  phone:
+                    type:
+                      - "string"
+                      - "null"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/connection/qr":
+    get:
+      tags:
+        - "Stores"
+      summary: "QR (PNG) to link the number"
+      operationId: "getApiStoresStoreidConnectionQr"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "string"
+                format: "binary"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/connection/connect":
+    post:
+      tags:
+        - "Stores"
+      summary: "Start / re-establish the session (shows a QR when not linked)"
+      operationId: "postApiStoresStoreidConnectionConnect"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/connection/unlink":
+    post:
+      tags:
+        - "Stores"
+      summary: "Log the number out and delete its credentials"
+      operationId: "postApiStoresStoreidConnectionUnlink"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/catalog":
+    get:
+      tags:
+        - "Stores"
+      summary: "Categories, products (with today's price) and promotions"
+      operationId: "getApiStoresStoreidCatalog"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+                properties:
+                  categories:
+                    type: "array"
+                    items:
+                      type: "object"
+                  products:
+                    type: "array"
+                    items:
+                      type: "object"
+                  promotions:
+                    type: "array"
+                    items:
+                      type: "object"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/categories":
+    post:
+      tags:
+        - "Stores"
+      summary: "Create (categories)"
+      operationId: "postApiStoresStoreidCategories"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                name:
+                  type: "string"
+                position:
+                  type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Created"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/categories/{id}":
+    patch:
+      tags:
+        - "Stores"
+      summary: "Edit (categories)"
+      operationId: "patchApiStoresStoreidCategoriesId"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Row id (only rows of the signed-in person are reachable)."
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                name:
+                  type: "string"
+                position:
+                  type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags:
+        - "Stores"
+      summary: "Delete (categories)"
+      operationId: "deleteApiStoresStoreidCategoriesId"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Row id (only rows of the signed-in person are reachable)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/products":
+    post:
+      tags:
+        - "Stores"
+      summary: "Create (products)"
+      operationId: "postApiStoresStoreidProducts"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                name:
+                  type: "string"
+                price:
+                  type: "integer"
+                category_id:
+                  type:
+                    - "integer"
+                    - "null"
+                description:
+                  type:
+                    - "string"
+                    - "null"
+                details:
+                  type:
+                    - "string"
+                    - "null"
+                available:
+                  type: "boolean"
+                featured:
+                  type: "boolean"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Created"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/products/{id}":
+    patch:
+      tags:
+        - "Stores"
+      summary: "Edit (products)"
+      operationId: "patchApiStoresStoreidProductsId"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Row id (only rows of the signed-in person are reachable)."
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                name:
+                  type: "string"
+                price:
+                  type: "integer"
+                category_id:
+                  type:
+                    - "integer"
+                    - "null"
+                description:
+                  type:
+                    - "string"
+                    - "null"
+                details:
+                  type:
+                    - "string"
+                    - "null"
+                available:
+                  type: "boolean"
+                featured:
+                  type: "boolean"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags:
+        - "Stores"
+      summary: "Delete (products)"
+      operationId: "deleteApiStoresStoreidProductsId"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Row id (only rows of the signed-in person are reachable)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/promotions":
+    post:
+      tags:
+        - "Stores"
+      summary: "Create (promotions)"
+      operationId: "postApiStoresStoreidPromotions"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                title:
+                  type: "string"
+                description:
+                  type:
+                    - "string"
+                    - "null"
+                product_id:
+                  type:
+                    - "integer"
+                    - "null"
+                promo_price:
+                  type:
+                    - "integer"
+                    - "null"
+                weekdays:
+                  type: "array"
+                  items:
+                    type: "integer"
+                start_date:
+                  type:
+                    - "string"
+                    - "null"
+                end_date:
+                  type:
+                    - "string"
+                    - "null"
+                active:
+                  type: "boolean"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Created"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/promotions/{id}":
+    patch:
+      tags:
+        - "Stores"
+      summary: "Edit (promotions)"
+      operationId: "patchApiStoresStoreidPromotionsId"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Row id (only rows of the signed-in person are reachable)."
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                title:
+                  type: "string"
+                description:
+                  type:
+                    - "string"
+                    - "null"
+                product_id:
+                  type:
+                    - "integer"
+                    - "null"
+                promo_price:
+                  type:
+                    - "integer"
+                    - "null"
+                weekdays:
+                  type: "array"
+                  items:
+                    type: "integer"
+                start_date:
+                  type:
+                    - "string"
+                    - "null"
+                end_date:
+                  type:
+                    - "string"
+                    - "null"
+                active:
+                  type: "boolean"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags:
+        - "Stores"
+      summary: "Delete (promotions)"
+      operationId: "deleteApiStoresStoreidPromotionsId"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Row id (only rows of the signed-in person are reachable)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/products/{id}/image":
+    post:
+      tags:
+        - "Stores"
+      summary: "Upload the product photo (multipart field \"files\", JPG/PNG/WEBP up to 6 MB)"
+      operationId: "postApiStoresStoreidProductsIdImage"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Row id (only rows of the signed-in person are reachable)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+                properties:
+                  image_url:
+                    type: "string"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags:
+        - "Stores"
+      summary: "Remove the product photo"
+      operationId: "deleteApiStoresStoreidProductsIdImage"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Row id (only rows of the signed-in person are reachable)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/orders":
+    get:
+      tags:
+        - "Stores"
+      summary: "Orders the customers confirmed (carts are not listed)"
+      operationId: "getApiStoresStoreidOrders"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "status"
+          in: "query"
+          required: false
+          description: "Comma-separated: pending, confirmed, shipped, delivered, rejected, cancelled"
+          schema:
+            type: "string"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+                properties:
+                  orders:
+                    type: "array"
+                    items:
+                      type: "object"
+                  counts:
+                    type: "object"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/orders/{id}":
+    get:
+      tags:
+        - "Stores"
+      summary: "One order: items, delivery, payment with the receipt reading, history"
+      operationId: "getApiStoresStoreidOrdersId"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Row id (only rows of the signed-in person are reachable)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/orders/{id}/confirm":
+    post:
+      tags:
+        - "Stores"
+      summary: "Confirm (pending -> confirmed); a receipt waiting for review becomes verified. The customer is told on WhatsApp."
+      operationId: "postApiStoresStoreidOrdersIdConfirm"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Row id (only rows of the signed-in person are reachable)."
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                reason:
+                  type: "string"
+                status:
+                  type: "string"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/orders/{id}/reject":
+    post:
+      tags:
+        - "Stores"
+      summary: "Reject (pending), with an optional reason. The customer is told on WhatsApp."
+      operationId: "postApiStoresStoreidOrdersIdReject"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Row id (only rows of the signed-in person are reachable)."
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                reason:
+                  type: "string"
+                status:
+                  type: "string"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/orders/{id}/ship":
+    post:
+      tags:
+        - "Stores"
+      summary: "Mark as sent / ready for pickup (confirmed -> shipped). The customer is told on WhatsApp."
+      operationId: "postApiStoresStoreidOrdersIdShip"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Row id (only rows of the signed-in person are reachable)."
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                reason:
+                  type: "string"
+                status:
+                  type: "string"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/orders/{id}/deliver":
+    post:
+      tags:
+        - "Stores"
+      summary: "Mark as delivered. The customer is told on WhatsApp."
+      operationId: "postApiStoresStoreidOrdersIdDeliver"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Row id (only rows of the signed-in person are reachable)."
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                reason:
+                  type: "string"
+                status:
+                  type: "string"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/orders/{id}/cancel":
+    post:
+      tags:
+        - "Stores"
+      summary: "Cancel, with an optional reason. The customer is told on WhatsApp."
+      operationId: "postApiStoresStoreidOrdersIdCancel"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Row id (only rows of the signed-in person are reachable)."
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                reason:
+                  type: "string"
+                status:
+                  type: "string"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/orders/{id}/payment":
+    post:
+      tags:
+        - "Stores"
+      summary: "Verdict on the transfer receipt: {status: verified | rejected, reason}. The customer is told on WhatsApp."
+      operationId: "postApiStoresStoreidOrdersIdPayment"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "id"
+          in: "path"
+          required: true
+          description: "Row id (only rows of the signed-in person are reachable)."
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                reason:
+                  type: "string"
+                status:
+                  type: "string"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/media/{file}":
+    get:
+      tags:
+        - "Stores"
+      summary: "A photo a customer sent (payment receipt): only for the people of that business"
+      operationId: "getApiStoresStoreidMediaFile"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "file"
+          in: "path"
+          required: true
+          description: ""
+          schema:
+            type: "string"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "string"
+                format: "binary"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/conversations":
+    get:
+      tags:
+        - "Stores"
+      summary: "Chats of the business number, the ones waiting for a person first"
+      operationId: "getApiStoresStoreidConversations"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "array"
+                items:
+                  type: "object"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/conversations/{customerId}/messages":
+    get:
+      tags:
+        - "Stores"
+      summary: "Messages of a chat (after=<id> for new ones); typing=true while the assistant works"
+      operationId: "getApiStoresStoreidConversationsCustomeridMessages"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "customerId"
+          in: "path"
+          required: true
+          description: ""
+          schema:
+            type: "integer"
+        - name: "after"
+          in: "query"
+          required: false
+          description: ""
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      tags:
+        - "Stores"
+      summary: "A person writes to the customer (and takes the chat over)"
+      operationId: "postApiStoresStoreidConversationsCustomeridMessages"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "customerId"
+          in: "path"
+          required: true
+          description: ""
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                text:
+                  type: "string"
+              required:
+                - "text"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/conversations/{customerId}/mode":
+    post:
+      tags:
+        - "Stores"
+      summary: "'human' takes the chat (assistant silent), 'bot' gives it back"
+      operationId: "postApiStoresStoreidConversationsCustomeridMode"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "customerId"
+          in: "path"
+          required: true
+          description: ""
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                mode:
+                  enum:
+                    - "bot"
+                    - "human"
+              required:
+                - "mode"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/simulator":
+    get:
+      tags:
+        - "Stores"
+      summary: "The test chat of the signed-in person (they play the customer)"
+      operationId: "getApiStoresStoreidSimulator"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+        - name: "after"
+          in: "query"
+          required: false
+          description: ""
+          schema:
+            type: "integer"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/simulator/message":
+    post:
+      tags:
+        - "Stores"
+      summary: "Write in the test chat (JSON {text} or multipart with an image); answers right away, poll for the reply"
+      operationId: "postApiStoresStoreidSimulatorMessage"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                text:
+                  type: "string"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                type: "object"
+                properties:
+                  ok:
+                    type: "boolean"
+                  customerId:
+                    type: "integer"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/simulator/handoff":
+    post:
+      tags:
+        - "Stores"
+      summary: "Test the hand-off to a person (mode=bot gives it back)"
+      operationId: "postApiStoresStoreidSimulatorHandoff"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
+          schema:
+            type: "integer"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                mode:
+                  type: "string"
+      responses:
+        200:
+          description: "OK"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Ok"
+        400:
+          description: "Invalid input"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        401:
+          description: "Missing or expired session"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        403:
+          description: "Module not enabled for this person"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+        404:
+          description: "Not found (or not yours)"
+          content:
+            "application/json":
+              schema:
+                $ref: "#/components/schemas/Error"
+  "/api/stores/{storeId}/simulator/reset":
+    post:
+      tags:
+        - "Stores"
+      summary: "Start the test chat over (its test orders are deleted)"
+      operationId: "postApiStoresStoreidSimulatorReset"
+      description: "**Permission:** `store.manage`"
+      parameters:
+        - name: "storeId"
+          in: "path"
+          required: true
+          description: "A business the signed-in person manages (any for the administrator)."
           schema:
             type: "integer"
       responses:

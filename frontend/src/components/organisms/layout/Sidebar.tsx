@@ -29,7 +29,7 @@ export function Sidebar({
         }`}
       >
         <div className="flex items-center justify-between px-5 pb-4 pt-5">
-          <Logo size={42} subtitle={user?.role === 'admin' ? 'Panel de administración' : 'Tu asistente personal'} />
+          <Logo size={42} subtitle={user?.role === 'admin' ? 'Panel de administración' : user?.permissions.includes('store.manage') && user.permissions.every((p) => p === 'store.manage' || p === 'portal.access') ? 'Asistente de pedidos' : 'Tu asistente personal'} />
           <button onClick={onClose} className="rounded-lg p-1.5 text-gray-dark hover:bg-gray-medium/60 lg:hidden" aria-label="Cerrar menú">
             <X size={18} />
           </button>

@@ -16,12 +16,14 @@ import { ensureWeeklyReportReminder } from './services/agenda/weekly-report.serv
 import { ensureDailyResetReminder } from './services/conversation/daily-reset.service.js';
 import { ensureDailyDedupReminder, dedupeAllUsers } from './services/maintenance/dedup.service.js';
 import { permissionsModel } from './models/permissions.model.js';
-import { migrateLegacyAccess, grantLibraryToListUsers, grantMedicationsToReminderUsers, grantWorkoutsToRoutineUsers } from './services/permissions/permissions.service.js';
+import { isStoreManagerOnly, migrateLegacyAccess, grantLibraryToListUsers, grantMedicationsToReminderUsers, grantWorkoutsToRoutineUsers } from './services/permissions/permissions.service.js';
 import { migrateExerciseRoutinesToWorkouts } from './services/workouts/workouts-migration.service.js';
 import { migrateCategoryRemindersToMedications, migrateWaterReminders } from './services/medications/medications-migration.service.js';
 import { installProcessGuards } from './shared/utils/process-guards.js';
 import { setSchedulingNotifier } from './services/scheduling/scheduling.service.js';
 import { expireDemos } from './services/growth/demo.service.js';
+import { initStoreEngine } from './services/store/store-engine.js';
+import { startStoreSessions } from './services/store/store-sessions.js';
 
 quietLibsignalLogs();
 installProcessGuards();
@@ -60,6 +62,8 @@ async function main() {
   // here too; it's been removed (proactive messaging is now limited to notifications the user
   // actually scheduled themselves - see the boot migration in database/migrate.ts).
   for (const user of usersModel.listAll()) {
+    // A business administrator of the order assistant is not a user of the personal assistant.
+    if (isStoreManagerOnly(user)) continue;
     ensureWeeklyReportReminder(user.id, user.jid);
     ensureDailyResetReminder(user.id, user.jid);
     ensureDailyDedupReminder(user.id, user.jid);
@@ -96,6 +100,11 @@ async function main() {
   // Appointment notifications (web portal actions included) go out through this same session.
   setSchedulingNotifier(bot.session);
   await bot.start();
+
+  // 3b) Order-taking assistant: each business has its OWN WhatsApp number, a session next to
+  // Canix's (see services/store/store-sessions.ts). Only numbers already linked reconnect here.
+  initStoreEngine(bot.session);
+  await startStoreSessions();
 
   // Routines left without notices get them back before the scheduler looks (see routine-repairs.service.ts).
   repairRoutines();

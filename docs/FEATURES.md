@@ -143,6 +143,52 @@ people talk to Canix; everything works in free wording - the examples are not co
 - Reminders the morning of the appointment and optionally N hours before; unconfirmed requests
   expire. Admin groups give a combined calendar.
 
+## Order-taking assistant (Pedidos)
+
+A separate service on top of Canix: a business (restaurant, shop...) gets an assistant that takes
+orders from its customers on **the business' own WhatsApp number** - not Canix's. Code in
+`backend/src/services/store/`, routes in `api/routes/store.routes.ts`, schema in
+`database/schema/store.schema.ts`, portal pages in `frontend/src/pages/store/`.
+
+- **Multi-session**: every business links its number with a QR from the portal; each one is its own
+  Baileys session (`auth_info/store-<id>`) in the same process, next to Canix's. Only numbers
+  already linked reconnect at boot. Customers are not Canix users: nothing from that traffic touches
+  `users`/`contacts`.
+- **Two administrators**: the administrator (developer) sees every business in *Administración ->
+  Negocios*, creates them (or the demo), switches them off, deletes them and adds the business
+  administrators. A business administrator is a portal account with only `store.manage` +
+  `portal.access`: their menu is Pedidos, Conversaciones, Catálogo, Asistente and Mi cuenta, only
+  for their own businesses, and nothing of the personal assistant (no weekly report either).
+- **Catalog**: categories, products (price, photo, description, details for the assistant,
+  available/sold out, featured) and **promotions of the day** (special price for a product on given
+  weekdays and/or dates, or a plain announcement). Prices always come from here - the model can't
+  set one - and an order line keeps the price it had when ordered.
+- **The assistant** (`store-agent.ts`, tool-calling over the same LLM) follows the owner's own
+  specification of how to attend (*Asistente -> Cómo atiende*), understands natural language
+  ("me regalas dos de las dobles, una sin pepinillos, y una coca"), sends the menu and product
+  photos, builds the cart, collects delivery (address, who receives, phone; or pickup) and payment
+  (transfer with the business' account data, or cash), shows the summary and places the order only
+  after the customer says yes. It never confirms an order or a payment itself; a claim of a cart
+  change with no tool call is caught and retried.
+- **Payment receipts**: a photo the customer sends is read by the vision model (fal.ai, same key as
+  the wardrobe): amount, bank, reference, date, and whether it matches the total. It is attached to
+  the order as "comprobante por revisar"; a person verifies it. Without FAL_KEY the image is still
+  attached, just not read.
+- **Order flow**: carrito -> *por confirmar* (the customer confirmed) -> *confirmado* -> *enviado* /
+  listo para recoger -> *entregado* (or rechazado / cancelado). Confirm and ship from the portal or
+  by reacting 👍 (👎 rejects) to the WhatsApp notice the business' people receive; each step tells
+  the customer "tu pedido ha sido confirmado" / "ha sido enviado".
+- **Hand-off to a person**: when the customer asks for one, complains, or the assistant can't solve
+  it, the chat is flagged in Conversaciones and the people are notified. A person answers from the
+  portal or from the business' phone (detected automatically); the assistant stays silent in that
+  chat until it is given back, or after 12 hours without a person writing.
+- **Test chat** (*Asistente -> Probar*): the signed-in person plays the customer against the real
+  assistant, receipts included; the orders appear in Pedidos marked as tests and nothing goes to
+  WhatsApp.
+- **Demo**: *Negocios -> Crear negocio demo* creates "Brasa Burger (demo)" with 14 products with
+  real photos (`backend/assets/store-demo`, credits in its CREDITS.md), 5 categories, a promotion for
+  every day of the week and an attention specification to start from.
+
 ## Portal
 
 Sign in with the WhatsApp number and a password (sent by WhatsApp, never through the model). Each

@@ -74,6 +74,16 @@ export function isSchedulingClientOnly(user: Pick<User, 'id' | 'role'>): boolean
   return perms.has('scheduling.client') && [...perms].every((p) => p === 'scheduling.client' || p === 'portal.access');
 }
 
+/**
+ * True when this person is ONLY a business administrator of the order-taking assistant: they use
+ * the portal for their store and nothing of the personal assistant (no weekly report, no agenda).
+ */
+export function isStoreManagerOnly(user: Pick<User, 'id' | 'role'>): boolean {
+  if (user.role === 'admin') return false;
+  const perms = effectivePermissions(user);
+  return perms.has('store.manage') && [...perms].every((p) => p === 'store.manage' || p === 'portal.access');
+}
+
 const MIGRATION_FLAG = 'access_migrated_v1';
 
 /**

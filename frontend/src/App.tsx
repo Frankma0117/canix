@@ -58,7 +58,9 @@ function useHashSection(): [string, (id: string) => void] {
 function Shell() {
   const { user, can } = useAuth();
   const isAdmin = user?.role === 'admin';
-  const sections = useMemo(() => visibleSections(isAdmin, can), [isAdmin, can]);
+  // Only the order assistant (+ the portal itself): a business administrator, not a Canix user.
+  const storeOnly = !isAdmin && !!user && user.permissions.includes('store.manage') && user.permissions.every((p) => p === 'store.manage' || p === 'portal.access');
+  const sections = useMemo(() => visibleSections(isAdmin, can, storeOnly), [isAdmin, can, storeOnly]);
   const [hash, navigate] = useHashSection();
   const [menuOpen, setMenuOpen] = useState(false);
   const current = sections.find((s) => s.id === hash) ?? sections[0];

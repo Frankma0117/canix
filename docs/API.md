@@ -1,7 +1,7 @@
 # REST API
 
 The portal (`frontend/`) and the public site talk to the backend over a JSON API on the same
-origin. The full reference is **[api/openapi.yaml](api/openapi.yaml)** (OpenAPI 3.1, 134
+origin. The full reference is **[api/openapi.yaml](api/openapi.yaml)** (OpenAPI 3.1, 189
 operations). To browse it:
 
 ```bash
@@ -47,12 +47,14 @@ update that file and run `npm run docs:api` (both files are committed).
 | `/api/garments`, `/api/garment-questions` | `fashion.use` | wardrobe |
 | `/api/scheduling/pro/*`, `/api/scheduling/client/*` | `scheduling.professional`, `scheduling.client` | appointments |
 | `/api/voices` | `voice.premium` | natural voice |
+| `/api/stores/*` | `store.manage` (only the businesses the person manages; creating/deleting them and choosing their people is the administrator's) | order-taking assistant: catalog, promotions, orders, conversations, test chat, the business' WhatsApp session |
 | `/api/admin/*`, `/api/connection/*` | administrator | people, permissions, usage, analytics, WhatsApp session |
 | `/api/public/*` | none | public site: config, demo requests, analytics events |
 | `/webhooks/twilio/call-status` | Twilio signature | call status callbacks |
 
 Non-API routes served by the same app: the portal (`/app`, `/`), the public pages, `robots.txt`,
-`sitemap.xml`, `llms.txt`, and `/media/call-audio/<file>.mp3` (natural-voice audio Twilio fetches).
+`sitemap.xml`, `llms.txt`, and `/media/call-audio/<file>.mp3` (natural-voice audio Twilio fetches) and `/media/store/<storeId>/<file>` (product
+and promotion photos of the order-taking assistant; receipts customers send are never served there).
 
 ## Example
 

@@ -222,6 +222,14 @@ export const PERMISSIONS: PermissionDef[] = [
     tools: ['list_my_professionals', 'list_available_slots', 'request_appointment', 'list_my_appointments', 'cancel_my_appointment'],
   },
   {
+    key: 'store.manage',
+    module: 'Pedidos',
+    label: 'Asistente de pedidos (administrador de negocio)',
+    description:
+      'Administrar un negocio que toma pedidos por su propio número de WhatsApp: catálogo, promociones, pedidos por confirmar y enviar, conversaciones y la atención del asistente. Solo ve los negocios que el administrador le asigne (módulo Negocios).',
+    tools: [],
+  },
+  {
     key: 'portal.access',
     module: 'Portal web',
     label: 'Acceso al portal web',
