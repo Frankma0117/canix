@@ -11,7 +11,7 @@ import { join, resolve } from 'node:path';
 const tmp = mkdtempSync(join(tmpdir(), 'canix-screens-'));
 process.env.DB_PATH = join(tmp, 'demo.db');
 process.env.PORT = '0';
-const OUT = resolve(import.meta.dirname, '..', '..', 'frontend', 'public', 'promo', 'screens');
+const OUT = process.env.SCREENS_OUT || resolve(import.meta.dirname, '..', '..', 'frontend', 'public', 'promo', 'screens');
 mkdirSync(OUT, { recursive: true });
 
 const { initSchema } = await import('../src/database/migrate.js');
@@ -71,11 +71,19 @@ const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 const login = (await (await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: '573001234567', password: PASSWORD }) })).json()) as { token?: string };
 if (!login.token) throw new Error('No se pudo iniciar sesión con la cuenta demo');
 
-const SECTIONS = ['home', 'calendar', 'today', 'reminders', 'routines', 'lists', 'notes', 'recipes', 'meals', 'library', 'categories', 'contacts', 'agenda', 'account'];
+const SECTIONS = (process.env.SCREENS_SECTIONS || 'home,calendar,today,reminders,routines,lists,notes,recipes,meals,library,categories,contacts,agenda,account').split(',');
 const { chromium } = await import('playwright');
 const browser = await chromium.launch({ channel: process.env.PROMO_BROWSER || undefined });
 try {
   for (const [name, vp] of [['', { width: 1440, height: 900 }], ['m-', { width: 390, height: 844 }]] as const) {
+    if (process.env.SCREENS_LOGIN) {
+      const anon = await browser.newContext({ viewport: vp, deviceScaleFactor: 1, locale: 'es-CO' });
+      const lp = await anon.newPage();
+      await lp.goto(`${base}/`, { waitUntil: 'networkidle' });
+      await lp.waitForTimeout(600);
+      await lp.screenshot({ path: join(OUT, `${name}login.jpg`), type: 'jpeg', quality: 88 });
+      await anon.close();
+    }
     const ctx = await browser.newContext({ viewport: vp, deviceScaleFactor: 1.5, locale: 'es-CO', timezoneId: 'America/Bogota', colorScheme: 'light' });
     await ctx.addInitScript((t) => sessionStorage.setItem('canix_session', t), login.token);
     const page = await ctx.newPage();

@@ -39,7 +39,8 @@ export function HomePage() {
             <p className="text-sm font-semibold text-white/80">{new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
             <h1 className="mt-1 font-display text-3xl font-black leading-tight sm:text-4xl">
               {greeting}
-              {firstName ? `, ${firstName}` : ''} 👋
+              {/* nombre y saludo juntos: el emoji nunca queda solo en otra línea */}
+              <span className="whitespace-nowrap">{firstName ? `, ${firstName}` : ''} 👋</span>
             </h1>
             <p className="mt-2 max-w-xl text-white/85">
               {isAdmin ? 'Este es tu centro de control: quién usa el asistente, a qué tiene acceso y cuánto consume.' : 'Aquí tienes todo lo que tu asistente guarda para ti, ordenado y a un clic.'}

@@ -195,3 +195,8 @@ body { font-family: var(--font); color: var(--ink); -webkit-font-smoothing: anti
 /* chapter ticks over the progress bar: one per scene */
 .ticks { position: absolute; left: 0; right: 0; top: 0; height: calc(var(--u) * .6); z-index: 31; pointer-events: none; }
 .ticks i { position: absolute; top: 0; width: calc(var(--u) * .25); height: 100%; background: rgba(255, 255, 255, .85); }
+
+/* mascot guide: sits in a corner of every content scene */
+.guide { position: absolute; z-index: 9; pointer-events: none; filter: drop-shadow(0 calc(var(--u) * .6) calc(var(--u) * 1.4) rgba(27, 33, 96, .25)); }
+.f-landscape .guide { left: calc(var(--u) * 6); bottom: calc(var(--u) * 11); width: calc(var(--u) * 19); }
+.f-vertical .guide { left: calc(var(--u) * 2); bottom: calc(var(--u) * 24); width: calc(var(--u) * 26); }

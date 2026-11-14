@@ -92,6 +92,22 @@ function animChat(p, chat, lt) {
   p.status.textContent = typingOn ? 'escribiendo…' : 'en línea';
 }
 
+// The mascot as a guide: in every content scene it sits in a corner with a pose that fits what is shown, pops in,
+// floats and "talks" (a small pulse) while the narrator speaks. D.stickersDir lets another project use its own mascot.
+const POSE_BY_SHOT = { chat: 'mensaje', features: 'idea', steps: 'rutina', screen: 'revisando' };
+const POSE_BY_SCREEN = { reminders: 'agendado', calendar: 'agendado', today: 'agendado', routines: 'rutina', lists: 'tareas', notes: 'nota', recipes: 'cafe', meals: 'cafe', contacts: 'mensaje', agenda: 'evento', account: 'confianza', home: 'hola' };
+function guideOf(s) {
+  const pose = (s.shot === 'screen' ? POSE_BY_SCREEN[s.screen] : null) || (s.shot === 'chat' && D.feature?.sticker) || POSE_BY_SHOT[s.shot] || 'hola';
+  const img = h('img', { class: 'guide', src: `${D.stickersDir || '../stickers'}/${pose}.webp`, alt: '' });
+  return img;
+}
+function animGuide(g, s, lt, t) {
+  const k = back(prog(lt, 0.5, 0.6));
+  const talking = t >= s.say_start && t < s.say_start + s.say_dur;
+  const pulse = talking ? 1 + 0.035 * Math.sin(t * 13) : 1;
+  css(g, { opacity: clamp(k * 1.5), transform: `translateY(${Math.sin(t * 2.2) * 1.2 + (1 - k) * 30}%) rotate(${(1 - k) * -12 + Math.sin(t * 1.5) * 2.5}deg) scale(${(0.5 + 0.5 * k) * pulse})` });
+}
+
 // ---------- scenes: each returns {el, anim(localT, dur)} ----------
 function hookScene(s) {
   const title = titleEl(s.text, false);
@@ -250,6 +266,11 @@ window.stageSetup = (data) => {
   const brand = mark(false);
   const subs = h('div', { class: 'subs' }, h('span'));
   parts = D.scenes.map((s) => ({ s, ...(BUILD[s.shot] || hookScene)(s), subs: chunks(s) }));
+  parts.forEach((p) => {
+    if (['hook', 'end', 'cta'].includes(p.s.shot)) return;
+    p.guide = guideOf(p.s);
+    p.el.append(p.guide);
+  });
   const ticks = h('div', { class: 'ticks' }, D.scenes.slice(1).map((s) => h('i', { style: `left:${(s.start / D.total) * 100}%` })));
   stage.replaceChildren(h('div', { class: 'bg' }), glowA, glowB, ...parts.map((p) => p.el), brand, progress, ticks, subs);
   fixed = { glowA, glowB, progress, brand, subs };
@@ -276,7 +297,7 @@ window.stageAt = (t) => {
     const inn = 1 - easeOut(prog(lt, 0, 0.5)), out = easeOut(prog(lt, p.s.dur - 0.3, 0.3)), dir = idx % 2 ? 1 : -1;
     const full = ['hook', 'end', 'cta'].includes(p.s.shot);
     p.el.style.transform = visible ? (full ? `scale(${1 + inn * 0.04 + out * 0.03})` : `translateX(${(inn * 5 - out * 4) * dir}%) scale(${1 + inn * 0.02 + out * 0.02})`) : '';
-    if (visible) { p.anim(lt, p.s.dur); current = p; }
+    if (visible) { p.anim(lt, p.s.dur); if (p.guide) animGuide(p.guide, p.s, lt, t); current = p; }
   });
   const full = current && ['hook', 'end', 'cta'].includes(current.s.shot);
   brand.style.opacity = full ? 0 : 1;
