@@ -126,9 +126,12 @@ async function main() {
   // The automation tells the administrator by WhatsApp when something needs their OK or went out.
   setPublisherHost({
     adminId: () => usersModel.getAdmin()?.id ?? null,
-    notify: async (text) => {
+    // Returns the message id so a 👍 / 👎 reaction to it can be recognized (see BotManager.handleReaction).
+    notify: async (text, opts) => {
       const admin = usersModel.getAdmin();
-      if (admin) await bot.session.sendText(admin.jid, text);
+      if (!admin) return null;
+      if (opts?.image) return bot.session.sendImageBuffer(admin.jid, opts.image, text);
+      return bot.session.sendTextWithId(admin.jid, text);
     },
   });
   startPublisherJob();

@@ -39,6 +39,7 @@ import { workingUpdateMessage } from '../../shared/utils/motivational.js';
 import { synthesizeVoiceNote } from '../../services/audio/tts.js';
 import { extractDemoCode, activateDemo, isDemoExpired, demoEndedMessage } from '../../services/growth/demo.service.js';
 import { handleStoreNoticeReaction } from '../../services/store/store-engine.js';
+import { handlePublisherReaction } from '../../services/publisher/automation/automation.service.js';
 
 /** How long a turn can run before the user gets a "still working on it" ping, and how many of
  *  those pings a single turn can rack up - see shared/utils/human-delay.ts's withWorkingUpdates(). Tuned
@@ -134,6 +135,15 @@ export class BotManager {
     const { phoneJid } = await this.resolveIncomingIdentity(jid, altJid);
     const user = usersModel.getByJidOrLid(phoneJid) ?? usersModel.getByJidOrLid(jid);
     if (!user) return;
+
+    // The administrator's 👍 / 👎 on a social-media post waiting for approval (services/publisher/automation).
+    if (user.role === 'admin') {
+      const post = await handlePublisherReaction(targetId, emoji);
+      if (post.handled) {
+        if (post.reply) await this.wa.sendText(jid, post.reply).catch(() => {});
+        return;
+      }
+    }
 
     if (env.fashion.enabled && can(asBotUser(user), 'fashion.use')) {
       // In the chat's queue, so it never interleaves with a message being handled.

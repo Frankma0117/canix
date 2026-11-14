@@ -145,6 +145,7 @@ export function initPublisherSchema(db: Database.Database): void {
       status TEXT NOT NULL DEFAULT 'generating' CHECK (status IN ('generating', 'awaiting', 'scheduled', 'published', 'partial', 'failed', 'skipped')),
       detail TEXT NOT NULL DEFAULT '',
       notified INTEGER NOT NULL DEFAULT 0,
+      notice_id TEXT,                             -- WhatsApp message asking for the OK (👍 approves, 👎 skips)
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE (schedule_id, publish_at)
     );
@@ -153,5 +154,7 @@ export function initPublisherSchema(db: Database.Database): void {
 
   // Databases created before Meta/TikTok existed: the connection also keeps the page / account id.
   const cols = db.prepare(`PRAGMA table_info(publisher_connections)`).all() as { name: string }[];
+  const runCols = db.prepare('PRAGMA table_info(publisher_runs)').all() as { name: string }[];
+  if (!runCols.some((c) => c.name === 'notice_id')) db.exec('ALTER TABLE publisher_runs ADD COLUMN notice_id TEXT');
   if (!cols.some((c) => c.name === 'account_id')) db.exec(`ALTER TABLE publisher_connections ADD COLUMN account_id TEXT NOT NULL DEFAULT ''`);
 }

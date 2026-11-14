@@ -1,7 +1,7 @@
 import { AccessError } from '../../../models/permissions.model.js';
 import { promoModel } from '../../../models/promo.model.js';
 import { reviewPromo } from '../../promo/promo.service.js';
-import { generateAssets, postFromAsset, resolveMedia } from '../publisher-media.js';
+import { generateAssets, mediaAccess, postFromAsset, resolveMedia } from '../publisher-media.js';
 import { load, postView, schedule as schedulePost, suggestSeo, updatePost } from '../publisher.service.js';
 import { fromDb, publisherStore, toDb } from '../publisher.store.js';
 import { PLATFORMS, PLATFORM_MEDIA, PLATFORM_NAMES, type Platform } from '../publisher.types.js';
@@ -140,7 +140,18 @@ export const automationOverview = () => ({
 
 // ---------- the work ----------
 
-const say = (text: string) => publisherHost().notify(text).catch((err) => console.log('[PUBLISHER] Notice failed:', (err as Error).message));
+const say = (text: string, image?: Buffer): Promise<string | null> => publisherHost().notify(text, { image }).catch((err) => (console.log('[PUBLISHER] Notice failed:', (err as Error).message), null));
+
+/** The picture of what is waiting for approval (design, or the cover of the video), for the WhatsApp notice. */
+async function previewBytes(run: Run): Promise<Buffer | undefined> {
+  let ref = '';
+  if (run.item_kind === 'design') ref = studioStore.get(run.item_id ?? 0)?.file_ref ?? '';
+  else {
+    const f = Object.values(promoModel.get(run.item_id ?? 0)?.files ?? {})[0];
+    ref = f?.poster || f?.file || '';
+  }
+  return ref ? ((await mediaAccess.read(ref)) ?? undefined) : undefined;
+}
 
 function fail(run: Run, s: Schedule | undefined, detail: string) {
   automationStore.updateRun(run.id, { status: 'failed', detail: detail.slice(0, 300), notified: 2 });
@@ -260,7 +271,13 @@ async function advance(run: Run): Promise<void> {
     if (state.status !== 'review' && state.status !== 'approved') return; // still being made
     if (s.mode === 'auto') return approveAndSchedule(run, s);
     automationStore.updateRun(run.id, { status: 'awaiting', notified: 1 });
-    void say(`📣 Hay una publicación lista para aprobar: «${s.name}» para ${when(at)}. Entra a Publicador → Automático y apruébala (o hazle cambios).`);
+    const noticeId = await say(`📣 Publicación lista para aprobar
+«${state.title || s.name}»
+Sale ${when(at)} en ${s.platforms.map((p) => PLATFORM_NAMES[p]).join(' y ')}.
+
+👍 para aprobarla y programarla · 👎 para omitirla
+(o cámbiala en Publicador → Automático)`, await previewBytes(run).catch(() => undefined));
+    if (noticeId) automationStore.setNotice(run.id, noticeId);
     return;
   }
 
@@ -301,5 +318,31 @@ export async function automationTick(): Promise<void> {
     }
   } finally {
     ticking = false;
+  }
+}
+
+const POSITIVE = ['👍', '✅', '👌', '🙌', '🔥', '❤'];
+const NEGATIVE = ['👎', '❌', '🚫'];
+
+/**
+ * The administrator reacted to a WhatsApp message. If it is the notice of a piece waiting for
+ * approval, 👍 approves and schedules it and 👎 skips it. Returns handled = false when the message
+ * isn't one of ours (the caller keeps looking), and a reply to send back when there is something to say.
+ */
+export async function handlePublisherReaction(targetId: string, emoji: string): Promise<{ handled: boolean; reply?: string }> {
+  const run = automationStore.runByNotice(targetId);
+  if (!run) return { handled: false };
+  const positive = POSITIVE.some((e) => emoji.startsWith(e));
+  if (!positive && !NEGATIVE.some((e) => emoji.startsWith(e))) return { handled: true };
+  if (run.status !== 'awaiting') return { handled: true }; // already decided (from the panel, or it expired)
+  try {
+    if (positive) {
+      const view = await approveRun(run.id);
+      return { handled: true, reply: `✅ Aprobada y programada para ${view.publishAt ? when(new Date(view.publishAt)) : 'pronto'}.` };
+    }
+    skipRun(run.id);
+    return { handled: true, reply: '⏭️ Listo, la omití.' };
+  } catch (err) {
+    return { handled: true, reply: `No pude hacerlo: ${(err as Error).message}` };
   }
 }

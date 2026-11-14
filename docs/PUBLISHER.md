@@ -82,12 +82,12 @@ Crea el logo, la foto de perfil, las portadas (YouTube 2560×1440 y Facebook 164
 ## Automatización (Administración → Publicador → Automático)
 Reglas recurrentes («lunes y jueves 8:00 a. m.: un consejo en Instagram y Facebook») que hacen todo solas.
 - **Una regla** tiene: tipo (imagen del estudio o video de publicidad), formato, diseños que se turnan, temas que se turnan (o la IA elige a partir de las palabras clave), redes, días, hora local, anticipación (4–48 h) y modo.
-- **Modo «Yo la apruebo»:** unas horas antes de la publicación se crea la pieza, te llega un WhatsApp («lista para aprobar») y aparece en «Por aprobar». Al aprobar se crea la publicación con su SEO por red y queda programada. Si nadie la aprueba 6 h después de su hora, se omite (y se avisa).
+- **Modo «Yo la apruebo»:** unas horas antes de la publicación se crea la pieza y te llega un WhatsApp **con la imagen** (o la portada del video): **👍 la aprueba y la programa, 👎 la omite** (también aparece en «Por aprobar» del panel). Al aprobar se crea la publicación con su SEO por red y queda programada. Solo reacciona el administrador; otro emoji no hace nada. Si nadie la aprueba 6 h después de su hora, se omite (y se avisa).
 - **Modo «Automática»:** se crea, se aprueba, se escribe el SEO y se programa sola; el WhatsApp avisa cuando la programó y cuando salió.
 - **Siempre se avisa** si algo falla (pieza que no se pudo crear, red desconectada, publicación que falló o salió parcial).
 - **Tope del mes:** si se acaba, la regla cambia a los diseños gratis (Consejo / Frase) para no romper el calendario.
 - **«Preparar ahora»** crea la próxima sin esperar su ventana, para ver qué sale.
 - **Zona horaria:** `publisher_settings.timezone` (por defecto `America/Bogota`; se cambia con `PUT /api/admin/publisher/automation/timezone`). Los cambios de hora de verano se manejan solos.
 - **Cómo funciona:** cada minuto el job (`publisher-job.ts`) llama a `automationTick()` (planea las corridas que entran en su ventana y mueve las abiertas) y luego envía lo vencido. Cada corrida (`publisher_runs`) es única por regla y hora: nada se duplica aunque el servidor se reinicie.
-- **Avisos:** el módulo no conoce WhatsApp. Cada proyecto conecta su canal en `index.ts` con `setPublisherHost({ adminId, notify })`; sin eso funciona igual, solo que sin avisos.
+- **Avisos y reacciones:** el módulo no conoce WhatsApp. Cada proyecto conecta su canal en `index.ts` con `setPublisherHost({ adminId, notify })` (`notify` devuelve el id del mensaje enviado) y llama a `handlePublisherReaction(targetId, emoji)` desde su manejador de reacciones; sin eso funciona igual, solo que sin avisos y se aprueba en el panel.
 - Archivos: `services/publisher/automation/` (`automation.service`, `.store`, `.host`, `automation-time`) y `components/organisms/publisher/AutomationPanel.tsx`.

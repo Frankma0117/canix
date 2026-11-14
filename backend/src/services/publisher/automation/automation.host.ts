@@ -5,10 +5,11 @@
  */
 export interface PublisherHost {
   adminId(): number | null;
-  notify(text: string): Promise<void>;
+  /** Sends the text (with a picture when given) and returns the message id, so a reaction to it can be recognized (null if unknown). */
+  notify(text: string, opts?: { image?: Buffer }): Promise<string | null>;
 }
 
-let host: PublisherHost = { adminId: () => null, notify: async () => {} };
+let host: PublisherHost = { adminId: () => null, notify: async () => null };
 
 export const setPublisherHost = (h: PublisherHost) => {
   host = h;

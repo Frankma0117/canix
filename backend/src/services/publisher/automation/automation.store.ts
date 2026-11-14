@@ -36,6 +36,7 @@ export interface Run {
   status: RunStatus;
   detail: string;
   notified: number;
+  notice_id: string | null;
 }
 
 type ScheduleRow = Omit<Schedule, 'layouts' | 'topics' | 'platforms' | 'days' | 'enabled'> & { layouts: string; topics: string; platforms: string; days: string; enabled: number };
@@ -90,6 +91,12 @@ export const automationStore = {
     const keys = Object.keys(patch) as (keyof typeof patch)[];
     if (!keys.length) return;
     db.prepare(`UPDATE publisher_runs SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map((k) => patch[k] as string | number | null), id);
+  },
+  setNotice(id: number, noticeId: string): void {
+    db.prepare('UPDATE publisher_runs SET notice_id = ? WHERE id = ?').run(noticeId, id);
+  },
+  runByNotice(noticeId: string): Run | undefined {
+    return db.prepare('SELECT * FROM publisher_runs WHERE notice_id = ?').get(noticeId) as Run | undefined;
   },
   /** How many awaiting approval (for the badge). */
   awaitingCount(): number {
