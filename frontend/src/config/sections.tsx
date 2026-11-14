@@ -1,12 +1,13 @@
 import type { ComponentType, ReactNode } from 'react';
 import {
-  CalendarClock, CalendarDays, Clapperboard, CalendarSearch, ListTodo, ListChecks, Repeat, Link2, Tags, Users, Smartphone, Trophy, PhoneCall, StickyNote, UtensilsCrossed, BookOpen, Shirt, CalendarRange, CalendarCheck, ShieldCheck, Package, ScrollText, Building2, UserCog, Home, Grid3x3, BarChart3, LineChart, FlaskConical, Smile, Pill, Megaphone, Dumbbell, ShoppingBag, MessagesSquare, Bot, Store, BookOpenCheck } from 'lucide-react';
+  CalendarClock, CalendarDays, Clapperboard, CalendarSearch, ListTodo, ListChecks, Repeat, Link2, Tags, Users, Smartphone, Trophy, PhoneCall, StickyNote, UtensilsCrossed, BookOpen, Shirt, CalendarRange, CalendarCheck, ShieldCheck, Package, ScrollText, Building2, UserCog, Home, Grid3x3, BarChart3, LineChart, FlaskConical, Smile, Pill, Megaphone, Send, Dumbbell, ShoppingBag, MessagesSquare, Bot, Store, BookOpenCheck } from 'lucide-react';
 import type { StickerName } from '../components/atoms/Sticker.tsx';
 import { HomePage } from '../pages/HomePage.tsx';
 import { AccessMatrixPage } from '../pages/admin/AccessMatrixPage.tsx';
 import { UsagePage } from '../pages/admin/UsagePage.tsx';
 import { AnalyticsPage } from '../pages/admin/AnalyticsPage.tsx';
 import { PromoPage } from '../pages/admin/PromoPage.tsx';
+import { PublisherPage } from '../pages/admin/PublisherPage.tsx';
 import { TodosPage } from '../pages/TodosPage.tsx';
 import { RoutinesPage } from '../pages/RoutinesPage.tsx';
 import { RewardsPage } from '../pages/RewardsPage.tsx';
@@ -91,6 +92,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'admin-analytics', label: 'Analítica web', group: 'Administración', icon: LineChart, adminOnly: true, render: () => <AnalyticsPage /> },
   { id: 'admin-usage', label: 'Uso y costos', group: 'Administración', icon: BarChart3, adminOnly: true, render: () => <UsagePage /> },
   { id: 'admin-promo', label: 'Videos y publicidad', group: 'Administración', icon: Megaphone, adminOnly: true, render: () => <PromoPage /> },
+  { id: 'admin-publisher', label: 'Publicador', group: 'Administración', icon: Send, adminOnly: true, render: () => <PublisherPage /> },
   { id: 'admin-packages', label: 'Paquetes', group: 'Administración', icon: Package, adminOnly: true, render: () => <PackagesPage /> },
   { id: 'admin-stickers', label: 'Stickers', group: 'Administración', icon: Smile, adminOnly: true, render: () => <StickersPage /> },
   { id: 'admin-test-mode', label: 'Modo prueba', group: 'Administración', icon: FlaskConical, adminOnly: true, render: () => <TestModePage /> },

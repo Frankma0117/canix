@@ -8,6 +8,7 @@ import { initSchedulingSchema } from './schema/scheduling.schema.js';
 import { initGrowthSchema } from './schema/growth.schema.js';
 import { initPromoSchema } from './schema/promo.schema.js';
 import { initStoreSchema } from './schema/store.schema.js';
+import { initPublisherSchema } from './schema/publisher.schema.js';
 
 /**
  * Creates every table that doesn't exist yet and upgrades older databases in place. Idempotent:
@@ -25,6 +26,7 @@ export function initSchema(): void {
   initGrowthSchema(db);
   initPromoSchema(db);
   initStoreSchema(db);
+  initPublisherSchema(db);
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);

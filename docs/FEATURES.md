@@ -235,3 +235,6 @@ Advertising material for social media, made from the portal and reviewed before 
 
 - Voice replies with Piper (local, male/female) or, for the paid permission, a natural voice from
   Fish Audio chosen among several.
+
+## Publisher (social media)
+Schedules and publishes videos and images to the project's own networks with per-network SEO. Admin only (Administración → Publicador). Details, phases and how to copy it to another project: see `docs/PUBLISHER.md`.

@@ -1,4 +1,5 @@
 import { wardrobeUpkeep } from './services/fashion/upkeep.js';
+import { startPublisherJob } from './services/publisher/publisher-job.js';
 import { setWardrobeNotifier } from './services/fashion/review.js';
 import { repairRoutines } from './services/routines/routine-repairs.service.js';
 import { quietLibsignalLogs } from './shared/utils/quiet-libsignal.js';
@@ -118,6 +119,9 @@ async function main() {
     expireDemos(bot.session).catch((err) => console.error('[DEMO] Error expiring demos:', (err as Error).message));
   }, 5 * 60_000);
   demoTimer.unref();
+
+  // Content publisher: sends the scheduled posts when their time comes (services/publisher/).
+  startPublisherJob();
 
   // Wardrobe upkeep (see services/fashion/upkeep.ts): colors read from the photos, exact duplicates removed -
   // a small batch now and every 20 minutes, in the background.
