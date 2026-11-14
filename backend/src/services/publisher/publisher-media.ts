@@ -4,7 +4,8 @@ import { AccessError } from '../../models/permissions.model.js';
 import { promoModel } from '../../models/promo.model.js';
 import type { PromoItem } from '../../entities/promo.entity.js';
 import { createPromo, type CreateInput } from '../promo/promo.service.js';
-import { publicUrl, readFile } from '../promo/promo-storage.js';
+import { deleteItemFiles, publicUrl, putFile, readFile } from '../promo/promo-storage.js';
+import { studioStore } from './studio/studio.store.js';
 import type { MediaAccess } from './publisher.types.js';
 import { createPost, type NewPost } from './publisher.service.js';
 import { publisherStore } from './publisher.store.js';
@@ -40,32 +41,37 @@ function bestFile(item: PromoItem): { file: string; poster: string } | null {
   return null;
 }
 
-/** Material ready to publish: what the administrator approved. */
+/** Material ready to publish: what the administrator approved (advertising module → «p12», brand studio → «d5»). */
 export function approvedAssets() {
-  return promoModel
+  const promo = promoModel
     .list()
     .filter((i) => i.status === 'approved')
     .flatMap((i) => {
       const best = bestFile(i);
-      return best ? [{ id: i.id, media: i.media, title: i.title, caption: i.caption, url: resolveMedia(best.file), poster: resolveMedia(best.poster) }] : [];
+      return best ? [{ id: `p${i.id}`, source: 'promo' as const, media: i.media, title: i.title, caption: i.caption, url: resolveMedia(best.file), poster: resolveMedia(best.poster) }] : [];
     });
+  const designs = studioStore
+    .approved()
+    .filter((d) => d.kind !== 'logo' && d.kind !== 'profile' && d.kind !== 'cover')
+    .map((d) => ({ id: `d${d.id}`, source: 'studio' as const, media: 'image' as const, title: d.title, caption: d.caption, url: resolveMedia(d.file_ref), poster: resolveMedia(d.file_ref) }));
+  return [...designs, ...promo];
 }
 
-export function postFromAsset(userId: number | null, promoId: number, extra: { keywords?: string[]; hashtags?: string[] } = {}) {
-  const item = promoModel.get(promoId);
+export function postFromAsset(userId: number | null, assetId: string, extra: { keywords?: string[]; hashtags?: string[] } = {}) {
+  const m = /^([pd])(\d+)$/.exec(assetId);
+  if (!m) throw new AccessError('Elige el video o la imagen que quieres publicar.');
+  const id = Number(m[2]);
+  const common = { keywords: extra.keywords ?? [], hashtags: normalizeHashtags(extra.hashtags ?? [], 30) };
+  if (m[1] === 'd') {
+    const d = studioStore.get(id);
+    if (!d || d.status !== 'approved' || !d.file_ref) throw new AccessError('Ese diseño todavía no está aprobado.');
+    return createPost(userId, { mediaType: 'image', mediaRef: d.file_ref, thumbnailRef: d.file_ref, title: d.title || 'Sin título', description: d.caption, ...common });
+  }
+  const item = promoModel.get(id);
   if (!item || item.status !== 'approved') throw new AccessError('Ese material todavía no está aprobado.');
   const best = bestFile(item);
   if (!best) throw new AccessError('Ese material no tiene archivo.');
-  const post: NewPost = {
-    promoItemId: item.id,
-    mediaType: item.media,
-    mediaRef: best.file,
-    thumbnailRef: best.poster,
-    title: item.title || 'Sin título',
-    description: item.caption,
-    hashtags: normalizeHashtags(extra.hashtags ?? [], 30),
-    keywords: extra.keywords ?? [],
-  };
+  const post: NewPost = { promoItemId: item.id, mediaType: item.media, mediaRef: best.file, thumbnailRef: best.poster, title: item.title || 'Sin título', description: item.caption, ...common };
   return createPost(userId, post);
 }
 
@@ -91,9 +97,22 @@ export function generatedThisMonth(): number {
 
 /** Asks the generator for new material, unless the project's monthly cap would be exceeded. */
 export function generateAssets(adminId: number, input: CreateInput) {
-  const wanted = Math.max(1, Math.min(3, Math.trunc(input.count ?? 1)));
-  const cap = generationCap();
-  const used = generatedThisMonth();
-  if (used + wanted > cap) throw new AccessError(`Con esto pasarías el tope de ${cap} piezas al mes (llevas ${used}). Súbelo en los ajustes si lo necesitas.`);
+  ensureBudget(Math.max(1, Math.min(3, Math.trunc(input.count ?? 1))));
   return createPromo(adminId, input);
 }
+
+// ---------- files of the brand studio (same storage as the rest of the material) ----------
+
+/** Stores a studio file (Spaces or the local disk) and returns its reference. */
+export const storeStudioFile = (designId: number, name: string, data: Buffer, mime: string): Promise<string> => putFile(`studio-${designId}`, name, data, mime);
+export const readStudioFile = (ref: string): Promise<Buffer | null> => readFile(ref);
+export const deleteStudioFiles = (designId: number): Promise<void> => deleteItemFiles(`studio-${designId}`);
+
+/** Pieces that cost money count against the same monthly cap: videos/images of the advertising module + AI art of the studio. */
+export function ensureBudget(wanted: number): void {
+  const cap = generationCap();
+  const used = usedThisMonth();
+  if (used + wanted > cap) throw new AccessError(`Con esto pasarías el tope de ${cap} piezas al mes (llevas ${used}). Súbelo en los ajustes si lo necesitas.`);
+}
+
+export const usedThisMonth = (): number => generatedThisMonth() + studioStore.aiThisMonth();

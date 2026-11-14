@@ -13,9 +13,10 @@ import { Skeleton } from '../../components/atoms/Skeleton.tsx';
 import { BrandForm } from '../../components/organisms/publisher/BrandForm.tsx';
 import { ConnectionsPanel } from '../../components/organisms/publisher/ConnectionsPanel.tsx';
 import { MediaGenerator } from '../../components/organisms/publisher/MediaGenerator.tsx';
+import { StudioPanel } from '../../components/organisms/publisher/StudioPanel.tsx';
 import { PostComposer } from '../../components/organisms/publisher/PostComposer.tsx';
 
-type Tab = 'queue' | 'new' | 'brand' | 'accounts';
+type Tab = 'queue' | 'new' | 'studio' | 'brand' | 'accounts';
 
 const STATUS: Record<PostStatus, { label: string; tone: string }> = {
   draft: { label: 'Borrador', tone: 'bg-gray-medium text-gray-dark dark:bg-white/10' },
@@ -81,9 +82,9 @@ export function PublisherPage() {
     }
   }
 
-  async function prepare(promoId: number) {
+  async function prepare(assetId: string) {
     try {
-      const post = await api.post<PublisherPost>('/api/admin/publisher/posts', { promoId });
+      const post = await api.post<PublisherPost>('/api/admin/publisher/posts', { asset: assetId });
       await load();
       setEditing(post);
     } catch (err) {
@@ -102,7 +103,8 @@ export function PublisherPage() {
         tabs={[
           { id: 'queue', label: '🗓️ Cola', count: data?.posts.length },
           { id: 'new', label: '✨ Nueva', count: data?.assets.length },
-          { id: 'brand', label: '🎨 Marca' },
+          { id: 'studio', label: '🎨 Estudio' },
+          { id: 'brand', label: '🗣️ Marca' },
           { id: 'accounts', label: '🔗 Cuentas', count: connected },
         ]}
         active={tab}
@@ -224,6 +226,14 @@ export function PublisherPage() {
         </div>
       )}
 
+      {data && tab === 'studio' && (
+        <StudioPanel
+          api={api}
+          onUse={(designId) => {
+            void prepare(`d${designId}`).then(() => setTab('queue'));
+          }}
+        />
+      )}
       {data && tab === 'brand' && <BrandForm api={api} brand={data.brand} onSaved={() => void load()} />}
       {data && tab === 'accounts' && <ConnectionsPanel api={api} connections={data.connections} onChange={() => void load()} />}
 

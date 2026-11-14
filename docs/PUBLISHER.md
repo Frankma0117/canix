@@ -67,3 +67,13 @@ Pruebas: contra una BD temporal (`DB_PATH=data/test.db`), con `AI_API_KEY=` vac�
 4. Panel → Cuentas → TikTok → **Conectar con TikTok**.
 - Hasta que TikTok audite la app, todo video se publica **privado** (solo tú). Pide la auditoría cuando quieras publicar abierto.
 - Solo videos (MP4). Los tokens se renuevan solos.
+
+## Estudio de marca (Administración → Publicador → Estudio)
+Crea el logo, la foto de perfil, las portadas (YouTube 2560×1440 y Facebook 1640×624, con zona segura), las publicaciones (cuadrada y vertical) y las historias/Reels (1080×1920), todo con la identidad del proyecto.
+- **Identidad visual** (una por proyecto): 5 colores, tipo de letra (Inter, Playfair, Poppins o Montserrat) y estilo del arte. Se guarda en `publisher_identity`.
+- **Cómo se hace una pieza:** textos con el LLM en la voz de la marca (o plantilla sin IA) → arte con un modelo de imagen (fal.ai · FLUX; sin `FAL_KEY`, un degradado de la marca) → el estudio dibuja los textos y el logo encima con un navegador (Chromium) y fotografía el resultado. El modelo **nunca escribe texto**: así no hay faltas de ortografía.
+- **Diseños:** Logo con símbolo · Portada con arte · Foto completa con titular · Mitad arte/mitad texto · Consejo con puntos (gratis) · Frase grande (gratis). Los dos «gratis» no usan IA de imagen y sirven para publicar a diario sin gasto.
+- **Revisión:** cada pieza espera tu aprobación. Puedes corregir los textos (se redibuja con el mismo arte, sin gastar IA), pedir otra versión, descargar o **publicar** (abre la publicación con su texto y SEO). Un logo aprobado se marca «Usar como logo» y aparece en todas las piezas siguientes.
+- **Costo:** solo el arte con IA cuenta contra el tope mensual de piezas (el mismo de los videos).
+- **Servidor:** se hace en un proceso hijo de baja prioridad (`studio-worker.ts`); necesita el mismo Chromium que el módulo de publicidad (`deploy/ubuntu-10-setup-promo.sh`). Las fuentes se piden a Google Fonts; sin internet se usa una fuente del sistema.
+- Archivos: `services/publisher/studio/` (`studio-art`, `studio-templates`, `studio-compose`, `studio-copy`, `studio-build`, `studio.service`) y `components/organisms/publisher/StudioPanel.tsx`. Para otro proyecto se copian junto con el resto del módulo; solo cambia la identidad.

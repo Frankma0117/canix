@@ -83,6 +83,39 @@ export function initPublisherSchema(db: Database.Database): void {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    -- Visual identity (one row, id = 1): colors, type, style and the approved logo. Feeds the brand studio.
+    CREATE TABLE IF NOT EXISTS publisher_identity (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      colors TEXT NOT NULL DEFAULT '{}',          -- {primary, secondary, accent, dark, light}
+      style TEXT NOT NULL DEFAULT '',             -- visual direction used for generated art
+      font TEXT NOT NULL DEFAULT 'modern',        -- modern | elegant | friendly | bold
+      logo_ref TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Brand studio (services/publisher/studio/): logos, covers, profile pictures and posts, drawn
+    -- with the identity. Each one waits for the administrator's review.
+    CREATE TABLE IF NOT EXISTS publisher_designs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL CHECK (kind IN ('logo', 'cover', 'profile', 'post', 'story')),
+      layout TEXT NOT NULL DEFAULT '',            -- hero | split | tip | quote | mark | banner
+      format TEXT NOT NULL,                       -- key of studio-formats.ts
+      brief TEXT NOT NULL DEFAULT '',
+      use_ai INTEGER NOT NULL DEFAULT 0,          -- 1 = an image model painted the art (costs money)
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'working', 'review', 'approved', 'rejected', 'error')),
+      detail TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL DEFAULT '',
+      caption TEXT NOT NULL DEFAULT '',           -- text to post with it
+      content TEXT NOT NULL DEFAULT '{}',         -- {headline, sub, bullets, cta, art_prompt}
+      file_ref TEXT NOT NULL DEFAULT '',
+      art_ref TEXT NOT NULL DEFAULT '',           -- the AI art alone, reused when only the texts change
+      created_by INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      approved_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_publisher_designs_status ON publisher_designs(status, created_at);
   `);
 
   // Databases created before Meta/TikTok existed: the connection also keeps the page / account id.

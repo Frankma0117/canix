@@ -1,13 +1,13 @@
 import type { Express } from 'express';
 import { env } from '../../config/env.js';
-import { AccessError } from '../../models/permissions.model.js';
-import { approvedAssets, generateAssets, generatedThisMonth, generationCap, mediaAccess, postFromAsset, resolveMedia, setGenerationCap } from '../../services/publisher/publisher-media.js';
+import { approvedAssets, generateAssets, generationCap, mediaAccess, postFromAsset, resolveMedia, setGenerationCap, usedThisMonth } from '../../services/publisher/publisher-media.js';
 import {
   connect, connectionsView, disconnect, getBrand, load, postView, providersView, removePost, retry, runDue, saveBrand, schedule, suggestSeo, unschedule, updatePost,
 } from '../../services/publisher/publisher.service.js';
 import { beginOAuth, finishOAuth } from '../../services/publisher/publisher-oauth.js';
 import { publisherStore } from '../../services/publisher/publisher.store.js';
 import { PLATFORMS } from '../../services/publisher/publisher.types.js';
+import { createDesigns, deleteDesign, editDesign, listDesigns, redoDesign, resumeStudioQueue, reviewDesign, saveIdentity, studioStatus, useAsLogo } from '../../services/publisher/studio/studio.service.js';
 import { h, int, str, strArr, userId } from '../http-helpers.js';
 
 /**
@@ -16,6 +16,7 @@ import { h, int, str, strArr, userId } from '../http-helpers.js';
  */
 export function registerPublisherRoutes(app: Express): void {
   const view = (id: number) => postView(load(id), resolveMedia);
+  resumeStudioQueue();
 
   app.get(
     '/api/admin/publisher',
@@ -27,7 +28,7 @@ export function registerPublisherRoutes(app: Express): void {
         platforms: PLATFORMS,
         posts: publisherStore.listPosts().map((p) => postView(p, resolveMedia)),
         assets: approvedAssets(),
-        generation: { cap: generationCap(), used: generatedThisMonth(), textAi: !!env.ai.apiKey },
+        generation: { cap: generationCap(), used: usedThisMonth(), textAi: !!env.ai.apiKey },
       }),
     ),
   );
@@ -53,7 +54,7 @@ export function registerPublisherRoutes(app: Express): void {
     '/api/admin/publisher/settings',
     h((req, res) => {
       setGenerationCap(Number(req.body?.cap));
-      res.json({ cap: generationCap(), used: generatedThisMonth() });
+      res.json({ cap: generationCap(), used: usedThisMonth() });
     }),
   );
 
@@ -81,13 +82,54 @@ export function registerPublisherRoutes(app: Express): void {
     }),
   );
 
+  // ---------- brand studio: identity and designs ----------
+  app.get('/api/admin/publisher/studio', h(async (_req, res) => res.json({ status: await studioStatus(), designs: listDesigns() })));
+
+  app.put(
+    '/api/admin/publisher/studio/identity',
+    h((req, res) => res.json(saveIdentity({ colors: typeof req.body?.colors === 'object' ? req.body.colors : undefined, style: str(req.body?.style, 300), font: str(req.body?.font, 20) }))),
+  );
+
+  app.post(
+    '/api/admin/publisher/studio/designs',
+    h((req, res) =>
+      res.json({ items: createDesigns(userId(req), { kind: str(req.body?.kind, 20) ?? '', layout: str(req.body?.layout, 20), formats: strArr(req.body?.formats), brief: str(req.body?.brief, 500), count: int(req.body?.count) }) }),
+    ),
+  );
+
+  app.post('/api/admin/publisher/studio/designs/:id/review', h((req, res) => res.json(reviewDesign(Number(req.params.id), req.body?.approve === true))));
+  app.post('/api/admin/publisher/studio/designs/:id/redo', h((req, res) => res.json({ items: redoDesign(userId(req), Number(req.params.id)) })));
+  app.post('/api/admin/publisher/studio/designs/:id/logo', h((req, res) => res.json(useAsLogo(Number(req.params.id)))));
+
+  app.put(
+    '/api/admin/publisher/studio/designs/:id',
+    h((req, res) =>
+      res.json(
+        editDesign(Number(req.params.id), {
+          headline: str(req.body?.headline, 90),
+          sub: str(req.body?.sub, 110),
+          cta: str(req.body?.cta, 28),
+          caption: str(req.body?.caption, 600),
+          bullets: Array.isArray(req.body?.bullets) ? strArr(req.body.bullets) : undefined,
+        }),
+      ),
+    ),
+  );
+
+  app.delete(
+    '/api/admin/publisher/studio/designs/:id',
+    h(async (req, res) => {
+      await deleteDesign(Number(req.params.id));
+      res.json({ ok: true });
+    }),
+  );
+
   app.post(
     '/api/admin/publisher/posts',
     h((req, res) => {
-      const promoId = int(req.body?.promoId);
+      const assetId = str(req.body?.asset, 20) ?? '';
       const extra = { keywords: strArr(req.body?.keywords), hashtags: strArr(req.body?.hashtags) };
-      if (promoId === undefined) throw new AccessError('Elige el video o la imagen que quieres publicar.');
-      res.json(view(postFromAsset(userId(req), promoId, extra).id));
+      res.json(view(postFromAsset(userId(req), assetId, extra).id));
     }),
   );
 

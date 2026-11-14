@@ -61,7 +61,8 @@ export interface PublisherPost {
 }
 
 export interface PublisherAsset {
-  id: number;
+  id: string;
+  source: 'promo' | 'studio';
   media: 'video' | 'image';
   title: string;
   caption: string;
@@ -77,4 +78,56 @@ export interface PublisherResponse {
   posts: PublisherPost[];
   assets: PublisherAsset[];
   generation: { cap: number; used: number; textAi: boolean };
+}
+
+// ---------- brand studio (GET /api/admin/publisher/studio) ----------
+export type DesignKind = 'logo' | 'cover' | 'profile' | 'post' | 'story';
+export type DesignStatus = 'pending' | 'working' | 'review' | 'approved' | 'rejected' | 'error';
+
+export interface StudioColors {
+  primary: string;
+  secondary: string;
+  accent: string;
+  dark: string;
+  light: string;
+}
+
+export interface StudioIdentity {
+  colors: StudioColors;
+  style: string;
+  font: string;
+  logoUrl: string;
+}
+
+export interface StudioDesign {
+  id: number;
+  kind: DesignKind;
+  layout: string;
+  format: string;
+  formatLabel: string;
+  brief: string;
+  useAi: boolean;
+  status: DesignStatus;
+  detail: string;
+  title: string;
+  caption: string;
+  content: { headline?: string; sub?: string; bullets?: string[]; cta?: string };
+  url: string;
+  createdAt: string;
+}
+
+export interface StudioStatus {
+  canCompose: boolean;
+  textAi: boolean;
+  art: { key: 'fal' | 'mock'; label: string };
+  identity: StudioIdentity;
+  formats: { key: string; kind: DesignKind; label: string; width: number; height: number }[];
+  layouts: { key: string; label: string; usesArt: boolean; kinds: DesignKind[] }[];
+  fonts: { key: string; label: string }[];
+  budget: { cap: number; used: number };
+}
+
+export interface StudioResponse {
+  status: StudioStatus;
+  designs: StudioDesign[];
 }
