@@ -142,6 +142,18 @@ export const automationOverview = () => ({
 
 const say = (text: string, image?: Buffer): Promise<string | null> => publisherHost().notify(text, { image }).catch((err) => (console.log('[PUBLISHER] Notice failed:', (err as Error).message), null));
 
+/** Public https address of the preview, for the notifier API (it needs a picture WhatsApp can fetch). */
+async function previewUrl(run: Run): Promise<string | undefined> {
+  let ref = '';
+  if (run.item_kind === 'design') ref = studioStore.get(run.item_id ?? 0)?.file_ref ?? '';
+  else {
+    const f = Object.values(promoModel.get(run.item_id ?? 0)?.files ?? {})[0];
+    ref = f?.poster || f?.file || '';
+  }
+  const url = ref ? mediaAccess.url(ref) : '';
+  return url.startsWith('https://') ? url : undefined;
+}
+
 /** The picture of what is waiting for approval (design, or the cover of the video), for the WhatsApp notice. */
 async function previewBytes(run: Run): Promise<Buffer | undefined> {
   let ref = '';
@@ -271,13 +283,21 @@ async function advance(run: Run): Promise<void> {
     if (state.status !== 'review' && state.status !== 'approved') return; // still being made
     if (s.mode === 'auto') return approveAndSchedule(run, s);
     automationStore.updateRun(run.id, { status: 'awaiting', notified: 1 });
-    const noticeId = await say(`📣 Publicación lista para aprobar
-«${state.title || s.name}»
-Sale ${when(at)} en ${s.platforms.map((p) => PLATFORM_NAMES[p]).join(' y ')}.
-
-👍 para aprobarla y programarla · 👎 para omitirla
-(o cámbiala en Publicador → Automático)`, await previewBytes(run).catch(() => undefined));
-    if (noticeId) automationStore.setNotice(run.id, noticeId);
+    const where = s.platforms.map((p) => PLATFORM_NAMES[p]).join(' y ');
+    const host = publisherHost();
+    if (host.requestApproval) {
+      // Through Canix's notifier API: the answer (👍 / 👎 / link) comes back to this project's webhook.
+      const img = await previewUrl(run);
+      await host
+        .requestApproval({ title: state.title || s.name, text: `Sale ${when(at)} en ${where}.`, imageUrl: img, ref: `run:${run.id}`, expiresInMinutes: Math.max(5, Math.round((at.getTime() + GRACE_MS - Date.now()) / 60_000)) })
+        .catch((err) => console.log('[PUBLISHER] Approval request failed:', (err as Error).message));
+    } else {
+      const noticeId = await say(
+        `📣 Publicación lista para aprobar\n«${state.title || s.name}»\nSale ${when(at)} en ${where}.\n\n👍 para aprobarla y programarla · 👎 para omitirla\n(o cámbiala en Publicador → Automático)`,
+        await previewBytes(run).catch(() => undefined),
+      );
+      if (noticeId) automationStore.setNotice(run.id, noticeId);
+    }
     return;
   }
 
@@ -324,6 +344,21 @@ export async function automationTick(): Promise<void> {
 const POSITIVE = ['👍', '✅', '👌', '🙌', '🔥', '❤'];
 const NEGATIVE = ['👎', '❌', '🚫'];
 
+/** Approve (and schedule) or skip a run waiting for the administrator. Replies with what to tell them. */
+async function decideRun(run: Run, approve: boolean): Promise<{ handled: true; reply?: string }> {
+  if (run.status !== 'awaiting') return { handled: true }; // already decided (from the panel, or it expired)
+  try {
+    if (approve) {
+      const view = await approveRun(run.id);
+      return { handled: true, reply: `✅ Aprobada y programada para ${view.publishAt ? when(new Date(view.publishAt)) : 'pronto'}.` };
+    }
+    skipRun(run.id);
+    return { handled: true, reply: '⏭️ Listo, la omití.' };
+  } catch (err) {
+    return { handled: true, reply: `No pude hacerlo: ${(err as Error).message}` };
+  }
+}
+
 /**
  * The administrator reacted to a WhatsApp message. If it is the notice of a piece waiting for
  * approval, 👍 approves and schedules it and 👎 skips it. Returns handled = false when the message
@@ -334,15 +369,17 @@ export async function handlePublisherReaction(targetId: string, emoji: string): 
   if (!run) return { handled: false };
   const positive = POSITIVE.some((e) => emoji.startsWith(e));
   if (!positive && !NEGATIVE.some((e) => emoji.startsWith(e))) return { handled: true };
-  if (run.status !== 'awaiting') return { handled: true }; // already decided (from the panel, or it expired)
-  try {
-    if (positive) {
-      const view = await approveRun(run.id);
-      return { handled: true, reply: `✅ Aprobada y programada para ${view.publishAt ? when(new Date(view.publishAt)) : 'pronto'}.` };
-    }
-    skipRun(run.id);
-    return { handled: true, reply: '⏭️ Listo, la omití.' };
-  } catch (err) {
-    return { handled: true, reply: `No pude hacerlo: ${(err as Error).message}` };
-  }
+  return decideRun(run, positive);
+}
+
+/**
+ * The answer to an approval asked through Canix's notifier API (the project's webhook calls this with
+ * the `ref` it sent). Approved → scheduled; rejected → skipped; expired → nothing (the grace period skips it).
+ */
+export async function handleApprovalDecision(ref: string, status: 'approved' | 'rejected' | 'expired'): Promise<{ handled: boolean }> {
+  const id = /^run:(\d+)$/.exec(ref)?.[1];
+  const run = id ? automationStore.getRun(Number(id)) : undefined;
+  if (!run) return { handled: false };
+  if (status !== 'expired') await decideRun(run, status === 'approved');
+  return { handled: true };
 }

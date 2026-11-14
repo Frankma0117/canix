@@ -1,6 +1,6 @@
 import type { ComponentType, ReactNode } from 'react';
 import {
-  CalendarClock, CalendarDays, Clapperboard, CalendarSearch, ListTodo, ListChecks, Repeat, Link2, Tags, Users, Smartphone, Trophy, PhoneCall, StickyNote, UtensilsCrossed, BookOpen, Shirt, CalendarRange, CalendarCheck, ShieldCheck, Package, ScrollText, Building2, UserCog, Home, Grid3x3, BarChart3, LineChart, FlaskConical, Smile, Pill, Megaphone, Send, Dumbbell, ShoppingBag, MessagesSquare, Bot, Store, LayoutDashboard, Tag, BadgePercent, SlidersHorizontal, Wallet } from 'lucide-react';
+  CalendarClock, CalendarDays, Clapperboard, CalendarSearch, ListTodo, ListChecks, Repeat, Link2, Tags, Users, Smartphone, Trophy, PhoneCall, StickyNote, UtensilsCrossed, BookOpen, Shirt, CalendarRange, CalendarCheck, ShieldCheck, Package, ScrollText, Building2, UserCog, Home, Grid3x3, BarChart3, LineChart, FlaskConical, Smile, Pill, Megaphone, Send, Plug, Dumbbell, ShoppingBag, MessagesSquare, Bot, Store, LayoutDashboard, Tag, BadgePercent, SlidersHorizontal, Wallet } from 'lucide-react';
 import type { StickerName } from '../components/atoms/Sticker.tsx';
 import { HomePage } from '../pages/HomePage.tsx';
 import { AccessMatrixPage } from '../pages/admin/AccessMatrixPage.tsx';
@@ -8,6 +8,7 @@ import { UsagePage } from '../pages/admin/UsagePage.tsx';
 import { AnalyticsPage } from '../pages/admin/AnalyticsPage.tsx';
 import { PromoPage } from '../pages/admin/PromoPage.tsx';
 import { PublisherPage } from '../pages/admin/PublisherPage.tsx';
+import { ConnectedProjectsPage } from '../pages/admin/ConnectedProjectsPage.tsx';
 import { TodosPage } from '../pages/TodosPage.tsx';
 import { RoutinesPage } from '../pages/RoutinesPage.tsx';
 import { RewardsPage } from '../pages/RewardsPage.tsx';
@@ -125,6 +126,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'admin-usage', label: 'Uso y costos', module: 'platform', group: 'Crecimiento', icon: BarChart3, adminOnly: true, render: () => <UsagePage /> },
   { id: 'admin-promo', label: 'Videos y publicidad', module: 'platform', group: 'Crecimiento', icon: Megaphone, adminOnly: true, render: () => <PromoPage /> },
   { id: 'admin-publisher', label: 'Publicador', module: 'platform', group: 'Crecimiento', icon: Send, adminOnly: true, render: () => <PublisherPage /> },
+  { id: 'admin-notify', label: 'Proyectos conectados', module: 'platform', group: 'Sistema', icon: Plug, adminOnly: true, render: () => <ConnectedProjectsPage /> },
   { id: 'admin-packages', label: 'Paquetes', module: 'platform', group: 'Accesos', icon: Package, adminOnly: true, render: () => <PackagesPage /> },
   { id: 'admin-stickers', label: 'Stickers', module: 'platform', group: 'Crecimiento', icon: Smile, adminOnly: true, render: () => <StickersPage /> },
   { id: 'admin-test-mode', label: 'Modo prueba', module: 'platform', group: 'Sistema', icon: FlaskConical, adminOnly: true, render: () => <TestModePage /> },
