@@ -21,7 +21,7 @@ El asistente se llama **Canix** (nunca Cania); la infraestructura y el dominio s
 
 ## Producción
 - `ssh manuel@169.58.79.154`, app en `/opt/canix`, systemd `canix` (usuario `canix`). Dominio `https://canix.cania.app`.
-- Despliegue = push a GitHub y luego `cd /opt/canix && sudo ./deploy.sh` (pide contraseña: lo corre el usuario).
+- Despliegue = push a GitHub y luego `ssh manuel@169.58.79.154 "sudo /opt/canix/deploy.sh"` (sudo sin contraseña solo para ese script, desde 2026-11-14).
   Ver la skill `deploy-canix`.
 - En ese servidor viven otros proyectos (n8n, maniksero, cania-web, panel, aula-interactiva, brindix): no tocarlos.
 
