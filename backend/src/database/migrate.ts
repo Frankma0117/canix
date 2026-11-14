@@ -10,6 +10,7 @@ import { initPromoSchema } from './schema/promo.schema.js';
 import { initStoreSchema } from './schema/store.schema.js';
 import { initStoreBookingSchema } from './schema/store-booking.schema.js';
 import { initPublisherSchema } from './schema/publisher.schema.js';
+import { initNotifySchema } from './schema/notify.schema.js';
 
 /**
  * Creates every table that doesn't exist yet and upgrades older databases in place. Idempotent:
@@ -29,6 +30,7 @@ export function initSchema(): void {
   initStoreSchema(db);
   initStoreBookingSchema(db);
   initPublisherSchema(db);
+  initNotifySchema(db);
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);

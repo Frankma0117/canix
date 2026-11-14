@@ -11,6 +11,7 @@ import { securityHeaders, rateLimit, requestTimeout, errorHandler } from './midd
 import { h } from './http-helpers.js';
 import { registerAdminRoutes } from './routes/admin.routes.js';
 import { registerPublisherPublicRoutes } from './routes/publisher.routes.js';
+import { registerNotifyPublicRoutes } from './routes/notify.routes.js';
 import { registerPublicRoutes } from './routes/growth.routes.js';
 import { registerNotFound } from '../services/growth/site.service.js';
 import { registerSchedulingRoutes } from './routes/scheduling.routes.js';
@@ -70,6 +71,8 @@ export function createServer(bot: BotManager): Express {
   registerPublicRoutes(app, bot);
   // Return page of the social networks' login (see services/publisher/publisher-oauth.ts) - public, protected by its one-use state.
   registerPublisherPublicRoutes(app);
+  // API for the administrator's other projects (Bearer key) and the confirmation link - see services/notify/.
+  registerNotifyPublicRoutes(app);
   app.use(express.static(publicDir, { maxAge: '1h', index: 'index.html' }));
 
   // ---------- Portal authentication (number + password, see services/auth/web-auth.service.ts) ----------

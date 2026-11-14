@@ -40,6 +40,7 @@ import { synthesizeVoiceNote } from '../../services/audio/tts.js';
 import { extractDemoCode, activateDemo, isDemoExpired, demoEndedMessage } from '../../services/growth/demo.service.js';
 import { handleStoreNoticeReaction } from '../../services/store/store-engine.js';
 import { handlePublisherReaction } from '../../services/publisher/automation/automation.service.js';
+import { handleNotifyReaction } from '../../services/notify/notify.service.js';
 
 /** How long a turn can run before the user gets a "still working on it" ping, and how many of
  *  those pings a single turn can rack up - see shared/utils/human-delay.ts's withWorkingUpdates(). Tuned
@@ -141,6 +142,12 @@ export class BotManager {
       const post = await handlePublisherReaction(targetId, emoji);
       if (post.handled) {
         if (post.reply) await this.wa.sendText(jid, post.reply).catch(() => {});
+        return;
+      }
+      // ...or on an approval another project asked for through the notifier API (services/notify).
+      const ask = await handleNotifyReaction(targetId, emoji);
+      if (ask.handled) {
+        if (ask.reply) await this.wa.sendText(jid, ask.reply).catch(() => {});
         return;
       }
     }

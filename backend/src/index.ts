@@ -2,6 +2,7 @@ import { wardrobeUpkeep } from './services/fashion/upkeep.js';
 import { startPublisherJob } from './services/publisher/publisher-job.js';
 import { startStoreBookingJob } from './services/store/store-booking-job.js';
 import { setPublisherHost } from './services/publisher/automation/automation.host.js';
+import { setNotifySender, startNotifyJob } from './services/notify/notify.service.js';
 import { setWardrobeNotifier } from './services/fashion/review.js';
 import { repairRoutines } from './services/routines/routine-repairs.service.js';
 import { quietLibsignalLogs } from './shared/utils/quiet-libsignal.js';
@@ -135,6 +136,16 @@ async function main() {
     },
   });
   startPublisherJob();
+
+  // Notifier API: the administrator's other projects send messages / ask approvals through this WhatsApp session.
+  setNotifySender({
+    send: async (text, imageUrl) => {
+      const admin = usersModel.getAdmin();
+      if (!admin) throw new Error('No hay administrador.');
+      return imageUrl ? bot.session.sendImage(admin.jid, imageUrl, text) : bot.session.sendTextWithId(admin.jid, text);
+    },
+  });
+  startNotifyJob();
   startStoreBookingJob();
 
   // Wardrobe upkeep (see services/fashion/upkeep.ts): colors read from the photos, exact duplicates removed -

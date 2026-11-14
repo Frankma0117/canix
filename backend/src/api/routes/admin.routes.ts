@@ -17,6 +17,7 @@ import { requirePanelAdmin } from '../middleware/auth.middleware.js';
 import { registerGrowthAdminRoutes } from './growth.routes.js';
 import { registerPromoRoutes } from './promo.routes.js';
 import { registerPublisherRoutes } from './publisher.routes.js';
+import { registerNotifyAdminRoutes } from './notify.routes.js';
 import { h, userId, str, strArr, intArr, int } from '../http-helpers.js';
 import type { User } from '../../entities/index.js';
 import type { BotManager } from '../../channels/whatsapp/bot-manager.js';
@@ -67,6 +68,7 @@ export function registerAdminRoutes(app: Express, bot: BotManager): void {
   registerGrowthAdminRoutes(app, userView as never);
   registerPromoRoutes(app);
   registerPublisherRoutes(app);
+  registerNotifyAdminRoutes(app);
 
   app.get('/api/admin/permissions', h((_req, res) => res.json(PERMISSIONS.map(({ tools: _t, ...p }) => p))));
 
