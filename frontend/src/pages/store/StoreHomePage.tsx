@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ArrowRight, Check, Circle, MessagesSquare, ShoppingBag, TrendingUp, UserRound } from 'lucide-react';
+import { ArrowRight, CalendarDays, Check, Circle, MessagesSquare, ShoppingBag, Tag, TrendingUp, UserRound, Users } from 'lucide-react';
 import { useApi } from '../../services/api.ts';
 import { usePolling } from '../../services/store.tsx';
 import type { Store, StoreSummary } from '../../types/store.ts';
@@ -33,22 +33,40 @@ function Overview({ store }: { store: Store }) {
   const pending = summary?.counts.pending ?? store.pendingOrders;
   const waiting = summary?.humanChats ?? store.humanChats;
 
-  const steps = [
+  const services = store.kind === 'services';
+  const sales = [
     { done: store.products > 0, label: 'Carga tu catálogo', hint: 'Productos con precio y foto: es lo único que el asistente puede ofrecer.', to: 'store-products' },
     { done: !!(store.address || store.payment_info), label: 'Completa datos y pagos', hint: 'Dirección, medios de pago y costo de envío.', to: 'store-business' },
     { done: !!store.bot_enabled, label: 'Activa el asistente', hint: 'Define cómo atiende y enciéndelo.', to: 'store-attention' },
     { done: store.connection.connected, label: 'Vincula el WhatsApp del negocio', hint: 'Escanea el QR con el teléfono del negocio.', to: 'store-whatsapp' },
   ];
+  const bookable = [
+    { done: store.servicesCount > 0, label: 'Crea tus servicios', hint: 'Nombre, precio y cuánto dura cada uno: es lo único que el asistente puede agendar.', to: 'store-services' },
+    { done: store.staffCount > 0, label: 'Agrega a quien atiende y su horario', hint: 'Sin un horario semanal el asistente no ofrece citas.', to: 'store-staff' },
+    { done: !!(store.address || store.hours_text), label: 'Completa los datos del negocio', hint: 'Dirección, horario y medios de pago.', to: 'store-business' },
+    { done: !!store.bot_enabled, label: 'Activa el asistente', hint: 'Define cómo atiende y enciéndelo.', to: 'store-attention' },
+    { done: store.connection.connected, label: 'Vincula el WhatsApp del negocio', hint: 'Escanea el QR con el teléfono del negocio.', to: 'store-whatsapp' },
+  ];
+  const steps = services ? bookable : sales;
   const left = steps.filter((s) => !s.done);
 
   return (
     <div className="space-y-8">
+      {services ? (
+        <section aria-label="Cifras" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat icon={<CalendarDays size={18} />} label="Citas de hoy" value={String(store.appointmentsToday)} sub={store.appointmentsToday ? 'Confirmadas para hoy' : 'Ninguna por ahora'} onClick={() => goTo('store-agenda')} />
+          <Stat icon={<UserRound size={18} />} label="Esperan persona" value={String(waiting)} sub={waiting ? 'Clientes sin respuesta' : 'Nadie esperando'} tone={waiting ? 'warn' : undefined} onClick={() => goTo('store-chats')} />
+          <Stat icon={<Tag size={18} />} label="Servicios" value={String(store.servicesCount)} sub={store.servicesCount ? 'Se pueden agendar' : 'Crea el primero'} onClick={() => goTo('store-services')} />
+          <Stat icon={<Users size={18} />} label="Profesionales" value={String(store.staffCount)} sub={store.staffCount ? 'Atendiendo' : 'Agrega a quien atiende'} onClick={() => goTo('store-staff')} />
+        </section>
+      ) : (
       <section aria-label="Cifras" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat icon={<TrendingUp size={18} />} label="Ventas de hoy" value={summary ? money(summary.today.total) : null} sub={summary ? `${summary.today.orders} pedidos` : ''} onClick={() => goTo('store-orders')} />
         <Stat icon={<ShoppingBag size={18} />} label="Por confirmar" value={String(pending)} sub={pending ? 'Esperan a una persona' : 'Todo al día'} tone={pending ? 'warn' : undefined} onClick={() => goTo('store-orders')} />
         <Stat icon={<UserRound size={18} />} label="Esperan persona" value={String(waiting)} sub={waiting ? 'Clientes sin respuesta' : 'Nadie esperando'} tone={waiting ? 'warn' : undefined} onClick={() => goTo('store-chats')} />
         <Stat icon={<MessagesSquare size={18} />} label="Últimos 7 días" value={summary ? money(summary.week.total) : null} sub={summary ? `${summary.week.orders} pedidos` : ''} onClick={() => goTo('store-orders')} />
       </section>
+      )}
 
       <section aria-label="WhatsApp" className="flex flex-wrap items-center gap-3 rounded-2xl border border-gray-medium/70 bg-white p-4 shadow-soft dark:border-white/10 dark:bg-[var(--surface)]">
         <div className="min-w-0 flex-1 basis-60">

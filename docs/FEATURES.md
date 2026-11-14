@@ -239,8 +239,10 @@ Advertising material for social media, made from the portal and reviewed before 
 ## Publisher (social media)
 Schedules and publishes videos and images to the project's own networks with per-network SEO. Admin only (Administración → Publicador). Details, phases and how to copy it to another project: see `docs/PUBLISHER.md`.
 
-## Appointments for service businesses (absorbed from the old "estylia" project)
-A store (business with its own WhatsApp number) can also sell bookable services. A product with `duration_min`
+## Two kinds of business: sales and services (services absorbed the old "estylia" project)
+A business (store, with its own WhatsApp number) is of ONE of two kinds, chosen by the administrator when creating it (`stores.kind`): **sales** (`sales`: catalog, promotions, cart, delivery, payment, orders) or **services** (`services`: appointments). They are different businesses: each has its own assistant prompt and tools (`store-agent.ts` vs `servicesPrompt` in `store-booking-tools.ts`; a services assistant never has the cart tools), its own menu (`kinds` in `frontend/src/config/sections.tsx`) and its own home. Booking endpoints answer an error for sales businesses. Stores that already had bookable services became `services` in the migration.
+
+Services business: A product with `duration_min`
 is a service; people (`store_staff`) have weekly hours and the services they do (none = all); the assistant
 checks free slots, books, reschedules and cancels, answers from the business' knowledge base (`store_knowledge`)
 and reminds the customer 3 hours before. The business' people get a WhatsApp notice for every new or cancelled

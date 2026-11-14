@@ -25,6 +25,9 @@ El asistente se llama **Canix** (nunca Cania); la infraestructura y el dominio s
   Ver la skill `deploy-canix`.
 - En ese servidor viven otros proyectos (n8n, maniksero, cania-web, panel, aula-interactiva, brindix): no tocarlos.
 
+## Negocios: ventas y servicios (NO son lo mismo)
+- `stores.kind`: `sales` (productos, pedidos, domicilio, pagos) o `services` (citas, profesionales, agenda). Cada tipo tiene su propio asistente, menú y pantallas; nunca mezclar el flujo de pedidos con el de citas. Detalle en `docs/FEATURES.md`.
+
 ## Reglas del usuario
 - Confirmaciones con reacciones 👍/👎; nunca encuestas.
 - Stickers solo del pack del administrador; nunca generar stickers.

@@ -44,6 +44,7 @@ import {
 } from '../../services/store/store-orders.service.js';
 import { handoffToHuman, isCustomerBusy, receiveCustomerMessage, returnToBot, sendAgentMessage } from '../../services/store/store-engine.js';
 import { proofReadingAvailable } from '../../services/store/payment-proof.service.js';
+import { appointmentsToday, listServices, staffRepo } from '../../services/store/store-booking.service.js';
 import { seedDemoStore } from '../../services/store/store-demo.service.js';
 import type { OrderStatus, Store, StoreMessage, StoreProduct, StorePromotion } from '../../entities/index.js';
 
@@ -84,6 +85,9 @@ function storeView(store: Store) {
     pendingOrders: counts.pending ?? 0,
     humanChats: conversations.filter((c) => c.mode === 'human' && !c.is_simulator).length,
     products: storeCatalogModel.products(store.id).length,
+    appointmentsToday: store.kind === 'services' ? appointmentsToday(store.id) : 0,
+    servicesCount: store.kind === 'services' ? listServices(store.id).length : 0,
+    staffCount: store.kind === 'services' ? staffRepo.list(store.id, true).length : 0,
   };
 }
 
@@ -141,7 +145,11 @@ function storePatchOf(body: Record<string, unknown>, isAdmin: boolean): StorePat
     delivery_zones: optText(body.delivery_zones, 600),
     bot_enabled: bool(body.bot_enabled),
   };
-  if (isAdmin) patch.active = bool(body.active);
+  if (isAdmin) {
+    patch.active = bool(body.active);
+    // The kind (ventas / servicios) is chosen by the administrator who creates the business.
+    patch.kind = body.kind === 'services' ? 'services' : body.kind === 'sales' ? 'sales' : undefined;
+  }
   return patch;
 }
 

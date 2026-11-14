@@ -71,6 +71,8 @@ export interface SectionDef {
   /** Visible if the user has ANY of these permissions. Omitted = everyone. */
   perms?: string[];
   adminOnly?: boolean;
+  /** Business module only: shown just for these kinds of business (ventas / servicios). Omitted = both. */
+  kinds?: ('sales' | 'services')[];
   /** One line for the home screen's module tiles. */
   description?: string;
   sticker?: StickerName;
@@ -107,17 +109,21 @@ const SECTIONS: SectionDef[] = [
   // Asistente de pedidos: the business administrator sees only these (plus Mi cuenta).
   // Módulo Negocio: lo que ve el administrador de un negocio (y el administrador de Canix al entrar a soportarlo).
   { id: 'store-home', description: 'Cómo va el negocio hoy y qué falta por configurar.', label: 'Resumen', module: 'business', group: 'Operación', icon: LayoutDashboard, perms: ['store.manage'], render: () => <StoreHomePage /> },
-  { id: 'store-orders', description: 'Pedidos que tus clientes confirmaron por WhatsApp, para confirmar y enviar.', label: 'Pedidos', module: 'business', group: 'Operación', icon: ShoppingBag, perms: ['store.manage'], render: () => <StoreOrdersPage /> },
-  { id: 'store-bookings', description: 'Las citas que tus clientes agendaron por WhatsApp, tu equipo, los servicios y lo que el asistente sabe del negocio.', label: 'Citas', module: 'business', group: 'Operación', icon: CalendarDays, perms: ['store.manage'], render: () => <StoreBookingPage /> },
+  { id: 'store-orders', description: 'Pedidos que tus clientes confirmaron por WhatsApp, para confirmar y enviar.', label: 'Pedidos', module: 'business', group: 'Operación', icon: ShoppingBag, perms: ['store.manage'], kinds: ['sales'], render: () => <StoreOrdersPage /> },
+  { id: 'store-agenda', description: 'Las citas que tus clientes agendaron por WhatsApp, para marcar como atendidas o cancelar.', label: 'Agenda', module: 'business', group: 'Operación', icon: CalendarDays, kinds: ['services'], perms: ['store.manage'], render: () => <StoreBookingPage tab="agenda" /> },
+  { id: 'store-services', description: 'Lo que se agenda: nombre, precio, duración y descripción.', label: 'Servicios', module: 'business', group: 'Catálogo', icon: Tag, kinds: ['services'], perms: ['store.manage'], render: () => <StoreBookingPage tab="services" /> },
+  { id: 'store-staff', description: 'Quién atiende, con su horario semanal y los servicios que hace.', label: 'Profesionales', module: 'business', group: 'Catálogo', icon: Users, kinds: ['services'], perms: ['store.manage'], render: () => <StoreBookingPage tab="team" /> },
+  { id: 'store-knowledge', description: 'Lo que el asistente puede responder: políticas, cuidados, preguntas frecuentes.', label: 'Conocimiento', module: 'business', group: 'Asistente', icon: BookOpen, kinds: ['services'], perms: ['store.manage'], render: () => <StoreBookingPage tab="knowledge" /> },
   { id: 'store-chats', description: 'Los chats del WhatsApp del negocio y los clientes que esperan a una persona.', label: 'Conversaciones', module: 'business', group: 'Operación', icon: MessagesSquare, perms: ['store.manage'], render: () => <StoreChatsPage /> },
-  { id: 'store-products', description: 'Productos con precio, foto y categorías.', label: 'Productos', module: 'business', group: 'Catálogo', icon: Tag, perms: ['store.manage'], render: () => <StoreCatalogPage view="products" /> },
-  { id: 'store-promos', description: 'Promociones del día y por fechas.', label: 'Promociones', module: 'business', group: 'Catálogo', icon: BadgePercent, perms: ['store.manage'], render: () => <StoreCatalogPage view="promotions" /> },
+  { id: 'store-products', description: 'Productos con precio, foto y categorías.', label: 'Productos', module: 'business', group: 'Catálogo', icon: Tag, perms: ['store.manage'], kinds: ['sales'], render: () => <StoreCatalogPage view="products" /> },
+  { id: 'store-promos', description: 'Promociones del día y por fechas.', label: 'Promociones', module: 'business', group: 'Catálogo', icon: BadgePercent, perms: ['store.manage'], kinds: ['sales'], render: () => <StoreCatalogPage view="promotions" /> },
   { id: 'store-test', description: 'Escríbele como un cliente para ver cómo atiende.', label: 'Probar', module: 'business', group: 'Asistente', icon: Bot, perms: ['store.manage'], render: () => <StoreBotPage tab="test" /> },
   { id: 'store-attention', description: 'Tono, horarios y cuándo pasa a una persona.', label: 'Cómo atiende', module: 'business', group: 'Asistente', icon: SlidersHorizontal, perms: ['store.manage'], render: () => <StoreBotPage tab="attention" /> },
   { id: 'store-whatsapp', description: 'Vincula el número de WhatsApp del negocio.', label: 'WhatsApp', module: 'business', group: 'Asistente', icon: Smartphone, perms: ['store.manage'], render: () => <StoreBotPage tab="whatsapp" /> },
   { id: 'store-business', description: 'Dirección, pagos y envíos.', label: 'Datos y pagos', module: 'business', group: 'Negocio', icon: Wallet, perms: ['store.manage'], render: () => <StoreBotPage tab="business" /> },
   { id: 'store-team', description: 'Quién administra este negocio.', label: 'Equipo', module: 'business', group: 'Negocio', icon: Users, perms: ['store.manage'], render: () => <StoreBotPage tab="team" /> },
   // Compatibilidad: enlaces viejos (#/store-bot?tab=whatsapp, #/store-catalog).
+  { id: 'store-bookings', label: 'Citas', module: 'business', group: 'Operación', hidden: true, icon: CalendarDays, kinds: ['services'], perms: ['store.manage'], render: () => <StoreBookingPage tab="agenda" /> },
   { id: 'store-bot', label: 'Asistente', module: 'business', group: 'Asistente', hidden: true, icon: Bot, perms: ['store.manage'], render: () => <StoreBotPage /> },
   { id: 'store-catalog', label: 'Catálogo', module: 'business', group: 'Catálogo', hidden: true, icon: Tag, perms: ['store.manage'], render: () => <StoreCatalogPage /> },
   { id: 'admin-users', label: 'Personas', module: 'platform', group: 'Accesos', icon: ShieldCheck, adminOnly: true, render: () => <UsersPage /> },

@@ -62,21 +62,25 @@ function Shell() {
   const isAdmin = user?.role === 'admin';
   // Only the order assistant (+ the portal itself): a business administrator, not a Canix user.
   const storeOnly = !isAdmin && !!user && user.permissions.includes('store.manage') && user.permissions.every((p) => p === 'store.manage' || p === 'portal.access');
-  const sections = useMemo(() => visibleSections(isAdmin, can, storeOnly), [isAdmin, can, storeOnly]);
+  const allSections = useMemo(() => visibleSections(isAdmin, can, storeOnly), [isAdmin, can, storeOnly]);
+  // The business module: which business is on screen decides the menu - a sales business (productos,
+  // pedidos) and a services business (agenda, servicios, equipo) are different things.
+  const hasBusiness = allSections.some((s) => s.module === 'business');
+  const stores = useStores(hasBusiness);
+  usePolling(stores.reload, 30_000, [stores.reload]);
+  const kind = stores.store?.kind;
+  const sections = useMemo(() => allSections.filter((s) => !s.kinds || !kind || s.kinds.includes(kind)), [allSections, kind]);
   const modules = useMemo(() => visibleModules(sections), [sections]);
   const [hash, navigate] = useHashSection();
   const [menuOpen, setMenuOpen] = useState(false);
   const current = sections.find((s) => s.id === hash) ?? sections.find((s) => s.module === modules[0]?.id && !s.hidden) ?? sections[0];
   const module: ModuleId = current?.module ?? modules[0]?.id ?? 'personal';
 
-  // The business module: counters in the menu and which business is on screen.
-  const hasBusiness = sections.some((s) => s.module === 'business');
-  const stores = useStores(hasBusiness);
-  usePolling(stores.reload, 30_000, [stores.reload]);
+  // Counters in the menu of the business on screen.
   const badges = useMemo(() => {
     const s = stores.store;
     const none: Record<string, number> = {};
-    return s && hasBusiness ? ({ 'store-orders': s.pendingOrders, 'store-chats': s.humanChats } as Record<string, number>) : none;
+    return s && hasBusiness ? ({ 'store-orders': s.pendingOrders, 'store-agenda': s.appointmentsToday, 'store-chats': s.humanChats } as Record<string, number>) : none;
   }, [stores.store, hasBusiness]);
 
   // Each module remembers where you were, so switching back lands in the same place.

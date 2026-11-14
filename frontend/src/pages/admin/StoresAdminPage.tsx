@@ -12,7 +12,7 @@ import { EmptyState } from '../../components/molecules/EmptyState.tsx';
 import { useToast } from '../../components/molecules/Toast.tsx';
 import { Badge } from '../../components/atoms/Badge.tsx';
 import { Button, IconButton } from '../../components/atoms/Button.tsx';
-import { Hint, Input, Label } from '../../components/atoms/Input.tsx';
+import { Hint, Input, Label, Select } from '../../components/atoms/Input.tsx';
 import { Skeleton } from '../../components/atoms/Skeleton.tsx';
 
 /**
@@ -26,6 +26,7 @@ export function StoresAdminPage() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [type, setType] = useState('');
+  const [kind, setKind] = useState<'sales' | 'services'>('sales');
   const [ownerName, setOwnerName] = useState('');
   const [ownerPhone, setOwnerPhone] = useState('');
   // The owner's login, shown once after creating the business.
@@ -127,7 +128,7 @@ export function StoresAdminPage() {
                     <button className="text-left font-bold text-ink hover:text-primary dark:text-white" onClick={() => open(s, 'store-orders')}>
                       {s.name}
                     </button>
-                    <p className="text-xs text-gray-dark">{s.business_type ?? 'Sin tipo'}</p>
+                    <p className="text-xs text-gray-dark">{s.kind === 'services' ? 'Servicios' : 'Ventas'} · {s.business_type ?? 'Sin tipo'}</p>
                   </td>
                   <td className="px-4 py-3">
                     <button className="text-left" onClick={() => open(s, 'store-whatsapp')}>
@@ -172,9 +173,17 @@ export function StoresAdminPage() {
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
-              if (name.trim()) void create('/api/stores', { name, business_type: type, owner: ownerPhone.trim() ? { name: ownerName, phone: ownerPhone } : undefined }, 'new');
+              if (name.trim()) void create('/api/stores', { name, kind, business_type: type, owner: ownerPhone.trim() ? { name: ownerName, phone: ownerPhone } : undefined }, 'new');
             }}
           >
+            <div>
+              <Label htmlFor="n-kind">Tipo de negocio</Label>
+              <Select id="n-kind" value={kind} onChange={(e) => setKind(e.target.value as 'sales' | 'services')}>
+                <option value="sales">Ventas: vende productos y toma pedidos</option>
+                <option value="services">Servicios: agenda citas (peluquería, clínica…)</option>
+              </Select>
+              <p className="mt-1.5 text-xs text-gray-dark">No es lo mismo: cada tipo tiene su asistente, su menú y sus pantallas.</p>
+            </div>
             <div>
               <Label htmlFor="n-name">Nombre del negocio</Label>
               <Input id="n-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} autoFocus required />

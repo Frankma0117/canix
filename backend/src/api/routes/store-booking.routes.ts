@@ -23,6 +23,7 @@ import type { Store } from '../../entities/index.js';
 function storeOf(req: Request): Store {
   const store = storesModel.get(Number(req.params.storeId));
   if (!store || !canManageStore(req.panelUser!, store.id)) throw new StoreError('Ese negocio no existe.');
+  if (store.kind !== 'services') throw new StoreError('Este negocio es de ventas: las citas son solo para negocios de servicios.');
   return store;
 }
 

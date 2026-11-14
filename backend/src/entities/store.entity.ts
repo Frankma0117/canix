@@ -1,8 +1,16 @@
 /** Order-taking assistant ("Pedidos") - see database/schema/store.schema.ts for what each column means. */
 
+/**
+ * 'sales' sells products and takes orders (cart, delivery, payment); 'services' sells bookable
+ * services and takes appointments (staff, schedule, reminders). They are different businesses with
+ * different assistants, menus and screens - see services/store/store-booking*.ts.
+ */
+export type StoreKind = 'sales' | 'services';
+
 export interface Store {
   id: number;
   name: string;
+  kind: StoreKind;
   business_type: string | null;
   description: string | null;
   instructions: string | null;

@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import { ensureColumn } from '../schema-helpers.js';
+import { ensureColumn, hasColumn } from '../schema-helpers.js';
 
 /**
  * Appointments for service businesses (beauty salons, clinics...) inside the order-taking
@@ -9,8 +9,14 @@ import { ensureColumn } from '../schema-helpers.js';
  * Wall-clock 'YYYY-MM-DD HH:mm:ss' timestamps in env.timezone, like everywhere else.
  */
 export function initStoreBookingSchema(db: Database.Database): void {
+  // Businesses are of two different kinds: 'sales' (products + orders) and 'services' (appointments).
+  // Stores created before this column that already offer bookable services become 'services'.
+  const hadKind = hasColumn(db, 'stores', 'kind');
+  ensureColumn(db, 'stores', 'kind', "kind TEXT NOT NULL DEFAULT 'sales' CHECK (kind IN ('sales', 'services'))");
+
   // A product with a duration is a SERVICE that can be booked.
   ensureColumn(db, 'store_products', 'duration_min', 'duration_min INTEGER CHECK (duration_min IS NULL OR duration_min BETWEEN 5 AND 600)');
+  if (!hadKind) db.exec("UPDATE stores SET kind = 'services' WHERE id IN (SELECT store_id FROM store_products WHERE duration_min IS NOT NULL)");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS store_staff (

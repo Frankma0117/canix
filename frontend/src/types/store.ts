@@ -9,9 +9,16 @@ export interface StoreConnection {
   phone: string | null;
 }
 
+/** 'sales' = productos y pedidos; 'services' = servicios y citas. Son negocios distintos. */
+export type StoreKind = 'sales' | 'services';
+
 export interface Store {
   id: number;
   name: string;
+  kind: StoreKind;
+  appointmentsToday: number;
+  servicesCount: number;
+  staffCount: number;
   business_type: string | null;
   description: string | null;
   instructions: string | null;

@@ -4,11 +4,9 @@ import { errMsg, useApi } from '../../services/api.ts';
 import { usePolling } from '../../services/store.tsx';
 import type { BookingAppointment, BookingService, CatalogResponse, KnowledgeEntry, StaffHour, StaffMember, Store } from '../../types/store.ts';
 import { WEEKDAY_NAMES } from '../../utils/dates.ts';
-import { money } from '../../utils/store.ts';
 import { StoreFrame } from '../../components/organisms/store/StoreFrame.tsx';
 import { ConfirmDialog } from '../../components/organisms/store/ConfirmDialog.tsx';
 import { Notice } from '../../components/molecules/Notice.tsx';
-import { Tabs } from '../../components/molecules/Tabs.tsx';
 import { EmptyState } from '../../components/molecules/EmptyState.tsx';
 import { useToast } from '../../components/molecules/Toast.tsx';
 import { Badge, type Tone } from '../../components/atoms/Badge.tsx';
@@ -16,36 +14,34 @@ import { Button } from '../../components/atoms/Button.tsx';
 import { Input, Label, Select, Textarea } from '../../components/atoms/Input.tsx';
 import { Skeleton } from '../../components/atoms/Skeleton.tsx';
 
-type TabId = 'agenda' | 'team' | 'services' | 'knowledge';
+export type TabId = 'agenda' | 'services' | 'team' | 'knowledge';
 
-/** Citas: for businesses that sell services - the agenda, the people who attend, which products are bookable, and what the assistant knows. */
-export function StoreBookingPage() {
+const TITLES: Record<TabId, [string, string]> = {
+  agenda: ['Agenda', 'Las citas que tus clientes agendan por WhatsApp: márcalas como atendidas o cancélalas.'],
+  services: ['Servicios', 'Lo que se agenda: nombre, precio, duración y descripción. El asistente solo ofrece lo que está aquí.'],
+  team: ['Profesionales', 'Quién atiende, con su horario semanal y los servicios que hace. Sin horario, el asistente no ofrece citas.'],
+  knowledge: ['Conocimiento', 'Lo que el asistente puede responder sin inventar: políticas, cuidados, formas de pago, preguntas frecuentes.'],
+};
+
+/** Screens of a SERVICES business (peluquería, clínica...): agenda, services, staff and knowledge. A sales business has none of this. */
+export function StoreBookingPage({ tab }: { tab: TabId }) {
+  const [title, description] = TITLES[tab];
   return (
-    <StoreFrame title="Citas" description="Lo que tus clientes agendan por WhatsApp: la agenda, tu equipo con sus horarios, los servicios y lo que el asistente sabe del negocio.">
-      {(store) => <Booking store={store} />}
+    <StoreFrame title={title} description={description}>
+      {(store) =>
+        store.kind !== 'services' ? (
+          <Notice tone="info">Este negocio es de ventas: maneja productos y pedidos. Las citas son solo para negocios de servicios.</Notice>
+        ) : tab === 'agenda' ? (
+          <Agenda store={store} />
+        ) : tab === 'services' ? (
+          <Services store={store} />
+        ) : tab === 'team' ? (
+          <Team store={store} />
+        ) : (
+          <Knowledge store={store} />
+        )
+      }
     </StoreFrame>
-  );
-}
-
-function Booking({ store }: { store: Store }) {
-  const [tab, setTab] = useState<TabId>('agenda');
-  return (
-    <div className="space-y-5">
-      <Tabs
-        tabs={[
-          { id: 'agenda', label: 'Agenda' },
-          { id: 'team', label: 'Equipo' },
-          { id: 'services', label: 'Servicios' },
-          { id: 'knowledge', label: 'Conocimiento' },
-        ]}
-        active={tab}
-        onChange={setTab}
-      />
-      {tab === 'agenda' && <Agenda store={store} />}
-      {tab === 'team' && <Team store={store} />}
-      {tab === 'services' && <Services store={store} />}
-      {tab === 'knowledge' && <Knowledge store={store} />}
-    </div>
   );
 }
 
@@ -314,7 +310,7 @@ function StaffCard({ member, services, base, onSaved }: { member: StaffMember; s
               </button>
             );
           })}
-          {!services.length && <span className="text-xs text-gray-dark">Primero marca productos como servicio en la pestaña Servicios.</span>}
+          {!services.length && <span className="text-xs text-gray-dark">Primero crea los servicios en la sección Servicios.</span>}
         </div>
       </div>
 
@@ -326,52 +322,116 @@ function StaffCard({ member, services, base, onSaved }: { member: StaffMember; s
 }
 
 // ---------------------------------------------------------------- services
+interface ServiceItem {
+  id: number;
+  name: string;
+  description: string | null;
+  price: number;
+  minutes: number | null;
+}
+
 function Services({ store }: { store: Store }) {
   const api = useApi();
-  const base = `/api/stores/${store.id}/booking`;
-  const [products, setProducts] = useState<{ id: number; name: string; price: number }[] | null>(null);
-  const [durations, setDurations] = useState<Map<number, number>>(new Map());
+  const toast = useToast();
+  const base = `/api/stores/${store.id}`;
+  const [items, setItems] = useState<ServiceItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState({ name: '', price: '', minutes: '60', description: '' });
+  const [doomed, setDoomed] = useState<ServiceItem | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [c, s] = await Promise.all([api.get<CatalogResponse>(`/api/stores/${store.id}/catalog`), api.get<{ services: BookingService[] }>(`${base}/services`)]);
-      setProducts(c.products.map((p) => ({ id: p.id, name: p.name, price: p.price })));
-      setDurations(new Map(s.services.map((x) => [x.id, x.duration_min])));
+      const [c, s] = await Promise.all([api.get<CatalogResponse>(`${base}/catalog`), api.get<{ services: BookingService[] }>(`${base}/booking/services`)]);
+      const minutes = new Map(s.services.map((x) => [x.id, x.duration_min]));
+      setItems(c.products.map((p) => ({ id: p.id, name: p.name, description: p.description, price: p.price, minutes: minutes.get(p.id) ?? null })));
       setError(null);
     } catch (err) {
       setError(errMsg(err));
     }
-  }, [api, base, store.id]);
+  }, [api, base]);
   useEffect(() => void load(), [load]);
 
+  async function create() {
+    try {
+      const { id } = await api.post<{ id: number }>(`${base}/products`, { name: draft.name, price: Number(draft.price || 0), description: draft.description });
+      await api.put(`${base}/booking/services/${id}`, { duration_min: Number(draft.minutes) });
+      setDraft({ name: '', price: '', minutes: '60', description: '' });
+      toast.success('Servicio creado.');
+      await load();
+    } catch (err) {
+      setError(errMsg(err));
+    }
+  }
+
+  async function remove(item: ServiceItem) {
+    try {
+      await api.del(`${base}/products/${item.id}`);
+      toast.success('Servicio borrado.');
+      await load();
+    } catch (err) {
+      setError(errMsg(err));
+    }
+    setDoomed(null);
+  }
+
+  const valid = draft.name.trim() && draft.price.trim() && Number(draft.minutes) >= 5;
   return (
-    <div className="space-y-3">
-      <p className="text-sm text-gray-dark">Marca la duración en minutos de los productos que se agendan. Los que dejes vacíos siguen siendo productos normales del catálogo.</p>
+    <div className="space-y-4">
       {error && <Notice tone="error">{error}</Notice>}
-      {!products ? (
+      <div className="space-y-3 rounded-2xl border border-gray-medium bg-white p-4 dark:border-white/10 dark:bg-white/5">
+        <p className="text-sm font-bold text-ink dark:text-white">Nuevo servicio</p>
+        <div className="grid gap-3 sm:grid-cols-[1fr_9rem_8rem]">
+          <div>
+            <Label htmlFor="sv-name">Nombre</Label>
+            <Input id="sv-name" value={draft.name} maxLength={120} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Ej. Corte de cabello" />
+          </div>
+          <div>
+            <Label htmlFor="sv-price">Precio</Label>
+            <Input id="sv-price" inputMode="numeric" value={draft.price} onChange={(e) => setDraft({ ...draft, price: e.target.value.replace(/\D/g, '') })} placeholder="30000" />
+          </div>
+          <div>
+            <Label htmlFor="sv-min">Duración (min)</Label>
+            <Input id="sv-min" type="number" min={5} max={600} step={5} value={draft.minutes} onChange={(e) => setDraft({ ...draft, minutes: e.target.value })} />
+          </div>
+        </div>
+        <div>
+          <Label htmlFor="sv-desc">Descripción (opcional)</Label>
+          <Input id="sv-desc" value={draft.description} maxLength={300} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Qué incluye" />
+        </div>
+        <Button onClick={create} disabled={!valid}>
+          <Plus size={16} /> Crear servicio
+        </Button>
+      </div>
+      {!items ? (
         <Skeleton className="h-32" />
-      ) : !products.length ? (
-        <EmptyState icon={<CalendarDays size={22} />} title="Aún no hay productos" description="Crea los servicios como productos en Catálogo (nombre, precio y descripción) y vuelve aquí a ponerles la duración." />
+      ) : !items.length ? (
+        <EmptyState icon={<CalendarDays size={22} />} title="Aún no hay servicios" description="Crea el primero arriba: nombre, precio y cuánto dura. El asistente lo ofrece y agenda con la duración que pongas." />
       ) : (
-        products.map((p) => <ServiceRow key={p.id} product={p} minutes={durations.get(p.id) ?? null} base={base} onSaved={load} />)
+        items.map((s) => <ServiceRow key={s.id} item={s} base={base} onSaved={load} onDelete={() => setDoomed(s)} />)
+      )}
+      {doomed && (
+        <ConfirmDialog title="¿Borrar este servicio?" cta="Borrar" onCancel={() => setDoomed(null)} onConfirm={() => remove(doomed)}>
+          «{doomed.name}» deja de ofrecerse. Las citas ya agendadas se conservan en la agenda.
+        </ConfirmDialog>
       )}
     </div>
   );
 }
 
-function ServiceRow({ product, minutes, base, onSaved }: { product: { id: number; name: string; price: number }; minutes: number | null; base: string; onSaved: () => Promise<void> }) {
+function ServiceRow({ item, base, onSaved, onDelete }: { item: ServiceItem; base: string; onSaved: () => Promise<void>; onDelete: () => void }) {
   const api = useApi();
   const toast = useToast();
-  const [value, setValue] = useState(minutes ? String(minutes) : '');
+  const initial = { name: item.name, price: String(item.price), minutes: item.minutes ? String(item.minutes) : '', description: item.description ?? '' };
+  const [v, setV] = useState(initial);
   const [error, setError] = useState<string | null>(null);
-  const changed = value !== (minutes ? String(minutes) : '');
+  const changed = JSON.stringify(v) !== JSON.stringify(initial);
 
   async function save() {
     setError(null);
     try {
-      await api.put(`${base}/services/${product.id}`, { duration_min: value.trim() ? Number(value) : null });
-      toast.success(value.trim() ? 'Servicio guardado.' : 'Ya no se agenda como servicio.');
+      await api.patch(`${base}/products/${item.id}`, { name: v.name, price: Number(v.price || 0), description: v.description });
+      await api.put(`${base}/booking/services/${item.id}`, { duration_min: v.minutes.trim() ? Number(v.minutes) : null });
+      toast.success('Servicio guardado.');
       await onSaved();
     } catch (err) {
       setError(errMsg(err));
@@ -379,17 +439,21 @@ function ServiceRow({ product, minutes, base, onSaved }: { product: { id: number
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-gray-medium bg-white p-3.5 dark:border-white/10 dark:bg-white/5">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-ink dark:text-white">{product.name}</p>
-        <p className="text-xs text-gray-dark">{money(product.price)}</p>
+    <div className="space-y-2 rounded-2xl border border-gray-medium bg-white p-3.5 dark:border-white/10 dark:bg-white/5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Input aria-label="Nombre" className="min-w-[10rem] flex-1" value={v.name} maxLength={120} onChange={(e) => setV({ ...v, name: e.target.value })} />
+        <Input aria-label="Precio" inputMode="numeric" className="w-28" value={v.price} onChange={(e) => setV({ ...v, price: e.target.value.replace(/\D/g, '') })} />
+        <Input aria-label="Duración en minutos" type="number" min={5} max={600} step={5} className="w-24" placeholder="min" value={v.minutes} onChange={(e) => setV({ ...v, minutes: e.target.value })} />
+        <Button size="sm" variant="soft" disabled={!changed || !v.name.trim()} onClick={save}>
+          Guardar
+        </Button>
+        <Button size="sm" variant="ghost" aria-label={`Borrar ${item.name}`} onClick={onDelete}>
+          <Trash2 size={14} />
+        </Button>
       </div>
-      {minutes && <Badge tone="success">Se agenda</Badge>}
-      <Input type="number" min={5} max={600} step={5} className="w-28" aria-label={`Duración de ${product.name} en minutos`} placeholder="minutos" value={value} onChange={(e) => setValue(e.target.value)} />
-      <Button size="sm" variant="soft" disabled={!changed} onClick={save}>
-        Guardar
-      </Button>
-      {error && <p className="w-full text-xs text-error">{error}</p>}
+      <Input aria-label="Descripción" value={v.description} maxLength={300} placeholder="Descripción (opcional)" onChange={(e) => setV({ ...v, description: e.target.value })} />
+      {!item.minutes && <p className="text-xs font-semibold text-amber-700 dark:text-amber-300">Sin duración: el asistente no lo agenda. Escribe los minutos y guarda.</p>}
+      {error && <p className="text-xs text-error">{error}</p>}
     </div>
   );
 }

@@ -147,7 +147,8 @@ export function BusinessForm({ store, onSaved }: { store: Store; onSaved: () => 
     onSaved,
   );
   const d = f.draft;
-  const noPayment = !d.accepts_transfer && !d.accepts_cash;
+  const services = store.kind === 'services';
+  const noPayment = !services && !d.accepts_transfer && !d.accepts_cash;
 
   return (
     <form
@@ -165,12 +166,12 @@ export function BusinessForm({ store, onSaved }: { store: Store; onSaved: () => 
           </div>
           <div>
             <Label htmlFor="b-type">Tipo de negocio</Label>
-            <Input id="b-type" value={d.business_type} onChange={(e) => f.set('business_type', e.target.value)} maxLength={80} placeholder="Restaurante, tienda de ropa, repostería…" />
+            <Input id="b-type" value={d.business_type} onChange={(e) => f.set('business_type', e.target.value)} maxLength={80} placeholder={services ? 'Peluquería, clínica, estudio de uñas…' : 'Restaurante, tienda de ropa, repostería…'} />
           </div>
         </div>
         <div>
           <Label htmlFor="b-desc">Descripción</Label>
-          <Textarea id="b-desc" rows={2} value={d.description} onChange={(e) => f.set('description', e.target.value)} maxLength={600} placeholder="Qué vendes y qué te hace distinto." />
+          <Textarea id="b-desc" rows={2} value={d.description} onChange={(e) => f.set('description', e.target.value)} maxLength={600} placeholder={services ? 'Qué servicios ofreces y qué te hace distinto.' : 'Qué vendes y qué te hace distinto.'} />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -184,6 +185,7 @@ export function BusinessForm({ store, onSaved }: { store: Store; onSaved: () => 
         </div>
       </Section>
 
+      {!services && (
       <Section title="Entrega" hint="El costo del domicilio se suma solo al total del pedido.">
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
@@ -208,7 +210,17 @@ export function BusinessForm({ store, onSaved }: { store: Store; onSaved: () => 
         </div>
         <Toggle checked={d.allows_pickup} onChange={(v) => f.set('allows_pickup', v)} label="El cliente puede recoger en el local" />
       </Section>
+      )}
 
+      {services && (
+        <Section title="Pagos" hint="Cómo pagan los clientes. El asistente lo cuenta solo si el cliente pregunta; los cobros se hacen en el negocio.">
+          <div>
+            <Label htmlFor="b-pay">Medios de pago</Label>
+            <Textarea id="b-pay" rows={3} value={d.payment_info} onChange={(e) => f.set('payment_info', e.target.value)} maxLength={800} placeholder="Efectivo, tarjeta o Nequi 300 000 0000 a nombre de…" />
+          </div>
+        </Section>
+      )}
+      {!services && (
       <Section title="Pagos" hint="Cuando el cliente paga por transferencia, el asistente le da estos datos y le pide la foto del comprobante.">
         <div className="space-y-3">
           <Toggle checked={d.accepts_transfer} onChange={(v) => f.set('accepts_transfer', v)} label="Transferencia o consignación" hint="Nequi, Daviplata, Bancolombia, Bre-B…" />
@@ -223,6 +235,7 @@ export function BusinessForm({ store, onSaved }: { store: Store; onSaved: () => 
           </div>
         )}
       </Section>
+      )}
       <SaveBar dirty={f.dirty && !noPayment} saving={f.saving} />
     </form>
   );

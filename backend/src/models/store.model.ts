@@ -29,6 +29,7 @@ function setClause<T extends object>(patch: T, allowed: readonly (keyof T & stri
 
 const STORE_FIELDS = [
   'name',
+  'kind',
   'business_type',
   'description',
   'instructions',

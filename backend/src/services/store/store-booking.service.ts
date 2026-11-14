@@ -84,8 +84,10 @@ export function listServices(storeId: number): BookableService[] {
     .all(storeId) as BookableService[];
 }
 
-export function hasServices(storeId: number): boolean {
-  return !!db.prepare('SELECT 1 FROM store_products WHERE store_id = ? AND duration_min IS NOT NULL LIMIT 1').get(storeId);
+/** Confirmed appointments of the store that start today (for the business home). */
+export function appointmentsToday(storeId: number): number {
+  const day = todayLocal();
+  return (db.prepare("SELECT COUNT(*) AS n FROM store_appointments WHERE store_id = ? AND status = 'confirmed' AND start_at >= ? AND start_at < ?").get(storeId, `${day} 00:00:00`, `${addDays(day, 1).slice(0, 10)} 00:00:00`) as { n: number }).n;
 }
 
 export function setServiceDuration(storeId: number, productId: number, durationMin: number | null): boolean {
