@@ -8,6 +8,7 @@ import { initSchedulingSchema } from './schema/scheduling.schema.js';
 import { initGrowthSchema } from './schema/growth.schema.js';
 import { initPromoSchema } from './schema/promo.schema.js';
 import { initStoreSchema } from './schema/store.schema.js';
+import { initStoreBookingSchema } from './schema/store-booking.schema.js';
 import { initPublisherSchema } from './schema/publisher.schema.js';
 
 /**
@@ -26,6 +27,7 @@ export function initSchema(): void {
   initGrowthSchema(db);
   initPromoSchema(db);
   initStoreSchema(db);
+  initStoreBookingSchema(db);
   initPublisherSchema(db);
 }
 

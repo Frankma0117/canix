@@ -35,6 +35,7 @@ import { registerWorkoutRoutes } from './routes/workouts.routes.js';
 import { registerCalendarRoutes } from './routes/calendar.routes.js';
 import { registerStickerRoutes } from './routes/stickers.routes.js';
 import { registerStoreRoutes } from './routes/store.routes.js';
+import { registerStoreBookingRoutes } from './routes/store-booking.routes.js';
 import type { User } from '../entities/index.js';
 import { PUBLIC_DIR } from '../config/paths.js';
 
@@ -152,6 +153,7 @@ export function createServer(bot: BotManager): Express {
   registerStickerRoutes(app);
   registerSchedulingRoutes(app);
   registerStoreRoutes(app);
+  registerStoreBookingRoutes(app);
   registerAdminRoutes(app, bot);
 
   // Unknown API path -> JSON 404 (never the SPA's index.html).

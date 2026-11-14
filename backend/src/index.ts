@@ -1,5 +1,6 @@
 import { wardrobeUpkeep } from './services/fashion/upkeep.js';
 import { startPublisherJob } from './services/publisher/publisher-job.js';
+import { startStoreBookingJob } from './services/store/store-booking-job.js';
 import { setPublisherHost } from './services/publisher/automation/automation.host.js';
 import { setWardrobeNotifier } from './services/fashion/review.js';
 import { repairRoutines } from './services/routines/routine-repairs.service.js';
@@ -131,6 +132,7 @@ async function main() {
     },
   });
   startPublisherJob();
+  startStoreBookingJob();
 
   // Wardrobe upkeep (see services/fashion/upkeep.ts): colors read from the photos, exact duplicates removed -
   // a small batch now and every 20 minutes, in the background.
