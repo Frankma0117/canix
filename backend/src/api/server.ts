@@ -10,6 +10,7 @@ import { PERMISSIONS } from '../services/permissions/catalog.js';
 import { securityHeaders, rateLimit, requestTimeout, errorHandler } from './middleware/security.middleware.js';
 import { h } from './http-helpers.js';
 import { registerAdminRoutes } from './routes/admin.routes.js';
+import { registerPublisherPublicRoutes } from './routes/publisher.routes.js';
 import { registerPublicRoutes } from './routes/growth.routes.js';
 import { registerNotFound } from '../services/growth/site.service.js';
 import { registerSchedulingRoutes } from './routes/scheduling.routes.js';
@@ -66,6 +67,8 @@ export function createServer(bot: BotManager): Express {
   // Public sales page (+ robots/sitemap) and its unauthenticated API: demo requests and analytics.
   // Before express.static so the landing host gets the landing at "/" instead of the portal.
   registerPublicRoutes(app, bot);
+  // Return page of the social networks' login (see services/publisher/publisher-oauth.ts) - public, protected by its one-use state.
+  registerPublisherPublicRoutes(app);
   app.use(express.static(publicDir, { maxAge: '1h', index: 'index.html' }));
 
   // ---------- Portal authentication (number + password, see services/auth/web-auth.service.ts) ----------

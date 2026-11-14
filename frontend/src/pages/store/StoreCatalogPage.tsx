@@ -21,19 +21,23 @@ type TabId = 'products' | 'promotions' | 'categories';
 type Doomed = { kind: 'product' | 'promotion' | 'category'; id: number; name: string };
 
 /** Catálogo: what the assistant can offer and at what price - products, promotions and categories. */
-export function StoreCatalogPage() {
+export function StoreCatalogPage({ view }: { view?: 'products' | 'promotions' }) {
+  const promos = view === 'promotions';
   return (
-    <StoreFrame title="Catálogo" description="Lo que el asistente puede ofrecer: productos con precio, foto y detalles, y las promociones de cada día. Los precios que cobra salen siempre de aquí.">
-      {(store) => <Catalog store={store} />}
+    <StoreFrame
+      title={promos ? 'Promociones' : 'Productos'}
+      description={promos ? 'La promoción del día: un producto a precio especial los días que elijas. El asistente la ofrece y cobra ese precio.' : 'Lo que el asistente puede ofrecer, con precio, foto y detalles. Los precios que cobra salen siempre de aquí.'}
+    >
+      {(store) => <Catalog store={store} view={view} />}
     </StoreFrame>
   );
 }
 
-function Catalog({ store }: { store: Store }) {
+function Catalog({ store, view }: { store: Store; view?: 'products' | 'promotions' }) {
   const api = useApi();
   const toast = useToast();
   const base = `/api/stores/${store.id}`;
-  const [tab, setTab] = useState<TabId>(() => (hashParam('tab') === 'promotions' ? 'promotions' : 'products'));
+  const [tab, setTab] = useState<TabId>(() => view ?? (hashParam('tab') === 'promotions' ? 'promotions' : 'products'));
   const [data, setData] = useState<CatalogResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -108,15 +112,19 @@ function Catalog({ store }: { store: Store }) {
     <>
       {error && <Notice tone="error">{error}</Notice>}
       <div className="flex flex-wrap items-start justify-between gap-x-4">
-        <Tabs
-          tabs={[
-            { id: 'products', label: 'Productos', count: data.products.length },
-            { id: 'promotions', label: 'Promociones', count: data.promotions.length },
-            { id: 'categories', label: 'Categorías', count: data.categories.length },
-          ]}
-          active={tab}
-          onChange={setTab}
-        />
+        {view === 'promotions' ? (
+          <span />
+        ) : (
+          <Tabs
+            tabs={[
+              { id: 'products', label: 'Productos', count: data.products.length },
+              ...(view ? [] : [{ id: 'promotions' as TabId, label: 'Promociones', count: data.promotions.length }]),
+              { id: 'categories', label: 'Categorías', count: data.categories.length },
+            ]}
+            active={tab}
+            onChange={setTab}
+          />
+        )}
         <div className="mb-5 flex flex-wrap items-center gap-2">
           {tab === 'products' && (
             <>

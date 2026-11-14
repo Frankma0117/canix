@@ -79,11 +79,20 @@ export interface Target {
 /** What a provider receives: the media plus the texts already adapted to its platform. */
 export interface PublishRequest {
   mediaType: MediaType;
-  mediaRef: string;
-  thumbnailRef: string;
+  /** Public URL of the media (for platforms that fetch it themselves, e.g. Meta). */
+  mediaUrl: string;
+  thumbnailUrl: string;
+  /** The file's bytes (for platforms that need an upload, e.g. YouTube). */
+  readMedia: () => Promise<Buffer>;
   text: SeoText;
   accessToken: string;
   accountName: string;
+}
+
+/** How the publisher reaches the media: resolved by the project's media layer (publisher-media.ts). */
+export interface MediaAccess {
+  url(ref: string): string;
+  read(ref: string): Promise<Buffer | null>;
 }
 
 export interface PublishResult {
@@ -107,9 +116,28 @@ export interface PublisherProvider {
   readonly label: string;
   /** False for providers that are not built yet: the panel shows them as «próximamente». */
   readonly available: boolean;
+  /** Real providers connect through the platform's login page (OAuth) instead of typing a name. */
+  readonly oauth?: boolean;
+  /** False when the app credentials (in .env) are missing. */
+  configured(): boolean;
+  /** Which .env variables the provider needs (shown in the panel when it isn't configured). */
+  readonly envVars?: string[];
   connect(platform: Platform, input: { accountName: string }): Promise<ConnectResult>;
+  /** OAuth: the login page's URL, and the exchange of the returned code for tokens. */
+  authUrl?(platform: Platform, redirectUri: string, state: string): string;
+  exchange?(platform: Platform, code: string, redirectUri: string): Promise<ConnectResult>;
+  /** Gets a new access token with the refresh token. */
+  refresh?(platform: Platform, refreshToken: string): Promise<{ accessToken: string; expiresAt: string }>;
   publish(platform: Platform, req: PublishRequest): Promise<PublishResult>;
 }
+
+/** What each network accepts. */
+export const PLATFORM_MEDIA: Record<Platform, MediaType[]> = {
+  youtube: ['video'],
+  instagram: ['video', 'image'],
+  facebook: ['video', 'image'],
+  tiktok: ['video'],
+};
 
 /** Limits per platform used to trim the texts. */
 export const PLATFORM_LIMITS: Record<Platform, { title: number; description: number; hashtags: number }> = {

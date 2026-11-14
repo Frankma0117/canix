@@ -42,6 +42,18 @@ export const VOICES: VoiceOption[] = [
   { key: 'M8', gender: 'female', name: 'Gabriela', style: 'clara y cálida', id: 'c5db0dd415bd4521a5c3c36372a4c464' },
   { key: 'M9', gender: 'female', name: 'Paula', style: 'paisa, expresiva y amigable', id: 'e8ffb4ccb56a4eb0b1d85b57f2f45a47' },
   { key: 'M10', gender: 'female', name: 'Juliana', style: 'enérgica y profesional', id: '14909251a5064426ab1ae84cdbb4aeac' },
+  { key: 'H11', gender: 'male', name: 'Rodrigo', style: 'locutor grave y profesional', id: '3f45a7fd7a614655a61eb7027b955783' },
+  { key: 'H12', gender: 'male', name: 'Ricardo', style: 'locutor publicitario, seguro', id: 'a1fe2e1b6f324e27929d5088f2d09be3' },
+  { key: 'H13', gender: 'male', name: 'Néstor', style: 'locutor profundo, de anuncio', id: 'def180b161a3498db94025d5124fcb2a' },
+  { key: 'H14', gender: 'male', name: 'Adrián', style: 'narrador de historias, cercano', id: '9deec9a061894a93a133d2bf45d2e4c0' },
+  { key: 'H15', gender: 'male', name: 'Javier', style: 'mexicano, narrador claro', id: 'b0e04de04f6e4ace8deee82fa6d121e5' },
+  { key: 'H16', gender: 'male', name: 'Esteban', style: 'enérgico, de publicidad', id: '9a831a5fafd04c9aab68d248a32fa5b2' },
+  { key: 'M11', gender: 'female', name: 'Natalia', style: 'joven, educativa y cercana', id: '35929683c49c4ec0bf779dc07d22620b' },
+  { key: 'M12', gender: 'female', name: 'Carolina', style: 'narradora de voz profunda', id: 'bfed5c0810a347dbb62e8ccce7f59c48' },
+  { key: 'M13', gender: 'female', name: 'Alejandra', style: 'profesional, de publicidad', id: '70fb19852a484f3eb1d040423e2a8be7' },
+  { key: 'M14', gender: 'female', name: 'Fernanda', style: 'mexicana, educativa y clara', id: 'b806a84350454df0af0b86f930f36915' },
+  { key: 'M15', gender: 'female', name: 'Ximena', style: 'mexicana, cálida y conversacional', id: '561fe660218349598b7570bab1c8148b' },
+  { key: 'M16', gender: 'female', name: 'Catalina', style: 'colombiana, enérgica, de anuncio', id: '0051425f78064482b3a75146feec8651' },
 ];
 
 function norm(text: string): string {

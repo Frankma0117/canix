@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Sparkles, Trash2 } from 'lucide-react';
+import { Check, Copy, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { errMsg, useApi } from '../../services/api.ts';
 import { rememberStore, useStores } from '../../services/store.tsx';
 import type { Store } from '../../types/store.ts';
@@ -26,6 +26,10 @@ export function StoresAdminPage() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [type, setType] = useState('');
+  const [ownerName, setOwnerName] = useState('');
+  const [ownerPhone, setOwnerPhone] = useState('');
+  // The owner's login, shown once after creating the business.
+  const [created, setCreated] = useState<{ storeName: string; loginId: string; password: string | null; existing: boolean } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<Store | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,13 +38,16 @@ export function StoresAdminPage() {
     setBusy(label);
     setError(null);
     try {
-      const { id } = await api.post<{ id: number }>(path, body);
+      const { id, access } = await api.post<{ id: number; access?: { loginId: string; created: boolean; temporaryPassword: string | null } | null }>(path, body);
       rememberStore(id);
       toast.success(label === 'demo' ? 'Negocio demo creado con catálogo, fotos y promociones.' : 'Negocio creado.');
       setCreating(false);
+      if (access) setCreated({ storeName: name, loginId: access.loginId, password: access.temporaryPassword, existing: !access.created });
       setName('');
       setType('');
-      goTo(label === 'demo' ? 'store-bot?tab=test' : 'store-bot?tab=business');
+      setOwnerName('');
+      setOwnerPhone('');
+      if (!access) goTo(label === 'demo' ? 'store-test' : 'store-business');
     } catch (err) {
       setError(errMsg(err));
     } finally {
@@ -123,7 +130,7 @@ export function StoresAdminPage() {
                     <p className="text-xs text-gray-dark">{s.business_type ?? 'Sin tipo'}</p>
                   </td>
                   <td className="px-4 py-3">
-                    <button className="text-left" onClick={() => open(s, 'store-bot?tab=whatsapp')}>
+                    <button className="text-left" onClick={() => open(s, 'store-whatsapp')}>
                       <Badge tone={s.connection.connected ? 'success' : s.connection.linked ? 'warning' : 'neutral'}>
                         {s.connection.connected ? `+${s.connection.phone}` : s.connection.linked ? 'Desconectado' : 'Sin vincular'}
                       </Badge>
@@ -141,7 +148,7 @@ export function StoresAdminPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => open(s, 'store-bot?tab=team')}>
+                      <Button size="sm" variant="ghost" onClick={() => open(s, 'store-team')}>
                         Equipo
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => void toggle(s)}>
@@ -165,7 +172,7 @@ export function StoresAdminPage() {
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
-              if (name.trim()) void create('/api/stores', { name, business_type: type }, 'new');
+              if (name.trim()) void create('/api/stores', { name, business_type: type, owner: ownerPhone.trim() ? { name: ownerName, phone: ownerPhone } : undefined }, 'new');
             }}
           >
             <div>
@@ -177,6 +184,19 @@ export function StoresAdminPage() {
               <Input id="n-type" value={type} onChange={(e) => setType(e.target.value)} maxLength={80} placeholder="Restaurante, tienda de ropa, droguería…" />
               <Hint>Ayuda al asistente a hablar como el negocio.</Hint>
             </div>
+            <fieldset className="space-y-3 rounded-2xl border border-gray-medium/70 p-4 dark:border-white/10">
+              <legend className="px-1 text-sm font-bold text-ink dark:text-white">Administrador del negocio</legend>
+              <p className="text-sm text-gray-dark">Recibe su propio usuario para entrar al portal y ver solo su negocio. Tú puedes entrar a cualquier negocio en modo soporte.</p>
+              <div>
+                <Label htmlFor="o-name">Nombre</Label>
+                <Input id="o-name" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} maxLength={80} autoComplete="off" />
+              </div>
+              <div>
+                <Label htmlFor="o-phone">WhatsApp personal (con indicativo)</Label>
+                <Input id="o-phone" value={ownerPhone} onChange={(e) => setOwnerPhone(e.target.value)} inputMode="tel" placeholder="573001234567" autoComplete="off" />
+                <Hint>Es su usuario de ingreso. Si lo dejas vacío, lo agregas después en Equipo.</Hint>
+              </div>
+            </fieldset>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setCreating(false)}>
                 Cancelar
@@ -188,6 +208,7 @@ export function StoresAdminPage() {
           </form>
         </Modal>
       )}
+      {created && <AccessCard info={created} onClose={() => { setCreated(null); goTo('store-business'); }} />}
       {deleting && (
         <ConfirmDialog
           title="Borrar el negocio"
@@ -208,5 +229,43 @@ export function StoresAdminPage() {
         </ConfirmDialog>
       )}
     </Page>
+  );
+}
+
+/** The business owner's login, shown once: copy it or send it by WhatsApp. */
+function AccessCard({ info, onClose }: { info: { storeName: string; loginId: string; password: string | null; existing: boolean }; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const url = window.location.origin;
+  const text = info.password
+    ? `Hola, ya tienes acceso a ${info.storeName} en Canix.
+Ingresa en ${url}
+Usuario: ${info.loginId}
+Contraseña temporal: ${info.password}
+Al entrar te pedirá crear tu propia contraseña.`
+    : `Hola, ya puedes administrar ${info.storeName} en Canix. Ingresa en ${url} con tu usuario ${info.loginId} y tu contraseña de siempre.`;
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* the text is selectable below */
+    }
+  }
+  return (
+    <Modal title="Negocio creado" description={info.existing ? 'Esa persona ya tenía usuario: ahora también administra este negocio.' : 'Estos datos se muestran una sola vez. Compártelos con su administrador.'} onClose={onClose}>
+      <div className="space-y-4">
+        <pre className="select-all whitespace-pre-wrap rounded-2xl bg-gray-light p-4 text-sm leading-relaxed text-ink dark:bg-white/5 dark:text-white">{text}</pre>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="secondary" onClick={() => void copy()}>
+            {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? 'Copiado' : 'Copiar'}
+          </Button>
+          <a href={`https://wa.me/${info.loginId}?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer" className="inline-flex items-center rounded-xl bg-success px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+            Enviar por WhatsApp
+          </a>
+          <Button onClick={onClose}>Listo, configurar el negocio</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }

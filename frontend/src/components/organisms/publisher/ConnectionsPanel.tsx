@@ -19,7 +19,14 @@ export function ConnectionsPanel({ api, connections, onChange }: { api: Api; con
   async function connect(c: PublisherConnection) {
     setBusy(c.platform);
     try {
-      await api.post(`/api/admin/publisher/connections/${c.platform}`, { provider: provider[c.platform] ?? 'mock', account: account[c.platform] ?? '' });
+      const key = (c.providers.find((p) => p.key === provider[c.platform]) ?? c.providers.find((p) => p.available && p.key !== 'mock') ?? c.providers[0]).key;
+      if (c.providers.find((p) => p.key === key)?.oauth) {
+        // Real networks: their own login page; it returns to the panel when done.
+        const { url } = await api.post<{ url: string }>(`/api/admin/publisher/connections/${c.platform}/start`, { provider: key });
+        window.location.assign(url);
+        return;
+      }
+      await api.post(`/api/admin/publisher/connections/${c.platform}`, { provider: key, account: account[c.platform] ?? '' });
       toast.success(`Listo: ${c.name} quedó conectada.`);
       onChange();
     } catch (err) {
@@ -44,9 +51,11 @@ export function ConnectionsPanel({ api, connections, onChange }: { api: Api; con
 
   return (
     <div className="space-y-4">
-      <Notice tone="info">Por ahora solo funciona la conexión simulada (para probar todo el flujo sin publicar de verdad). Las conexiones reales con YouTube, Instagram, Facebook y TikTok llegan en las próximas fases.</Notice>
+      <Notice tone="info">YouTube se conecta con tu cuenta de Google. Instagram, Facebook y TikTok llegan en las próximas fases; mientras tanto puedes probarlas con la conexión «Simulada» (no publica de verdad).</Notice>
       <div className="grid gap-4 md:grid-cols-2">
-        {connections.map((c) => (
+        {connections.map((c) => {
+          const sel = c.providers.find((p) => p.key === provider[c.platform]) ?? c.providers.find((p) => p.available && p.key !== 'mock') ?? c.providers[0];
+          return (
           <Card key={c.platform} className="p-5">
             <div className="flex items-start justify-between gap-3">
               <h3 className="font-display text-lg font-extrabold text-ink dark:text-white">{c.name}</h3>
@@ -64,7 +73,7 @@ export function ConnectionsPanel({ api, connections, onChange }: { api: Api; con
               </>
             ) : (
               <div className="mt-3 space-y-2.5">
-                <Select aria-label={`Proveedor de ${c.name}`} value={provider[c.platform] ?? 'mock'} onChange={(e) => setProvider((p) => ({ ...p, [c.platform]: e.target.value }))}>
+                <Select aria-label={`Proveedor de ${c.name}`} value={sel.key} onChange={(e) => setProvider((p) => ({ ...p, [c.platform]: e.target.value }))}>
                   {c.providers.map((p) => (
                     <option key={p.key} value={p.key}>
                       {p.label}
@@ -72,14 +81,16 @@ export function ConnectionsPanel({ api, connections, onChange }: { api: Api; con
                     </option>
                   ))}
                 </Select>
-                <Input aria-label={`Nombre de la cuenta de ${c.name}`} placeholder="Nombre de la cuenta (opcional)" value={account[c.platform] ?? ''} onChange={(e) => setAccount((a) => ({ ...a, [c.platform]: e.target.value }))} />
-                <Button size="sm" onClick={() => connect(c)} loading={busy === c.platform}>
-                  <Link2 size={14} /> Conectar
+                {!sel.oauth && <Input aria-label={`Nombre de la cuenta de ${c.name}`} placeholder="Nombre de la cuenta (opcional)" value={account[c.platform] ?? ''} onChange={(e) => setAccount((a) => ({ ...a, [c.platform]: e.target.value }))} />}
+                {sel.oauth && !sel.configured && <p className="text-xs text-warning">Faltan las claves de la app en el servidor: {sel.envVars.join(', ')}. Mira docs/PUBLISHER.md.</p>}
+                <Button size="sm" onClick={() => connect(c)} loading={busy === c.platform} disabled={!sel.available || !sel.configured}>
+                  <Link2 size={14} /> {sel.oauth ? 'Conectar con Google' : 'Conectar'}
                 </Button>
               </div>
             )}
           </Card>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

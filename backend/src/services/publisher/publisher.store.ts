@@ -50,6 +50,9 @@ export const publisherStore = {
          connected_at = datetime('now'), updated_at = datetime('now')`,
     ).run(c.platform, c.provider, c.accountName, c.accessEnc, c.refreshEnc, c.expiresAt);
   },
+  updateTokens(platform: Platform, accessEnc: string, expiresAt: string): void {
+    db.prepare(`UPDATE publisher_connections SET access_token_enc = ?, expires_at = ?, updated_at = datetime('now') WHERE platform = ?`).run(accessEnc, expiresAt, platform);
+  },
   markConnectionError(platform: Platform, message: string): void {
     db.prepare(`UPDATE publisher_connections SET status = 'error', last_error = ?, updated_at = datetime('now') WHERE platform = ?`).run(message.slice(0, 300), platform);
   },

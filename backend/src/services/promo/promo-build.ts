@@ -35,7 +35,7 @@ async function askModel(userId: number | null, system: string, prompt: string): 
     model,
     messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }],
     temperature: 0.8,
-    max_tokens: 2000,
+    max_tokens: 5000,
     response_format: { type: 'json_object' },
   });
   if (res.usage && userId) aiUsageModel.log(userId, 'promo.text', model, res.usage.prompt_tokens, res.usage.completion_tokens);
@@ -148,7 +148,12 @@ async function buildVideo(item: PromoItem, work: string): Promise<void> {
       dur = Math.max(dur, timing.end);
       for (const line of chat) effects.push([line.from === 'me' ? sounds.sent : sounds.received, t + line.at, 1]);
     }
-    if (scene.shot === 'end') dur += 1.4;
+    if (scene.shot === 'screen') effects.push([sounds.click, t + 0.65, 0.8]);
+    if ((scene.shot === 'features' || scene.shot === 'steps') && scene.items) scene.items.forEach((_, n) => effects.push([sounds.pop, t + 0.4 + n * 0.28 + 0.1, 0.7]));
+    if (scene.shot === 'end') {
+      dur += 1.4;
+      effects.push([sounds.ding, t + 0.2, 0.8]);
+    } else if (i > 0) effects.push([sounds.whoosh, Math.max(0, t - 0.1), scene.shot === 'chat' ? 0.3 : 0.55]);
     timeline.push({ ...scene, ...(chat ? { chat } : {}), start: +t.toFixed(3), dur: +dur.toFixed(3), say_start: +(t + lead).toFixed(3), say_dur: +said.toFixed(3) });
     t += dur;
   }

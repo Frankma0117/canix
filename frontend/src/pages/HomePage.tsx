@@ -23,7 +23,7 @@ export function HomePage() {
   const isAdmin = user?.role === 'admin';
   const { sticker, greeting } = greetingSticker();
   const modules = useMemo(
-    () => visibleSections(isAdmin, can).filter((s) => s.description && s.group !== 'Administración'),
+    () => visibleSections(isAdmin, can).filter((s) => s.description && s.module === 'personal' && !s.hidden),
     [isAdmin, can],
   );
   const firstName = (user?.name ?? '').split(/\s+/)[0];

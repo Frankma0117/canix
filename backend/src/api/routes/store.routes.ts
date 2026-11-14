@@ -165,11 +165,24 @@ export function registerStoreRoutes(app: Express): void {
   app.post(
     '/api/stores',
     requirePanelAdmin,
-    h((req, res) => {
+    h(async (req, res) => {
       const name = str(req.body?.name, 80);
       if (!name) throw new StoreError('Ponle un nombre al negocio.');
       const store = storesModel.create({ ...storePatchOf(req.body ?? {}, true), name });
-      res.status(201).json({ id: store.id });
+      // Optional: the business owner gets their own user (and temporary password) in the same step.
+      const owner = req.body?.owner;
+      let access: { name: string | null; loginId: string; created: boolean; temporaryPassword: string | null } | null = null;
+      if (owner && String(owner.phone ?? '').trim()) {
+        try {
+          const added = await addStoreMember(store.id, { phone: String(owner.phone), name: str(owner.name, 80) }, userId(req));
+          access = { name: added.user.name, loginId: jidToPhone(added.user.jid) ?? added.user.jid.split('@')[0], created: added.created, temporaryPassword: added.temporaryPassword };
+        } catch (err) {
+          // Don't leave a half-made business behind when the number is wrong.
+          storesModel.remove(store.id);
+          throw err;
+        }
+      }
+      res.status(201).json({ id: store.id, access });
     }),
   );
 

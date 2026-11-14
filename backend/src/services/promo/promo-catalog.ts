@@ -86,7 +86,29 @@ export const FEATURES: PromoFeature[] = [
   },
 ];
 
-export const FEATURE_KEYS = FEATURES.map((f) => f.key);
+/**
+ * Real screenshots of the portal (made by backend/scripts/promo-screens.ts with a demo account) that the
+ * "screen" scene shows, with the part to highlight [x, y, w, h] (0-1) on the desktop capture and the label.
+ * Another project reuses the same scene: it generates its own screens/ folder and lists them here.
+ */
+export const SCREENS: Record<string, { label: string; focus: [number, number, number, number]; feature?: string }> = {
+  home: { label: 'Tu resumen en un vistazo', focus: [0.3, 0.14, 0.64, 0.3] },
+  calendar: { label: 'Tu semana por horas', focus: [0.3, 0.3, 0.64, 0.55], feature: 'agenda' },
+  today: { label: 'Todo lo de hoy', focus: [0.3, 0.3, 0.64, 0.45], feature: 'agenda' },
+  reminders: { label: 'Tus recordatorios', focus: [0.3, 0.38, 0.64, 0.3], feature: 'reminders' },
+  routines: { label: 'Tus rutinas y rachas', focus: [0.3, 0.3, 0.64, 0.5], feature: 'routines' },
+  lists: { label: 'Tus tareas', focus: [0.3, 0.3, 0.64, 0.5], feature: 'todos' },
+  notes: { label: 'Tus notas', focus: [0.3, 0.3, 0.64, 0.5], feature: 'notes' },
+  recipes: { label: 'Tus recetas', focus: [0.3, 0.3, 0.64, 0.5], feature: 'meals' },
+  meals: { label: 'Tus comidas de la semana', focus: [0.3, 0.3, 0.64, 0.5], feature: 'meals' },
+  library: { label: 'Tu biblioteca', focus: [0.3, 0.3, 0.64, 0.5] },
+  contacts: { label: 'Tus contactos', focus: [0.3, 0.3, 0.64, 0.5], feature: 'contacts' },
+  agenda: { label: 'Agenda de citas', focus: [0.3, 0.3, 0.64, 0.5], feature: 'scheduling' },
+  account: { label: 'Tu cuenta', focus: [0.3, 0.2, 0.64, 0.5], feature: 'portal' },
+};
+export const screenForFeature = (key: string | null | undefined) => Object.entries(SCREENS).find(([, v]) => v.feature === key)?.[0];
+
+export const FEATURE_KEYS =FEATURES.map((f) => f.key);
 export const featureByKey = (key: string | null | undefined) => FEATURES.find((f) => f.key === key);
 
 /** What every script can rely on about the product as a whole. */
@@ -108,4 +130,9 @@ export const MUSIC: { key: string; name: string; prompt: string }[] = [
   { key: 'moderna', name: 'Moderna y alegre', prompt: 'upbeat modern pop background music for a tech app ad, soft synths, light claps, positive and friendly, no vocals, seamless loop' },
   { key: 'tranquila', name: 'Tranquila', prompt: 'calm lo-fi background music for a productivity app ad, mellow keys, soft beat, warm, no vocals, seamless loop' },
   { key: 'energica', name: 'Enérgica', prompt: 'energetic motivating electronic background music for a short social media ad, punchy drums, bright synth, no vocals, seamless loop' },
+  { key: 'corporativa', name: 'Corporativa', prompt: 'clean corporate background music for a business software ad, piano and soft strings, confident and inspiring, no vocals, seamless loop' },
+  { key: 'acustica', name: 'Acústica cálida', prompt: 'warm acoustic guitar background music, light percussion, friendly and hopeful, no vocals, seamless loop' },
+  { key: 'latina', name: 'Latina suave', prompt: 'smooth latin pop instrumental background music, light percussion and nylon guitar, summery and positive, no vocals, seamless loop' },
+  { key: 'electronica', name: 'Electrónica moderna', prompt: 'modern future-bass electronic background music for a tech ad, bright plucks, steady beat, optimistic, no vocals, seamless loop' },
+  { key: 'epica', name: 'Épica / inspiradora', prompt: 'cinematic inspiring orchestral background music building gradually, hopeful and powerful, no vocals, seamless loop' },
 ];

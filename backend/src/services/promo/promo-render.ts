@@ -135,13 +135,22 @@ export function durationOf(path: string): Promise<number> {
 }
 
 /** The two soft sounds of the chats, synthesized (no files, no cost): a message sent and one received. */
-export async function chatSounds(dir: string): Promise<{ sent: string; received: string }> {
+export async function chatSounds(dir: string): Promise<{ sent: string; received: string; whoosh: string; ding: string; pop: string; click: string }> {
+  const pop = join(dir, 'pop.wav');
+  const click = join(dir, 'click.wav');
+  await ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=660:duration=0.12', '-af', 'afade=t=in:d=0.004,afade=t=out:st=0.04:d=0.08,volume=0.45', pop]);
+  await ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=1900:duration=0.05', '-f', 'lavfi', '-i', 'anoisesrc=d=0.05:c=white:a=0.3', '-filter_complex', '[0:a][1:a]amix=inputs=2:normalize=0,afade=t=out:st=0.02:d=0.03,volume=0.5', click]);
+  const whoosh = join(dir, 'whoosh.wav');
+  const ding = join(dir, 'ding.wav');
+  await ffmpeg(['-f', 'lavfi', '-i', 'anoisesrc=d=0.45:c=pink:a=0.6', '-af', 'highpass=f=500,lowpass=f=5000,afade=t=in:d=0.2,afade=t=out:st=0.2:d=0.25,volume=0.5', whoosh]);
+  await ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=1568:duration=0.9', '-f', 'lavfi', '-i', 'sine=frequency=2093:duration=0.9',
+    '-filter_complex', '[1:a]adelay=90|90[b];[0:a][b]amix=inputs=2:normalize=0,afade=t=out:st=0.1:d=0.8,volume=0.4', ding]);
   const sent = join(dir, 'sent.wav');
   const received = join(dir, 'received.wav');
   await ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=1320:duration=0.07', '-af', 'afade=t=in:d=0.005,afade=t=out:st=0.03:d=0.04,volume=0.5', sent]);
   await ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=880:duration=0.09', '-f', 'lavfi', '-i', 'sine=frequency=1175:duration=0.12',
     '-filter_complex', '[1:a]adelay=70|70[b];[0:a][b]amix=inputs=2:normalize=0,afade=t=out:st=0.1:d=0.08,volume=0.45', received]);
-  return { sent, received };
+  return { sent, received, whoosh, ding, pop, click };
 }
 
 /**

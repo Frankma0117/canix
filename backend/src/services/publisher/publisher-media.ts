@@ -3,7 +3,8 @@ import { AccessError } from '../../models/permissions.model.js';
 import { promoModel } from '../../models/promo.model.js';
 import type { PromoItem } from '../../entities/promo.entity.js';
 import { createPromo, type CreateInput } from '../promo/promo.service.js';
-import { publicUrl } from '../promo/promo-storage.js';
+import { publicUrl, readFile } from '../promo/promo-storage.js';
+import type { MediaAccess } from './publisher.types.js';
 import { createPost, type NewPost } from './publisher.service.js';
 import { publisherStore } from './publisher.store.js';
 import { normalizeHashtags } from './publisher-seo.js';
@@ -17,6 +18,9 @@ import { normalizeHashtags } from './publisher-seo.js';
 
 /** A stored reference → a URL a platform (or the browser) can fetch. */
 export const resolveMedia = (ref: string): string => publicUrl(ref);
+
+/** What the publisher uses to reach the media: its URL, or its bytes (for platforms that need an upload). */
+export const mediaAccess: MediaAccess = { url: resolveMedia, read: (ref) => readFile(ref) };
 
 const PREFERRED = { video: ['vertical', 'landscape'], image: ['square', 'story', 'landscape'] } as const;
 

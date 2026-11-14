@@ -11,40 +11,39 @@ import { AttentionForm, BusinessForm } from '../../components/organisms/store/St
 import { StoreWhatsApp } from '../../components/organisms/store/StoreWhatsApp.tsx';
 import { StoreTeam } from '../../components/organisms/store/StoreTeam.tsx';
 import { Notice } from '../../components/molecules/Notice.tsx';
-import { Tabs } from '../../components/molecules/Tabs.tsx';
 import { Badge } from '../../components/atoms/Badge.tsx';
 import { Button } from '../../components/atoms/Button.tsx';
 
-type TabId = 'test' | 'attention' | 'business' | 'whatsapp' | 'team';
+export type BotTab = 'test' | 'attention' | 'business' | 'whatsapp' | 'team';
+type TabId = BotTab;
 const TABS: TabId[] = ['test', 'attention', 'business', 'whatsapp', 'team'];
 
-/** Asistente: try it, tell it how to attend, the business facts, its WhatsApp number and the team. */
-export function StoreBotPage() {
+const PAGES: Record<BotTab, { title: string; description: string }> = {
+  test: { title: 'Probar el asistente', description: 'Escríbele como si fueras un cliente. Responde con tu catálogo y tus indicaciones reales; no se envía nada a WhatsApp.' },
+  attention: { title: 'Cómo atiende', description: 'El tono, los horarios, cuándo pasa a una persona y qué avisos recibes.' },
+  business: { title: 'Datos y pagos', description: 'Dirección, medios de pago, costo de envío y los datos que el asistente da a tus clientes.' },
+  whatsapp: { title: 'WhatsApp del negocio', description: 'El número por el que tus clientes te escriben. Vincúlalo escaneando un QR.' },
+  team: { title: 'Equipo', description: 'Las personas que administran este negocio y sus accesos.' },
+};
+
+/**
+ * One section of the business's assistant settings. Each is its own menu entry (`tab`); with no
+ * `tab` (old links like #/store-bot?tab=whatsapp) it keeps the previous tabbed page.
+ */
+export function StoreBotPage({ tab }: { tab?: BotTab }) {
+  const legacy = (hashParam('tab') as TabId | null) ?? 'test';
+  const only = tab ?? (TABS.includes(legacy) ? legacy : 'test');
+  const meta = PAGES[only];
   return (
-    <StoreFrame title="Asistente" description="Pruébalo como si fueras un cliente, dile cómo atender y conecta el WhatsApp del negocio.">
-      {(store, stores) => <Bot store={store} stores={stores} />}
+    <StoreFrame title={meta.title} description={meta.description}>
+      {(store, stores) => <Bot store={store} stores={stores} tab={only} />}
     </StoreFrame>
   );
 }
 
-function Bot({ store, stores }: { store: Store; stores: StoresState }) {
-  const [tab, setTab] = useState<TabId>(() => {
-    const asked = hashParam('tab') as TabId | null;
-    return asked && TABS.includes(asked) ? asked : 'test';
-  });
+function Bot({ store, stores, tab }: { store: Store; stores: StoresState; tab: TabId }) {
   return (
     <>
-      <Tabs
-        tabs={[
-          { id: 'test' as TabId, label: 'Probar' },
-          { id: 'attention' as TabId, label: 'Cómo atiende' },
-          { id: 'business' as TabId, label: 'Negocio y pagos' },
-          { id: 'whatsapp' as TabId, label: store.connection.connected ? 'WhatsApp' : 'WhatsApp · desconectado' },
-          { id: 'team' as TabId, label: 'Equipo' },
-        ]}
-        active={tab}
-        onChange={setTab}
-      />
       {tab === 'test' && <TestChat store={store} />}
       {tab === 'attention' && <AttentionForm store={store} onSaved={stores.reload} />}
       {tab === 'business' && <BusinessForm store={store} onSaved={stores.reload} />}

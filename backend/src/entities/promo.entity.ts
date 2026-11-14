@@ -13,11 +13,15 @@ export interface ChatLine {
 
 /** One scene of a video: what it shows, the line on screen and what the narrator says. */
 export interface PromoScene {
-  shot: 'hook' | 'chat' | 'features' | 'steps' | 'cta' | 'end';
+  shot: 'hook' | 'chat' | 'features' | 'steps' | 'screen' | 'cta' | 'end';
   text: string;
   say: string;
   chat?: ChatLine[];
   items?: string[];
+  /** 'screen' shot: name of a portal screenshot (frontend/public/promo/screens/<name>.jpg), the area to highlight [x, y, w, h] as 0-1 fractions, and the label of that area. */
+  screen?: string;
+  focus?: [number, number, number, number];
+  note?: string;
 }
 
 export interface VideoContent {

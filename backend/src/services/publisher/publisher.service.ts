@@ -3,7 +3,7 @@ import { decryptSecret, encryptSecret } from './publisher-crypto.js';
 import { fit, generateSeo, isPlatform, normalizeHashtags } from './publisher-seo.js';
 import { getProvider, listProviders, providersFor } from './publisher.providers.js';
 import { fromDb, publisherStore, toDb } from './publisher.store.js';
-import { PLATFORMS, PLATFORM_NAMES, type Brand, type MediaType, type Platform, type Post, type Target } from './publisher.types.js';
+import { PLATFORMS, PLATFORM_MEDIA, PLATFORM_NAMES, type Brand, type Connection, type MediaAccess, type MediaType, type Platform, type Post, type PublisherProvider, type Target } from './publisher.types.js';
 
 /**
  * Content publisher: brand profile, platform connections, the queue of posts and their
@@ -48,7 +48,7 @@ export function connectionsView() {
       provider: c?.provider ?? null,
       lastError: c?.last_error ?? '',
       connectedAt: fromDb(c?.connected_at ?? null),
-      providers: providersFor(platform).map((p) => ({ key: p.key, label: p.label, available: p.available })),
+      providers: providersFor(platform).map((p) => ({ key: p.key, label: p.label, available: p.available, oauth: !!p.oauth, configured: p.configured(), envVars: p.envVars ?? [] })),
     };
   });
 }
@@ -58,6 +58,7 @@ export async function connect(platform: string, providerKey: string, accountName
   const provider = getProvider(providerKey);
   if (!provider || !providersFor(platform).some((p) => p.key === provider.key)) throw new AccessError('Ese proveedor no sirve para esta red.');
   if (!provider.available) throw new AccessError(`${provider.label} todavía no está disponible: llega en una fase próxima.`);
+  if (provider.oauth) throw new AccessError('Esta red se conecta con el botón «Conectar con…», que abre su inicio de sesión.');
   const res = await provider.connect(platform, { accountName: accountName.trim().slice(0, 80) });
   publisherStore.saveConnection({
     platform,
@@ -201,6 +202,8 @@ export function schedule(id: number, at: string | null): Post {
   if (!targets.length) throw new AccessError('Elige en qué redes se va a publicar.');
   const disconnected = targets.filter((t) => !publisherStore.getConnection(t.platform)).map((t) => PLATFORM_NAMES[t.platform]);
   if (disconnected.length) throw new AccessError(`Conecta primero ${disconnected.join(', ')}.`);
+  const unsupported = targets.filter((t) => !PLATFORM_MEDIA[t.platform].includes(post.media_type)).map((t) => PLATFORM_NAMES[t.platform]);
+  if (unsupported.length) throw new AccessError(`${unsupported.join(', ')} no admite ${post.media_type === 'video' ? 'videos' : 'imágenes'}. Quita esa red de la publicación.`);
   let when = new Date();
   if (at) {
     when = new Date(at);
@@ -237,7 +240,7 @@ export function removePost(id: number): void {
 // ---------- publication ----------
 
 /** Sends every pending target of one post, then settles the post's status. */
-export async function publishPost(id: number, resolveMedia: (ref: string) => string): Promise<void> {
+export async function publishPost(id: number, media: MediaAccess): Promise<void> {
   const post = publisherStore.getPost(id);
   if (!post || !['scheduled', 'publishing'].includes(post.status)) return;
   publisherStore.setPostStatus(id, 'publishing');
@@ -249,12 +252,18 @@ export async function publishPost(id: number, resolveMedia: (ref: string) => str
       if (!conn?.access_token_enc) throw new Error(`${PLATFORM_NAMES[target.platform]} no está conectada.`);
       const provider = getProvider(conn.provider);
       if (!provider?.available) throw new Error('El proveedor de esta red no está disponible.');
+      const accessToken = await freshToken(conn, provider);
       const res = await provider.publish(target.platform, {
         mediaType: post.media_type,
-        mediaRef: resolveMedia(post.media_ref),
-        thumbnailRef: resolveMedia(post.thumbnail_ref),
+        mediaUrl: media.url(post.media_ref),
+        thumbnailUrl: media.url(post.thumbnail_ref),
+        readMedia: async () => {
+          const bytes = await media.read(post.media_ref);
+          if (!bytes) throw new Error('No se encontró el archivo del video.');
+          return bytes;
+        },
         text: textFor(post, target.platform),
-        accessToken: decryptSecret(conn.access_token_enc),
+        accessToken,
         accountName: conn.account_name,
       });
       publisherStore.targetSucceeded(target.id, res.externalId, res.externalUrl);
@@ -267,6 +276,16 @@ export async function publishPost(id: number, resolveMedia: (ref: string) => str
     }
   }
   settle(id);
+}
+
+/** The access token, renewed with the refresh token when it's about to expire. */
+async function freshToken(conn: Connection, provider: PublisherProvider): Promise<string> {
+  const access = decryptSecret(conn.access_token_enc!);
+  const expiring = conn.expires_at && new Date(conn.expires_at).getTime() < Date.now() + 120_000;
+  if (!expiring || !provider.refresh || !conn.refresh_token_enc) return access;
+  const fresh = await provider.refresh(conn.platform, decryptSecret(conn.refresh_token_enc));
+  publisherStore.updateTokens(conn.platform, encryptSecret(fresh.accessToken), fresh.expiresAt);
+  return fresh.accessToken;
 }
 
 /** published = all sent · partial = some sent, some failed for good · failed = none sent · otherwise it waits for retries. */
@@ -282,16 +301,16 @@ function settle(id: number): void {
 let running = false;
 
 /** Called every minute by the job (and right after «Publicar ahora»). */
-export async function runDue(resolveMedia: (ref: string) => string): Promise<number> {
+export async function runDue(media: MediaAccess): Promise<number> {
   if (running) return 0;
   running = true;
   try {
     const ids = publisherStore.duePostIds(toDb(new Date()));
-    for (const id of ids) await publishPost(id, resolveMedia);
+    for (const id of ids) await publishPost(id, media);
     return ids.length;
   } finally {
     running = false;
   }
 }
 
-export const providersView = () => listProviders().map((p) => ({ key: p.key, label: p.label, available: p.available }));
+export const providersView = () => listProviders().map((p) => ({ key: p.key, label: p.label, available: p.available, oauth: !!p.oauth, configured: p.configured() }));

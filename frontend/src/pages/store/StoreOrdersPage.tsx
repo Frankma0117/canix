@@ -81,7 +81,7 @@ function Orders({ store }: { store: Store }) {
       {!store.connection.connected && (
         <Notice tone="warning">
           El WhatsApp de este negocio no está conectado, así que los clientes no reciben los avisos.{' '}
-          <button className="font-semibold underline underline-offset-2" onClick={() => goTo('store-bot?tab=whatsapp')}>
+          <button className="font-semibold underline underline-offset-2" onClick={() => goTo('store-whatsapp')}>
             Conectar el número
           </button>
         </Notice>
@@ -117,7 +117,7 @@ function Orders({ store }: { store: Store }) {
       {!data ? (
         <Skeleton className="h-64" />
       ) : rows.length === 0 ? (
-        <EmptyState icon={<ShoppingBag size={36} className="text-primary" />} title="Nada por aquí" description={EMPTY[tab]} action={tab === 'pending' ? <Button variant="secondary" onClick={() => goTo('store-bot?tab=test')}>Hacer un pedido de prueba</Button> : undefined} />
+        <EmptyState icon={<ShoppingBag size={36} className="text-primary" />} title="Nada por aquí" description={EMPTY[tab]} action={tab === 'pending' ? <Button variant="secondary" onClick={() => goTo('store-test')}>Hacer un pedido de prueba</Button> : undefined} />
       ) : (
         <ul className="overflow-hidden rounded-2xl border border-gray-medium/70 bg-white shadow-soft dark:border-white/10 dark:bg-[var(--surface)]">
           {rows.map((order) => {

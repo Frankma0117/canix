@@ -1,5 +1,5 @@
 import type { ChatLine, ImageContent, PromoKind, PromoScene } from '../../entities/promo.entity.js';
-import { FEATURES, PRODUCT_FACTS, featureByKey, type PromoFeature } from './promo-catalog.js';
+import { FEATURES, PRODUCT_FACTS, SCREENS, featureByKey, screenForFeature, type PromoFeature } from './promo-catalog.js';
 
 /**
  * The words of the advertising material: the video scripts and the image texts.
@@ -10,25 +10,26 @@ import { FEATURES, PRODUCT_FACTS, featureByKey, type PromoFeature } from './prom
  * scene it can't draw or a text too long to read.
  */
 
-const SHOTS: PromoScene['shot'][] = ['hook', 'chat', 'features', 'steps', 'cta', 'end'];
+const SHOTS: PromoScene['shot'][] = ['hook', 'chat', 'features', 'steps', 'screen', 'cta', 'end'];
 const MAX_TEXT = 60;
 const MAX_SAY = 230;
 const MAX_LINE = 120;
-const MAX_SCENES = 8;
+const MAX_SCENES = 14;
 
 const SHOT_HELP: Record<PromoScene['shot'], string> = {
   hook: 'portada animada con el titular y la mascota (siempre la primera)',
   chat: 'un celular con un chat de WhatsApp: la persona escribe y Canix responde (lleva "chat": 2 a 4 mensajes)',
   features: 'tarjetas con funciones (lleva "items": 3 a 6 textos cortos con un emoji al inicio)',
   steps: 'tres pasos numerados: escríbele, Canix lo organiza, te avisa a tiempo (lleva "items": 3 textos cortos)',
+  screen: `pantallazo real del portal con un recuadro que señala la parte que se explica (lleva "screen": uno de ${Object.keys(SCREENS).join(', ')}; úsala justo después del chat de esa función)`,
   cta: 'llamado a la acción: pedir la demo gratis por WhatsApp',
   end: 'cierre con el logo y la dirección web (siempre la última)',
 };
 
 const GOALS: Record<PromoKind, string> = {
-  ad: 'un anuncio corto y emocionante para redes sociales (unos 20 a 30 segundos)',
-  howto: 'un video que explique cómo funciona Canix y cómo empezar, de principio a fin (unos 40 a 55 segundos)',
-  feature: 'un video que muestre una función de Canix con un ejemplo real de chat (unos 25 a 40 segundos)',
+  ad: 'un anuncio dinámico y emocionante para redes sociales (unos 30 a 45 segundos, 6 a 8 escenas)',
+  howto: 'un tutorial completo: cómo funciona Canix y cómo empezar, recorriendo las secciones principales una por una, cada una con su ejemplo de chat (unos 90 a 120 segundos, 10 a 14 escenas)',
+  feature: 'un mini tutorial de una función de Canix: el problema, cómo se pide, varios ejemplos reales de chat con casos distintos, un consejo útil y cómo empezar (unos 60 a 90 segundos, 8 a 12 escenas)',
 };
 
 const BASE_RULES = `Escribes en español latino, cercano, tuteando, sin regionalismos fuertes. Canix es "él" (un asistente).
@@ -47,7 +48,10 @@ ${BASE_RULES}
 - "text" es lo que se lee en pantalla: máximo 7 palabras, sin punto final.
 - "say" es lo que dice la narradora: una o dos frases naturales que complementan lo que se ve (no leen el chat palabra
   por palabra). Máximo 35 palabras por escena. Números cortos en palabras.
-- Entre 4 y 8 escenas. La primera es "hook" y la última es "end".
+- En tutoriales, cada escena "chat" o "features" abre con "text" tipo "Sección 2 · Recordatorios" para que se vea
+  qué parte se explica; usa un ejemplo distinto en cada una (otra hora, otra frase, otra situación) y alterna
+  "chat" con "features" y "steps" para dar ritmo. Incluye un consejo práctico ("Tip: también puedes mandarle un audio").
+- Respeta la cantidad de escenas pedida. La primera es "hook" y la última es "end".
 
 Responde SOLO con JSON: {"title": "título del video", "caption": "1 a 3 frases para publicar con el video, con 1 o 2
 emojis y como máximo 3 hashtags específicos", "scenes": [{"shot": "...", "text": "...", "say": "...", "chat": [{"from":
@@ -133,6 +137,12 @@ export function cleanVideo(raw: unknown, fallback: VideoScript): VideoScript {
       scene.chat = cleanChat(x.chat);
       if (scene.chat.length < 2) continue;
     }
+    if (shot === 'screen') {
+      const name = String(x.screen ?? '');
+      if (!SCREENS[name]) continue;
+      scene.screen = name;
+      scene.note = short(x.note, 40) || SCREENS[name].label;
+    }
     if (shot === 'features' || shot === 'steps') {
       scene.items = cleanItems(x.items, shot === 'steps' ? 3 : 6);
       if (scene.items.length < 3) continue;
@@ -178,8 +188,12 @@ export function videoTemplate(kind: PromoKind, featureKey: string | null, varian
       caption: `${f.emoji} ${f.name} sin salir de WhatsApp: se lo pides a Canix como a un amigo. #canix #asistentepersonal`,
       scenes: [
         scene('hook', [`${f.name}, por WhatsApp`, `¿Y si nunca se te olvida?`][variant % 2], `¿Sabías que Canix se encarga de esto por ti? Te muestro cómo.`),
-        scene('chat', 'Se lo pides con tus palabras', f.facts.split('. ')[0] + '.', { chat: f.chat }),
-        scene('features', 'Y mucho más', 'Además recuerda, organiza y te avisa de todo lo demás.', { items: FEATURES.filter((x) => x.key !== f.key).slice(0, 4).map((x) => `${x.emoji} ${x.name}`) }),
+        scene('steps', 'Así de fácil', `Es tan simple como escribirle a un amigo: ${f.name.toLowerCase()} sin formularios ni apps nuevas.`, { items: STEPS }),
+        scene('chat', `Ejemplo · ${f.name}`, f.facts.split('. ')[0] + '.', { chat: f.chat }),
+        ...(screenForFeature(f.key) ? [scene('screen', `${f.name} en tu portal`, `Lo que le pides aparece al instante en tu portal web, listo para revisar o editar.`, { screen: screenForFeature(f.key)!, note: SCREENS[screenForFeature(f.key)!].label })] : []),
+        scene('features', 'Lo que puedes pedirle', f.facts.split('. ').slice(1, 2).join(' ') || 'Entiende fechas, horas y frases normales; si le falta un dato, pregunta.', { items: ['💬 Con tus palabras', '🎤 Por texto o audio', '⏰ Te avisa a la hora exacta', '💻 Lo ves en tu portal'] }),
+        scene('chat', 'Otro ejemplo', 'Y si algo cambia, se lo dices y lo ajusta.', { chat: [{ from: 'me', text: 'Cámbialo para una hora más tarde' }, { from: 'canix', text: '✅ Listo, lo moví. Te aviso a la nueva hora.' }] }),
+        scene('features', 'Y mucho más','Además recuerda, organiza y te avisa de todo lo demás.', { items: FEATURES.filter((x) => x.key !== f.key).slice(0, 4).map((x) => `${x.emoji} ${x.name}`) }),
         scene('cta', 'Pruébalo gratis', 'Pide tu demo gratis y escríbele hoy mismo.'),
         END,
       ],
@@ -192,9 +206,16 @@ export function videoTemplate(kind: PromoKind, featureKey: string | null, varian
       scenes: [
         scene('hook', 'Así funciona Canix', 'Te muestro cómo funciona Canix, tu asistente personal en WhatsApp.'),
         scene('steps', 'Tan fácil como escribirle a un amigo', 'Le escribes o le mandas un audio, Canix lo organiza y te avisa a la hora exacta.', { items: STEPS }),
-        scene('chat', 'Recordatorios con una frase', 'Entiende fechas, horas y repeticiones. Si le falta un dato, te pregunta.', { chat: featureByKey('reminders')!.chat }),
-        scene('chat', '¿Qué tengo hoy?', 'Pregúntale por tu día y te lo da ordenado por hora.', { chat: featureByKey('agenda')!.chat }),
-        scene('features', 'Todo en un solo chat', 'Rutinas, tareas, notas, citas y más, sin instalar nada.', { items: FEATURES.slice(2, 8).map((x) => `${x.emoji} ${x.name}`) }),
+        ...(['reminders', 'dates', 'routines', 'todos', 'agenda', 'notes', 'voice', 'calls'] as const).flatMap((key, n) => {
+          const x = featureByKey(key)!;
+          const sc = screenForFeature(key);
+          return [
+            scene('chat', `Sección ${n + 1} · ${x.name}`, x.facts.split('. ')[0].replace(/\.$/, '') + '. Mira cómo se pide.', { chat: x.chat }),
+            ...(sc ? [scene('screen', `${x.name} en tu portal`, `Y todo queda ordenado en tu portal web: ${SCREENS[sc].label.toLowerCase()}.`, { screen: sc, note: SCREENS[sc].label })] : []),
+          ];
+        }),
+        scene('features', 'Tip: también por audio', 'Si no quieres escribir, mándale un audio: te entiende igual y puede responderte con una nota de voz.', { items: ['🎤 Le hablas por audio', '💬 Le escribes normal', '🗣️ Te responde con voz', '💻 Todo en tu portal web'] }),
+        scene('features', 'Y mucho más', 'Comidas, modo fashion, mensajes a tus contactos, citas para profesionales y un portal web.', { items: FEATURES.slice(8).map((x) => `${x.emoji} ${x.name}`) }),
         scene('cta', 'Empieza con la demo gratis', 'Pide tu demo gratis: recibes un código, se lo mandas a Canix y listo.'),
         END,
       ],

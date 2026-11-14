@@ -27,7 +27,7 @@ export interface PublisherConnection {
   provider: string | null;
   lastError: string;
   connectedAt: string | null;
-  providers: { key: string; label: string; available: boolean }[];
+  providers: { key: string; label: string; available: boolean; oauth: boolean; configured: boolean; envVars: string[] }[];
 }
 
 export interface PublisherTarget {

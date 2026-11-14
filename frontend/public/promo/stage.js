@@ -131,6 +131,34 @@ function chatScene(s) {
   } };
 }
 
+// A real screenshot of the portal in a browser (landscape) or phone (vertical) frame: it slowly zooms into the part
+// being explained, a box with a label marks it. Screens live in ./screens/<name>.jpg (m-<name>.jpg for the phone).
+function screenScene(s) {
+  const vertical = D.format === 'vertical';
+  const cap = capBlock(s, '🖥️ Así se ve');
+  const [fx, fy, fw, fh] = s.focus || [0.3, 0.3, 0.64, 0.5];
+  const box = vertical ? [0.04, 0.12, 0.92, 0.3] : [fx, fy, fw, fh];
+  const img = h('img', { class: 'shot', src: `./screens/${vertical ? 'm-' : ''}${s.screen}.jpg`, alt: '' });
+  const ring = h('div', { class: 'ring', style: `left:${box[0] * 100}%;top:${box[1] * 100}%;width:${box[2] * 100}%;height:${box[3] * 100}%` });
+  const chip = h('div', { class: 'ring-chip', style: `left:${box[0] * 100}%;top:${box[1] * 100}%` }, '👆 ', s.note || '');
+  const zoom = h('div', { class: 'zoom' }, img, ring, chip);
+  const frame = h('div', { class: `screen-frame ${vertical ? 'is-phone' : 'is-browser'}` },
+    vertical ? null : h('div', { class: 'bar' }, h('i'), h('i'), h('i'), h('span', null, 'canix.cania.app')),
+    h('div', { class: 'viewport' }, zoom));
+  const el = h('div', { class: 'scene scene-screen' }, cap.el, frame);
+  const cx = (box[0] + box[2] / 2) * 100, cy = (box[1] + box[3] / 2) * 100;
+  return { el, anim(lt, dur) {
+    animCap(cap, lt);
+    const k = easeOut(prog(lt, 0.05, 0.6));
+    css(frame, { opacity: k, transform: `translateY(${(1 - k) * 6}%) scale(${0.95 + 0.05 * k})` });
+    const z = easeOut(prog(lt, 0.9, Math.max(1, dur - 1.3)));
+    css(zoom, { transformOrigin: `${cx}% ${cy}%`, transform: `scale(${1 + (vertical ? 0.06 : 0.14) * z})` });
+    const r = prog(lt, 0.6, 0.5);
+    css(ring, { opacity: easeOut(r), boxShadow: `0 0 0 ${3 + 3 * Math.sin(lt * 5)}px rgba(75,92,246,${0.35 + 0.2 * Math.sin(lt * 5)})`, transform: `scale(${0.96 + 0.04 * back(r)})` });
+    css(chip, { opacity: easeOut(prog(lt, 0.8, 0.4)) });
+  } };
+}
+
 function cardsScene(s, numbered) {
   const cap = capBlock(s, numbered ? '🧭 Cómo funciona' : '✨ Todo en un solo chat');
   const cards = (s.items || []).map((text, i) => {
@@ -186,7 +214,7 @@ function endScene(s) {
   } };
 }
 
-const BUILD = { hook: hookScene, chat: chatScene, features: (s) => cardsScene(s, false), steps: (s) => cardsScene(s, true), cta: ctaScene, end: endScene };
+const BUILD = { hook: hookScene, chat: chatScene, features: (s) => cardsScene(s, false), steps: (s) => cardsScene(s, true), screen: screenScene, cta: ctaScene, end: endScene };
 
 // Subtitles: the narration split into short chunks spread over its duration.
 function chunks(s) {
@@ -222,7 +250,8 @@ window.stageSetup = (data) => {
   const brand = mark(false);
   const subs = h('div', { class: 'subs' }, h('span'));
   parts = D.scenes.map((s) => ({ s, ...(BUILD[s.shot] || hookScene)(s), subs: chunks(s) }));
-  stage.replaceChildren(h('div', { class: 'bg' }), glowA, glowB, ...parts.map((p) => p.el), brand, progress, subs);
+  const ticks = h('div', { class: 'ticks' }, D.scenes.slice(1).map((s) => h('i', { style: `left:${(s.start / D.total) * 100}%` })));
+  stage.replaceChildren(h('div', { class: 'bg' }), glowA, glowB, ...parts.map((p) => p.el), brand, progress, ticks, subs);
   fixed = { glowA, glowB, progress, brand, subs };
   ready().then(() => {
     fitTitles(stage, (el) => (el.closest('.scene-hook, .scene-end') ? 2 : D.format === 'vertical' ? 2 : 3));
@@ -237,12 +266,16 @@ window.stageAt = (t) => {
   css(glowB, { left: `${-30 + Math.cos(t * 0.27) * 8}%`, top: `${45 + Math.sin(t * 0.33) * 10}%` });
   progress.style.width = `${(t / D.total) * 100}%`;
   let current = null;
-  parts.forEach((p) => {
+  parts.forEach((p, idx) => {
     const lt = t - p.s.start;
     const visible = lt >= 0 && lt < p.s.dur;
     const o = visible ? Math.min(easeOut(prog(lt, 0, 0.35)), 1 - prog(lt, p.s.dur - 0.25, 0.25)) : 0;
     p.el.style.opacity = o;
     p.el.style.visibility = o > 0 ? 'visible' : 'hidden';
+    // transition: the scene slides in from one side and leaves to the other (full-bleed scenes only scale)
+    const inn = 1 - easeOut(prog(lt, 0, 0.5)), out = easeOut(prog(lt, p.s.dur - 0.3, 0.3)), dir = idx % 2 ? 1 : -1;
+    const full = ['hook', 'end', 'cta'].includes(p.s.shot);
+    p.el.style.transform = visible ? (full ? `scale(${1 + inn * 0.04 + out * 0.03})` : `translateX(${(inn * 5 - out * 4) * dir}%) scale(${1 + inn * 0.02 + out * 0.02})`) : '';
     if (visible) { p.anim(lt, p.s.dur); current = p; }
   });
   const full = current && ['hook', 'end', 'cta'].includes(current.s.shot);

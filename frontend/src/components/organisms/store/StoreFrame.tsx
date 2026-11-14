@@ -9,7 +9,6 @@ import { Page } from '../../templates/Page.tsx';
 import { Notice } from '../../molecules/Notice.tsx';
 import { EmptyState } from '../../molecules/EmptyState.tsx';
 import { Button } from '../../atoms/Button.tsx';
-import { Select } from '../../atoms/Input.tsx';
 import { Skeleton } from '../../atoms/Skeleton.tsx';
 
 /**
@@ -39,19 +38,6 @@ export function StoreFrame({
       actions={
         store && (
           <>
-            {data && data.stores.length > 1 && (
-              <label className="flex items-center gap-2 text-sm font-semibold text-gray-dark">
-                <StoreIcon size={16} aria-hidden />
-                <span className="sr-only">Negocio</span>
-                <Select value={store.id} onChange={(e) => stores.select(Number(e.target.value))} className="!w-auto !py-2">
-                  {data.stores.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-            )}
             {actions?.(store)}
           </>
         )
