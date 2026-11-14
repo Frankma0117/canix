@@ -33,7 +33,7 @@ Generar material cuesta (voz, música, IA). El tope mensual por proyecto se guar
 En Canix la generación ya es solo del administrador, así que no es un permiso de paquetes.
 
 ## Copiar el módulo a otro proyecto
-**Recomendado: usar el servicio independiente `D:publisher-app`** (repo propio): es este mismo módulo empaquetado con login, biblioteca de archivos, Docker y guías; funciona con cualquier stack (Java, Next.js…). Se despliega una copia por proyecto. Un arreglo del módulo aquí se porta allá (y al revés).
+**Recomendado: el publicador de cada proyecto es una copia de `D:\publisher-app` incrustada en su panel** (modo incrustado: sin otro login ni subdominio, por ticket firmado; los videos que el proyecto genera llegan a «Por validar» y se elige cuál publicar). Ya está hecho en Brindix, Cania Web y Aula Interactiva (ramas `publicador`; cada uno con su `docs/PUBLICADOR.md` y su `scripts/set-publisher.sh`). Guía del motor: `publisher-app/docs/INCRUSTADO.md`. Un arreglo del módulo aquí se porta allá (y al revés) y se vuelve a copiar con `node publisher-app/scripts/vendor.mjs <proyecto>/publisher`.
 
 La copia manual de abajo solo aplica a proyectos Node/TypeScript que quieran integrarlo en su propio código:
 1. Copia `services/publisher/`, `database/schema/publisher.schema.ts`, `api/routes/publisher.routes.ts` y, en el frontend, `types/publisher.ts`, `pages/admin/PublisherPage.tsx` y `components/organisms/publisher/`.
