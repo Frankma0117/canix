@@ -37,6 +37,7 @@ export interface Connection {
   platform: Platform;
   provider: string;
   account_name: string;
+  account_id: string;
   access_token_enc: string | null;
   refresh_token_enc: string | null;
   expires_at: string | null;
@@ -87,6 +88,8 @@ export interface PublishRequest {
   text: SeoText;
   accessToken: string;
   accountName: string;
+  /** Page id (Facebook), Instagram business account id, TikTok open id... whatever the platform needs to post as the account. */
+  accountId: string;
 }
 
 /** How the publisher reaches the media: resolved by the project's media layer (publisher-media.ts). */
@@ -105,6 +108,9 @@ export interface ConnectResult {
   accessToken: string;
   refreshToken?: string;
   expiresAt?: string;
+  accountId?: string;
+  /** One login can connect several networks (Meta: Facebook page + its Instagram). */
+  also?: Partial<Record<Platform, Omit<ConnectResult, 'also'>>>;
 }
 
 /**
@@ -118,6 +124,8 @@ export interface PublisherProvider {
   readonly available: boolean;
   /** Real providers connect through the platform's login page (OAuth) instead of typing a name. */
   readonly oauth?: boolean;
+  /** Short name of the login page, for the button («Conectar con Google»). */
+  readonly loginName?: string;
   /** False when the app credentials (in .env) are missing. */
   configured(): boolean;
   /** Which .env variables the provider needs (shown in the panel when it isn't configured). */

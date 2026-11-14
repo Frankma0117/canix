@@ -1,4 +1,6 @@
 import { randomBytes } from 'node:crypto';
+import { metaProvider } from './providers/meta.provider.js';
+import { tiktokProvider } from './providers/tiktok.provider.js';
 import { youtubeProvider } from './providers/youtube.provider.js';
 import { PLATFORM_NAMES, type Platform, type PublisherProvider } from './publisher.types.js';
 
@@ -27,15 +29,8 @@ const mock: PublisherProvider = {
   },
 };
 
-/** Placeholder for the real ones (next phases): visible in the panel, but not connectable yet. */
-function comingSoon(key: string, label: string): PublisherProvider {
-  const notYet = () => {
-    throw new Error(`${label} todavía no está disponible: se conecta en una fase próxima.`);
-  };
-  return { key, label, available: false, configured: () => false, connect: async () => notYet(), publish: async () => notYet() };
-}
 
-const PROVIDERS: PublisherProvider[] = [mock, youtubeProvider, comingSoon('meta', 'Instagram y Facebook (Meta)'), comingSoon('tiktok', 'TikTok')];
+const PROVIDERS: PublisherProvider[] = [mock, youtubeProvider, metaProvider, tiktokProvider];
 
 /** Which real provider serves each platform when it exists (phases 3-5 fill this in). */
 const REAL_FOR: Record<Platform, string> = { youtube: 'google', instagram: 'meta', facebook: 'meta', tiktok: 'tiktok' };

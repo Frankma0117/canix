@@ -51,7 +51,7 @@ export function ConnectionsPanel({ api, connections, onChange }: { api: Api; con
 
   return (
     <div className="space-y-4">
-      <Notice tone="info">YouTube se conecta con tu cuenta de Google. Instagram, Facebook y TikTok llegan en las próximas fases; mientras tanto puedes probarlas con la conexión «Simulada» (no publica de verdad).</Notice>
+      <Notice tone="info">Cada red se conecta con el inicio de sesión de su plataforma (Instagram y Facebook comparten el de Meta). La conexión «Simulada» sirve para probar sin publicar de verdad.</Notice>
       <div className="grid gap-4 md:grid-cols-2">
         {connections.map((c) => {
           const sel = c.providers.find((p) => p.key === provider[c.platform]) ?? c.providers.find((p) => p.available && p.key !== 'mock') ?? c.providers[0];
@@ -84,7 +84,7 @@ export function ConnectionsPanel({ api, connections, onChange }: { api: Api; con
                 {!sel.oauth && <Input aria-label={`Nombre de la cuenta de ${c.name}`} placeholder="Nombre de la cuenta (opcional)" value={account[c.platform] ?? ''} onChange={(e) => setAccount((a) => ({ ...a, [c.platform]: e.target.value }))} />}
                 {sel.oauth && !sel.configured && <p className="text-xs text-warning">Faltan las claves de la app en el servidor: {sel.envVars.join(', ')}. Mira docs/PUBLISHER.md.</p>}
                 <Button size="sm" onClick={() => connect(c)} loading={busy === c.platform} disabled={!sel.available || !sel.configured}>
-                  <Link2 size={14} /> {sel.oauth ? 'Conectar con Google' : 'Conectar'}
+                  <Link2 size={14} /> {sel.oauth ? `Conectar con ${sel.loginName}` : 'Conectar'}
                 </Button>
               </div>
             )}

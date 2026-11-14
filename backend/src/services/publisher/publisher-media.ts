@@ -1,3 +1,4 @@
+import { env } from '../../config/env.js';
 import { db } from '../../database/connection.js';
 import { AccessError } from '../../models/permissions.model.js';
 import { promoModel } from '../../models/promo.model.js';
@@ -20,7 +21,14 @@ import { normalizeHashtags } from './publisher-seo.js';
 export const resolveMedia = (ref: string): string => publicUrl(ref);
 
 /** What the publisher uses to reach the media: its URL, or its bytes (for platforms that need an upload). */
-export const mediaAccess: MediaAccess = { url: resolveMedia, read: (ref) => readFile(ref) };
+export const mediaAccess: MediaAccess = {
+  // Platforms download from outside: local files need the public address of the server.
+  url: (ref) => {
+    const url = resolveMedia(ref);
+    return url.startsWith('/') ? `${env.panelUrl.replace(/\/$/, '')}${url}` : url;
+  },
+  read: (ref) => readFile(ref),
+};
 
 const PREFERRED = { video: ['vertical', 'landscape'], image: ['square', 'story', 'landscape'] } as const;
 

@@ -41,14 +41,14 @@ export const publisherStore = {
   getConnection(platform: Platform): Connection | undefined {
     return db.prepare('SELECT * FROM publisher_connections WHERE platform = ?').get(platform) as Connection | undefined;
   },
-  saveConnection(c: { platform: Platform; provider: string; accountName: string; accessEnc: string; refreshEnc: string | null; expiresAt: string | null }): void {
+  saveConnection(c: { platform: Platform; provider: string; accountName: string; accountId?: string; accessEnc: string; refreshEnc: string | null; expiresAt: string | null }): void {
     db.prepare(
-      `INSERT INTO publisher_connections (platform, provider, account_name, access_token_enc, refresh_token_enc, expires_at, status, last_error)
-       VALUES (?, ?, ?, ?, ?, ?, 'connected', '')
-       ON CONFLICT(platform) DO UPDATE SET provider = excluded.provider, account_name = excluded.account_name, access_token_enc = excluded.access_token_enc,
+      `INSERT INTO publisher_connections (platform, provider, account_name, account_id, access_token_enc, refresh_token_enc, expires_at, status, last_error)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'connected', '')
+       ON CONFLICT(platform) DO UPDATE SET provider = excluded.provider, account_name = excluded.account_name, account_id = excluded.account_id, access_token_enc = excluded.access_token_enc,
          refresh_token_enc = excluded.refresh_token_enc, expires_at = excluded.expires_at, status = 'connected', last_error = '',
          connected_at = datetime('now'), updated_at = datetime('now')`,
-    ).run(c.platform, c.provider, c.accountName, c.accessEnc, c.refreshEnc, c.expiresAt);
+    ).run(c.platform, c.provider, c.accountName, c.accountId ?? "", c.accessEnc, c.refreshEnc, c.expiresAt);
   },
   updateTokens(platform: Platform, accessEnc: string, expiresAt: string): void {
     db.prepare(`UPDATE publisher_connections SET access_token_enc = ?, expires_at = ?, updated_at = datetime('now') WHERE platform = ?`).run(accessEnc, expiresAt, platform);

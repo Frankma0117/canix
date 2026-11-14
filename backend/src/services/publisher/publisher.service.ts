@@ -48,7 +48,7 @@ export function connectionsView() {
       provider: c?.provider ?? null,
       lastError: c?.last_error ?? '',
       connectedAt: fromDb(c?.connected_at ?? null),
-      providers: providersFor(platform).map((p) => ({ key: p.key, label: p.label, available: p.available, oauth: !!p.oauth, configured: p.configured(), envVars: p.envVars ?? [] })),
+      providers: providersFor(platform).map((p) => ({ key: p.key, label: p.label, available: p.available, oauth: !!p.oauth, loginName: p.loginName ?? '', configured: p.configured(), envVars: p.envVars ?? [] })),
     };
   });
 }
@@ -64,6 +64,7 @@ export async function connect(platform: string, providerKey: string, accountName
     platform,
     provider: provider.key,
     accountName: res.accountName,
+    accountId: res.accountId,
     accessEnc: encryptSecret(res.accessToken),
     refreshEnc: res.refreshToken ? encryptSecret(res.refreshToken) : null,
     expiresAt: res.expiresAt ?? null,
@@ -265,6 +266,7 @@ export async function publishPost(id: number, media: MediaAccess): Promise<void>
         text: textFor(post, target.platform),
         accessToken,
         accountName: conn.account_name,
+        accountId: conn.account_id,
       });
       publisherStore.targetSucceeded(target.id, res.externalId, res.externalUrl);
     } catch (err) {

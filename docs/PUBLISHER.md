@@ -9,8 +9,8 @@ Panel: **Administración → Publicador** (solo administrador). Cada proyecto ti
 | 1 | Cola, programación, perfil de marca, tokens cifrados, SEO (IA + plantilla), panel, proveedor simulado | Hecha |
 | 2 | Generar imágenes/videos desde el panel con tope mensual (sobre `services/promo/`) | Hecha |
 | 3 | Conector YouTube (OAuth + subida reanudable, Data API v3) | Hecha; falta probarla con una cuenta real |
-| 4 | Conector Instagram y Facebook (Meta Graph API) | Pendiente |
-| 5 | Conector TikTok (Content Posting API) | Pendiente |
+| 4 | Conector Instagram y Facebook (Meta Graph API, un solo inicio de sesión) | Hecha; falta probarla con cuentas reales |
+| 5 | Conector TikTok (Content Posting API) | Hecha; falta probarla con una cuenta real |
 | 6 | Portar el módulo a Brindix y demás proyectos | Pendiente |
 
 ## Piezas (todo en `backend/src/services/publisher/`)
@@ -49,3 +49,21 @@ Pruebas: contra una BD temporal (`DB_PATH=data/test.db`), con `AI_API_KEY=` vac�
 6. Cuota: cada subida gasta ~1600 unidades de las 10 000 diarias (unos 6 videos al día).
 - La API de YouTube solo recibe videos: una imagen no se puede programar a YouTube (el panel avisa).
 - Los tokens se renuevan solos con el refresh token.
+
+## Conectar Instagram y Facebook (Meta)
+1. Crea una **página de Facebook** y convierte tu Instagram en cuenta **profesional** (Empresa o Creador); vincúlala a esa página (Configuración de la página → Cuentas vinculadas).
+2. En developers.facebook.com crea una app tipo **Empresa** y añade **Facebook Login for Business** (o Inicio de sesión con Facebook). En «URI de redireccionamiento OAuth válidos» pon `<PANEL_URL>/api/publisher-oauth/callback`.
+3. Permisos que pide el panel: `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `instagram_basic`, `instagram_content_publish`, `business_management`. En modo desarrollo funcionan con tus propias cuentas (agrégate como administrador o probador de la app); para cuentas de terceros hay que pasar la revisión de Meta.
+4. `.env` del servidor: `META_APP_ID`, `META_APP_SECRET` (y `META_PAGE_ID` si administras varias páginas). Reinicia.
+5. Panel → Cuentas → Instagram (o Facebook) → **Conectar con Meta**: una sola autorización conecta la página y su Instagram.
+- Meta descarga el archivo desde la dirección pública: `PANEL_URL` debe ser https y alcanzable desde internet (en Canix ya lo es).
+- Instagram: los videos salen como Reels y las imágenes como publicaciones (JPEG). El video puede tardar unos minutos en procesarse.
+- El token de página no caduca; si Meta lo revoca (cambio de contraseña, etc.) el panel marca la red «Con error» y se vuelve a conectar.
+
+## Conectar TikTok
+1. En developers.tiktok.com crea una app, añade los productos **Login Kit** y **Content Posting API** (activa *Direct Post*) y registra la URI de redirección `<PANEL_URL>/api/publisher-oauth/callback`.
+2. Scopes: `user.info.basic` y `video.publish`. En modo sandbox añade tu cuenta como usuario de prueba.
+3. `.env` del servidor: `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET`, `TIKTOK_PRIVACY` (por defecto `SELF_ONLY`). Reinicia.
+4. Panel → Cuentas → TikTok → **Conectar con TikTok**.
+- Hasta que TikTok audite la app, todo video se publica **privado** (solo tú). Pide la auditoría cuando quieras publicar abierto.
+- Solo videos (MP4). Los tokens se renuevan solos.

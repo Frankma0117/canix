@@ -34,6 +34,7 @@ const expiry = (seconds: number) => new Date(Date.now() + seconds * 1000).toISOS
 export const youtubeProvider: PublisherProvider = {
   key: 'google',
   label: 'YouTube (Google)',
+  loginName: 'Google',
   available: true,
   oauth: true,
   envVars: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],

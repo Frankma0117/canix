@@ -38,13 +38,18 @@ export async function finishOAuth(state: string, code: string): Promise<Platform
   const provider = getProvider(entry.provider);
   if (!provider?.exchange) throw new AccessError('Proveedor no válido.');
   const res = await provider.exchange(entry.platform, code, redirectUri());
-  publisherStore.saveConnection({
-    platform: entry.platform,
-    provider: provider.key,
-    accountName: res.accountName,
-    accessEnc: encryptSecret(res.accessToken),
-    refreshEnc: res.refreshToken ? encryptSecret(res.refreshToken) : (publisherStore.getConnection(entry.platform)?.refresh_token_enc ?? null),
-    expiresAt: res.expiresAt ?? null,
-  });
+  const save = (platform: Platform, r: Omit<typeof res, 'also'>) =>
+    publisherStore.saveConnection({
+      platform,
+      provider: provider.key,
+      accountName: r.accountName,
+      accountId: r.accountId,
+      accessEnc: encryptSecret(r.accessToken),
+      refreshEnc: r.refreshToken ? encryptSecret(r.refreshToken) : (publisherStore.getConnection(platform)?.refresh_token_enc ?? null),
+      expiresAt: r.expiresAt ?? null,
+    });
+  save(entry.platform, res);
+  // One login can connect more than one network (Meta: the Facebook page and its Instagram).
+  for (const [platform, r] of Object.entries(res.also ?? {})) if (isPlatform(platform) && r) save(platform, r);
   return entry.platform;
 }

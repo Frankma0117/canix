@@ -25,6 +25,7 @@ export function initPublisherSchema(db: Database.Database): void {
       platform TEXT PRIMARY KEY CHECK (platform IN ('youtube', 'instagram', 'facebook', 'tiktok')),
       provider TEXT NOT NULL DEFAULT 'mock',
       account_name TEXT NOT NULL DEFAULT '',
+      account_id TEXT NOT NULL DEFAULT '',
       access_token_enc TEXT,
       refresh_token_enc TEXT,
       expires_at TEXT,
@@ -83,4 +84,8 @@ export function initPublisherSchema(db: Database.Database): void {
       value TEXT NOT NULL
     );
   `);
+
+  // Databases created before Meta/TikTok existed: the connection also keeps the page / account id.
+  const cols = db.prepare(`PRAGMA table_info(publisher_connections)`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === 'account_id')) db.exec(`ALTER TABLE publisher_connections ADD COLUMN account_id TEXT NOT NULL DEFAULT ''`);
 }
