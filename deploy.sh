@@ -132,10 +132,12 @@ fi
 
 # --- 3. Dependencies + build -----------------------------------------------------
 step "Backend: dependencies"
-(cd backend && npm ci)
+# A corrupted npm cache (ENOENT in _cacache) breaks `npm ci`: clean it once and retry.
+npm_ci() { npm ci || { echo "npm ci failed - cleaning the npm cache and retrying once."; npm cache clean --force; npm ci; }; }
+(cd backend && npm_ci)
 
 step "Frontend: dependencies + build"
-(cd frontend && npm ci && npm run build)
+(cd frontend && npm_ci && npm run build)
 
 # Leftovers from the single-package layout (before backend/ and frontend/ existed): the old
 # dependency folders and the old build folder of the public site. All untracked and regenerated
