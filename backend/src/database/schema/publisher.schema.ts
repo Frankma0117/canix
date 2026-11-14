@@ -116,6 +116,39 @@ export function initPublisherSchema(db: Database.Database): void {
       approved_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_publisher_designs_status ON publisher_designs(status, created_at);
+
+    -- Automation (services/publisher/automation/): recurring rules that make, write and schedule
+    -- the content by themselves. One row per rule; each time it comes due it makes a «run».
+    CREATE TABLE IF NOT EXISTS publisher_schedules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      media TEXT NOT NULL CHECK (media IN ('image', 'video')),
+      format TEXT NOT NULL DEFAULT 'square',      -- images: key of studio-formats.ts · videos: 'vertical'
+      layouts TEXT NOT NULL DEFAULT '[]',         -- images: layouts that take turns
+      topics TEXT NOT NULL DEFAULT '[]',          -- themes that take turns (empty: the model chooses from the brand's keywords)
+      platforms TEXT NOT NULL DEFAULT '[]',
+      days TEXT NOT NULL DEFAULT '[]',            -- weekdays, 0 = Sunday
+      time TEXT NOT NULL DEFAULT '09:00',         -- local time of the project (publisher_settings.timezone)
+      lead_hours INTEGER NOT NULL DEFAULT 8,      -- how long before it goes out the piece is made
+      mode TEXT NOT NULL DEFAULT 'approve' CHECK (mode IN ('approve', 'auto')),
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS publisher_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      schedule_id INTEGER NOT NULL REFERENCES publisher_schedules(id) ON DELETE CASCADE,
+      publish_at TEXT NOT NULL,                   -- UTC 'YYYY-MM-DD HH:MM:SS'
+      item_kind TEXT NOT NULL CHECK (item_kind IN ('design', 'promo')),
+      item_id INTEGER,
+      post_id INTEGER,
+      status TEXT NOT NULL DEFAULT 'generating' CHECK (status IN ('generating', 'awaiting', 'scheduled', 'published', 'partial', 'failed', 'skipped')),
+      detail TEXT NOT NULL DEFAULT '',
+      notified INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (schedule_id, publish_at)
+    );
+    CREATE INDEX IF NOT EXISTS idx_publisher_runs_status ON publisher_runs(status, publish_at);
   `);
 
   // Databases created before Meta/TikTok existed: the connection also keeps the page / account id.

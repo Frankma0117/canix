@@ -1,5 +1,6 @@
 import { wardrobeUpkeep } from './services/fashion/upkeep.js';
 import { startPublisherJob } from './services/publisher/publisher-job.js';
+import { setPublisherHost } from './services/publisher/automation/automation.host.js';
 import { setWardrobeNotifier } from './services/fashion/review.js';
 import { repairRoutines } from './services/routines/routine-repairs.service.js';
 import { quietLibsignalLogs } from './shared/utils/quiet-libsignal.js';
@@ -121,6 +122,14 @@ async function main() {
   demoTimer.unref();
 
   // Content publisher: sends the scheduled posts when their time comes (services/publisher/).
+  // The automation tells the administrator by WhatsApp when something needs their OK or went out.
+  setPublisherHost({
+    adminId: () => usersModel.getAdmin()?.id ?? null,
+    notify: async (text) => {
+      const admin = usersModel.getAdmin();
+      if (admin) await bot.session.sendText(admin.jid, text);
+    },
+  });
   startPublisherJob();
 
   // Wardrobe upkeep (see services/fashion/upkeep.ts): colors read from the photos, exact duplicates removed -

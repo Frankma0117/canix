@@ -78,6 +78,7 @@ export interface PublisherResponse {
   posts: PublisherPost[];
   assets: PublisherAsset[];
   generation: { cap: number; used: number; textAi: boolean };
+  awaiting: number;
 }
 
 // ---------- brand studio (GET /api/admin/publisher/studio) ----------
@@ -130,4 +131,44 @@ export interface StudioStatus {
 export interface StudioResponse {
   status: StudioStatus;
   designs: StudioDesign[];
+}
+
+// ---------- automation (GET /api/admin/publisher/automation) ----------
+export type RunStatus = 'generating' | 'awaiting' | 'scheduled' | 'published' | 'partial' | 'failed' | 'skipped';
+
+export interface AutomationSchedule {
+  id: number;
+  name: string;
+  media: 'image' | 'video';
+  format: string;
+  layouts: string[];
+  topics: string[];
+  platforms: PublisherPlatform[];
+  days: number[];
+  time: string;
+  leadHours: number;
+  mode: 'approve' | 'auto';
+  enabled: boolean;
+  nextAt: string | null;
+  missing: string[];
+}
+
+export interface AutomationRun {
+  id: number;
+  scheduleId: number;
+  scheduleName: string;
+  media: 'image' | 'video';
+  publishAt: string | null;
+  status: RunStatus;
+  detail: string;
+  title: string;
+  preview: string;
+  post: PublisherPost | null;
+}
+
+export interface AutomationOverview {
+  timezone: string;
+  schedules: AutomationSchedule[];
+  runs: AutomationRun[];
+  awaiting: number;
 }

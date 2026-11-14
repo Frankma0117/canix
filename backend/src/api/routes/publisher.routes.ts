@@ -4,11 +4,12 @@ import { approvedAssets, generateAssets, generationCap, mediaAccess, postFromAss
 import {
   connect, connectionsView, disconnect, getBrand, load, postView, providersView, removePost, retry, runDue, saveBrand, schedule, suggestSeo, unschedule, updatePost,
 } from '../../services/publisher/publisher.service.js';
+import { approveRun, automationOverview, createSchedule, deleteSchedule, runNow, saveTimeZone, setScheduleEnabled, skipRun, updateSchedule, type ScheduleBody } from '../../services/publisher/automation/automation.service.js';
 import { beginOAuth, finishOAuth } from '../../services/publisher/publisher-oauth.js';
 import { publisherStore } from '../../services/publisher/publisher.store.js';
 import { PLATFORMS } from '../../services/publisher/publisher.types.js';
 import { createDesigns, deleteDesign, editDesign, listDesigns, redoDesign, resumeStudioQueue, reviewDesign, saveIdentity, studioStatus, useAsLogo } from '../../services/publisher/studio/studio.service.js';
-import { h, int, str, strArr, userId } from '../http-helpers.js';
+import { h, int, intArr, str, strArr, userId } from '../http-helpers.js';
 
 /**
  * Content publisher (/api/admin/publisher/*, admin only - mounted behind requirePanelAdmin by
@@ -29,6 +30,7 @@ export function registerPublisherRoutes(app: Express): void {
         posts: publisherStore.listPosts().map((p) => postView(p, resolveMedia)),
         assets: approvedAssets(),
         generation: { cap: generationCap(), used: usedThisMonth(), textAi: !!env.ai.apiKey },
+        awaiting: automationOverview().awaiting,
       }),
     ),
   );
@@ -81,6 +83,30 @@ export function registerPublisherRoutes(app: Express): void {
       });
     }),
   );
+
+  // ---------- automation: recurring rules and their runs ----------
+  const scheduleBody = (b: Record<string, unknown>): ScheduleBody => ({
+    name: str(b?.name, 60),
+    media: str(b?.media, 10),
+    format: str(b?.format, 30),
+    layouts: b?.layouts === undefined ? undefined : strArr(b.layouts),
+    topics: b?.topics === undefined ? undefined : strArr(b.topics),
+    platforms: b?.platforms === undefined ? undefined : strArr(b.platforms),
+    days: b?.days === undefined ? undefined : intArr(b.days),
+    time: str(b?.time, 5),
+    leadHours: int(b?.leadHours),
+    mode: str(b?.mode, 10),
+    enabled: typeof b?.enabled === 'boolean' ? b.enabled : undefined,
+  });
+  app.get('/api/admin/publisher/automation', h((_req, res) => res.json(automationOverview())));
+  app.put('/api/admin/publisher/automation/timezone', h((req, res) => res.json({ timezone: saveTimeZone(str(req.body?.timezone, 60) ?? '') })));
+  app.post('/api/admin/publisher/automation/schedules', h((req, res) => res.json({ id: createSchedule(scheduleBody(req.body)) })));
+  app.put('/api/admin/publisher/automation/schedules/:id', h((req, res) => (updateSchedule(Number(req.params.id), scheduleBody(req.body)), res.json({ ok: true }))));
+  app.post('/api/admin/publisher/automation/schedules/:id/enabled', h((req, res) => (setScheduleEnabled(Number(req.params.id), req.body?.enabled === true), res.json({ ok: true }))));
+  app.post('/api/admin/publisher/automation/schedules/:id/run-now', h(async (req, res) => (await runNow(Number(req.params.id)), res.json({ ok: true }))));
+  app.delete('/api/admin/publisher/automation/schedules/:id', h((req, res) => (deleteSchedule(Number(req.params.id)), res.json({ ok: true }))));
+  app.post('/api/admin/publisher/automation/runs/:id/approve', h(async (req, res) => res.json(await approveRun(Number(req.params.id)))));
+  app.post('/api/admin/publisher/automation/runs/:id/skip', h((req, res) => (skipRun(Number(req.params.id)), res.json({ ok: true }))));
 
   // ---------- brand studio: identity and designs ----------
   app.get('/api/admin/publisher/studio', h(async (_req, res) => res.json({ status: await studioStatus(), designs: listDesigns() })));

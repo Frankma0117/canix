@@ -11,7 +11,8 @@ Panel: **Administración → Publicador** (solo administrador). Cada proyecto ti
 | 3 | Conector YouTube (OAuth + subida reanudable, Data API v3) | Hecha; falta probarla con una cuenta real |
 | 4 | Conector Instagram y Facebook (Meta Graph API, un solo inicio de sesión) | Hecha; falta probarla con cuentas reales |
 | 5 | Conector TikTok (Content Posting API) | Hecha; falta probarla con una cuenta real |
-| 6 | Portar el módulo a Brindix y demás proyectos | Pendiente |
+| 6 | Estudio de marca y automatización (calendario por red) | Hecha |
+| 7 | Portar el módulo a Brindix y demás proyectos | Pendiente |
 
 ## Piezas (todo en `backend/src/services/publisher/`)
 - `publisher.types.ts` — tipos, redes, límites por red e interfaz `PublisherProvider`.
@@ -77,3 +78,16 @@ Crea el logo, la foto de perfil, las portadas (YouTube 2560×1440 y Facebook 164
 - **Costo:** solo el arte con IA cuenta contra el tope mensual de piezas (el mismo de los videos).
 - **Servidor:** se hace en un proceso hijo de baja prioridad (`studio-worker.ts`); necesita el mismo Chromium que el módulo de publicidad (`deploy/ubuntu-10-setup-promo.sh`). Las fuentes se piden a Google Fonts; sin internet se usa una fuente del sistema.
 - Archivos: `services/publisher/studio/` (`studio-art`, `studio-templates`, `studio-compose`, `studio-copy`, `studio-build`, `studio.service`) y `components/organisms/publisher/StudioPanel.tsx`. Para otro proyecto se copian junto con el resto del módulo; solo cambia la identidad.
+
+## Automatización (Administración → Publicador → Automático)
+Reglas recurrentes («lunes y jueves 8:00 a. m.: un consejo en Instagram y Facebook») que hacen todo solas.
+- **Una regla** tiene: tipo (imagen del estudio o video de publicidad), formato, diseños que se turnan, temas que se turnan (o la IA elige a partir de las palabras clave), redes, días, hora local, anticipación (4–48 h) y modo.
+- **Modo «Yo la apruebo»:** unas horas antes de la publicación se crea la pieza, te llega un WhatsApp («lista para aprobar») y aparece en «Por aprobar». Al aprobar se crea la publicación con su SEO por red y queda programada. Si nadie la aprueba 6 h después de su hora, se omite (y se avisa).
+- **Modo «Automática»:** se crea, se aprueba, se escribe el SEO y se programa sola; el WhatsApp avisa cuando la programó y cuando salió.
+- **Siempre se avisa** si algo falla (pieza que no se pudo crear, red desconectada, publicación que falló o salió parcial).
+- **Tope del mes:** si se acaba, la regla cambia a los diseños gratis (Consejo / Frase) para no romper el calendario.
+- **«Preparar ahora»** crea la próxima sin esperar su ventana, para ver qué sale.
+- **Zona horaria:** `publisher_settings.timezone` (por defecto `America/Bogota`; se cambia con `PUT /api/admin/publisher/automation/timezone`). Los cambios de hora de verano se manejan solos.
+- **Cómo funciona:** cada minuto el job (`publisher-job.ts`) llama a `automationTick()` (planea las corridas que entran en su ventana y mueve las abiertas) y luego envía lo vencido. Cada corrida (`publisher_runs`) es única por regla y hora: nada se duplica aunque el servidor se reinicie.
+- **Avisos:** el módulo no conoce WhatsApp. Cada proyecto conecta su canal en `index.ts` con `setPublisherHost({ adminId, notify })`; sin eso funciona igual, solo que sin avisos.
+- Archivos: `services/publisher/automation/` (`automation.service`, `.store`, `.host`, `automation-time`) y `components/organisms/publisher/AutomationPanel.tsx`.

@@ -13,10 +13,11 @@ import { Skeleton } from '../../components/atoms/Skeleton.tsx';
 import { BrandForm } from '../../components/organisms/publisher/BrandForm.tsx';
 import { ConnectionsPanel } from '../../components/organisms/publisher/ConnectionsPanel.tsx';
 import { MediaGenerator } from '../../components/organisms/publisher/MediaGenerator.tsx';
+import { AutomationPanel } from '../../components/organisms/publisher/AutomationPanel.tsx';
 import { StudioPanel } from '../../components/organisms/publisher/StudioPanel.tsx';
 import { PostComposer } from '../../components/organisms/publisher/PostComposer.tsx';
 
-type Tab = 'queue' | 'new' | 'studio' | 'brand' | 'accounts';
+type Tab = 'queue' | 'new' | 'studio' | 'auto' | 'brand' | 'accounts';
 
 const STATUS: Record<PostStatus, { label: string; tone: string }> = {
   draft: { label: 'Borrador', tone: 'bg-gray-medium text-gray-dark dark:bg-white/10' },
@@ -104,6 +105,7 @@ export function PublisherPage() {
           { id: 'queue', label: '🗓️ Cola', count: data?.posts.length },
           { id: 'new', label: '✨ Nueva', count: data?.assets.length },
           { id: 'studio', label: '🎨 Estudio' },
+          { id: 'auto', label: '⚡ Automático', count: data?.awaiting || undefined },
           { id: 'brand', label: '🗣️ Marca' },
           { id: 'accounts', label: '🔗 Cuentas', count: connected },
         ]}
@@ -234,6 +236,7 @@ export function PublisherPage() {
           }}
         />
       )}
+      {tab === 'auto' && <AutomationPanel api={api} onChanged={() => void load()} />}
       {data && tab === 'brand' && <BrandForm api={api} brand={data.brand} onSaved={() => void load()} />}
       {data && tab === 'accounts' && <ConnectionsPanel api={api} connections={data.connections} onChange={() => void load()} />}
 
