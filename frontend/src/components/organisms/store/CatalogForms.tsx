@@ -165,6 +165,11 @@ export interface PromotionDraft {
   start_date: string;
   end_date: string;
   active: boolean;
+  image_url: string | null;
+  own_image: boolean;
+  /** A banner picked in this form, uploaded after the promotion is saved. */
+  file: File | null;
+  removeImage: boolean;
 }
 
 export function promotionDraftOf(p: StorePromotion | null): PromotionDraft {
@@ -178,6 +183,10 @@ export function promotionDraftOf(p: StorePromotion | null): PromotionDraft {
     start_date: p?.start_date ?? '',
     end_date: p?.end_date ?? '',
     active: p ? !!p.active : true,
+    image_url: p?.image_url ?? null,
+    own_image: !!p?.own_image,
+    file: null,
+    removeImage: false,
   };
 }
 
@@ -191,6 +200,18 @@ export function PromotionForm({ initial, products, onCancel, onSave }: { initial
   const product = products.find((p) => String(p.id) === draft.product_id);
   const priceTooHigh = !!product && draft.promo_price !== '' && Number(draft.promo_price) >= product.price;
   const valid = draft.title.trim() && !priceTooHigh && (!draft.product_id || draft.promo_price !== '');
+  const [preview, setPreview] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  // Own banner > the linked product's photo (what the assistant sends when there is no banner).
+  const own = preview ?? (draft.removeImage || !draft.own_image ? null : draft.image_url);
+  const shown = own ?? product?.image_url ?? null;
+
+  function pick(file: File | undefined) {
+    if (!file) return;
+    if (preview) URL.revokeObjectURL(preview);
+    setPreview(URL.createObjectURL(file));
+    setDraft((d) => ({ ...d, file, removeImage: false }));
+  }
 
   return (
     <Modal title={draft.id ? 'Editar promoción' : 'Nueva promoción'} description="El asistente la ofrece los días en que aplica y cobra el precio especial." onClose={onCancel} size="md">
@@ -203,6 +224,42 @@ export function PromotionForm({ initial, products, onCancel, onSave }: { initial
           await onSave(draft).finally(() => setSaving(false));
         }}
       >
+        <div>
+          <span className="mb-1.5 block text-sm font-semibold text-ink dark:text-white/85">Imagen de la promoción</span>
+          <div className="flex items-stretch gap-3">
+            <button
+              type="button"
+              onClick={() => fileInput.current?.click()}
+              aria-label={own ? 'Cambiar la imagen' : 'Subir una imagen'}
+              className="relative flex aspect-[16/9] w-48 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-dashed border-gray-medium bg-gray-light text-gray-dark transition-colors hover:border-primary/50 hover:text-primary focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/25 dark:border-white/15 dark:bg-white/5"
+            >
+              {shown ? <img src={shown} alt="" className={`h-full w-full object-cover ${own ? '' : 'opacity-70'}`} /> : <ImagePlus size={28} />}
+            </button>
+            <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5 text-sm">
+              <p className="text-gray-dark">{own ? 'Esta imagen se envía con la promoción por WhatsApp.' : shown ? 'Sin imagen propia se usa la foto del producto.' : 'Una imagen hace que la promoción se vea y se venda mejor.'}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="secondary" onClick={() => fileInput.current?.click()}>
+                  <ImagePlus size={14} /> {own ? 'Cambiar' : 'Subir imagen'}
+                </Button>
+                {own && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      if (preview) URL.revokeObjectURL(preview);
+                      setPreview(null);
+                      setDraft((d) => ({ ...d, file: null, removeImage: true }));
+                    }}
+                  >
+                    <Trash2 size={14} /> Quitar
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+          <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => pick(e.target.files?.[0])} />
+        </div>
         <div>
           <Label htmlFor="pr-title">Título</Label>
           <Input id="pr-title" value={draft.title} onChange={(e) => set('title', e.target.value)} maxLength={120} placeholder="Martes de doble carne" autoFocus required />

@@ -76,6 +76,9 @@ export interface StorePromotion {
   end_date: string | null;
   active: number;
   applies_today: boolean;
+  /** The promotion's own banner, or the linked product's photo when it has none. */
+  image_url: string | null;
+  own_image: boolean;
 }
 
 export interface CatalogResponse {

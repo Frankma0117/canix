@@ -31,6 +31,7 @@
   --shadow-lift: 0 2px 4px rgb(20 26 69 / 0.05), 0 18px 40px -16px rgb(75 92 246 / 0.35);
 
   --animate-fade-in: fade-in 0.25s ease-out both;
+  --animate-pop: pop 0.16s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-pop-in: pop-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
   --animate-slide-in-right: slide-in-right 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-float: float 4s ease-in-out infinite;
@@ -38,6 +39,10 @@
   @keyframes fade-in {
     from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pop {
+    from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+    to { opacity: 1; transform: none; }
   }
   @keyframes pop-in {
     from { opacity: 0; transform: scale(0.94) translateY(8px); }

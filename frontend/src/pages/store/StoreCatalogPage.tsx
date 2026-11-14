@@ -90,7 +90,12 @@ function Catalog({ store, view }: { store: Store; view?: 'products' | 'promotion
       end_date: draft.end_date || null,
       active: draft.active,
     };
-    const ok = await run(() => (draft.id ? api.patch(`${base}/promotions/${draft.id}`, body) : api.post(`${base}/promotions`, body)), 'Promoción guardada.');
+    const ok = await run(async () => {
+      const id = draft.id ?? (await api.post<{ id: number }>(`${base}/promotions`, body)).id;
+      if (draft.id) await api.patch(`${base}/promotions/${id}`, body);
+      if (draft.file) await api.upload(`${base}/promotions/${id}/image`, [draft.file]);
+      else if (draft.removeImage && draft.own_image) await api.del(`${base}/promotions/${id}/image`);
+    }, 'Promoción guardada.');
     if (ok) setPromotion(null);
   }
 
@@ -296,7 +301,10 @@ function PromotionRow({ promo, onEdit, onDelete }: { promo: StorePromotion; onEd
   const days = promo.weekdays ? [1, 2, 3, 4, 5, 6, 0].filter((d) => promo.weekdays!.includes(d)).map((d) => WEEKDAY_SHORT[d]).join(', ') : 'Todos los días';
   const range = promo.start_date || promo.end_date ? ` · ${promo.start_date ? `desde ${promo.start_date}` : ''}${promo.end_date ? ` hasta ${promo.end_date}` : ''}` : '';
   return (
-    <li className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-gray-medium/60 px-4 py-3 last:border-b-0 dark:border-white/10">
+    <li className={`flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-gray-medium/60 px-4 py-3 last:border-b-0 dark:border-white/10 ${promo.active ? '' : 'bg-gray-light/60 dark:bg-white/[0.03]'}`}>
+      <div className={`flex aspect-[16/9] w-28 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-light text-gray-dark dark:bg-white/5 ${promo.active ? '' : 'opacity-60 grayscale'}`}>
+        {promo.image_url ? <img src={promo.image_url} alt="" loading="lazy" className="h-full w-full object-cover" /> : <ImageOff size={20} aria-label="Sin imagen" />}
+      </div>
       <div className="min-w-0 flex-1 basis-64">
         <p className="flex flex-wrap items-center gap-2 text-sm font-bold text-ink dark:text-white">
           {promo.title}

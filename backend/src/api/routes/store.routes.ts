@@ -96,7 +96,8 @@ function promotionView(storeId: number, promo: StorePromotion, products: StorePr
   return {
     ...promo,
     weekdays: promoWeekdays(promo),
-    image_url: publicMediaUrl(storeId, promo.image),
+    image_url: publicMediaUrl(storeId, promo.image ?? product?.image ?? null),
+    own_image: !!promo.image,
     product_name: product?.name ?? null,
     product_price: product?.price ?? null,
     applies_today: promoAppliesOn(promo),
@@ -465,8 +466,41 @@ export function registerStoreRoutes(app: Express): void {
 
   app.delete(
     '/api/stores/:storeId/promotions/:id',
-    h((req, res) => {
-      storeCatalogModel.removePromotion(storeOf(req).id, Number(req.params.id));
+    h(async (req, res) => {
+      const store = storeOf(req);
+      const promo = storeCatalogModel.promotion(store.id, Number(req.params.id));
+      storeCatalogModel.removePromotion(store.id, Number(req.params.id));
+      if (promo?.image) await deleteStoreImage(store.id, promo.image);
+      res.json({ ok: true });
+    }),
+  );
+
+  // The promotion's own banner (without one, the linked product's photo is used).
+  app.post(
+    '/api/stores/:storeId/promotions/:id/image',
+    imageUpload,
+    h(async (req, res) => {
+      const store = storeOf(req);
+      const promo = storeCatalogModel.promotion(store.id, Number(req.params.id));
+      const image = uploadedImage(req);
+      if (!promo) throw new StoreError('Esa promoción no existe.');
+      if (!image) throw new StoreError('No llegó ninguna imagen.');
+      const file = await saveStoreImage(store.id, image, 'public');
+      storeCatalogModel.updatePromotion(store.id, promo.id, { image: file });
+      await deleteStoreImage(store.id, promo.image);
+      res.json({ image_url: publicMediaUrl(store.id, file) });
+    }),
+  );
+
+  app.delete(
+    '/api/stores/:storeId/promotions/:id/image',
+    h(async (req, res) => {
+      const store = storeOf(req);
+      const promo = storeCatalogModel.promotion(store.id, Number(req.params.id));
+      if (promo?.image) {
+        storeCatalogModel.updatePromotion(store.id, promo.id, { image: null });
+        await deleteStoreImage(store.id, promo.image);
+      }
       res.json({ ok: true });
     }),
   );
