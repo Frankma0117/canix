@@ -33,6 +33,9 @@ Generar material cuesta (voz, música, IA). El tope mensual por proyecto se guar
 En Canix la generación ya es solo del administrador, así que no es un permiso de paquetes.
 
 ## Copiar el módulo a otro proyecto
+**Recomendado: usar el servicio independiente `D:publisher-app`** (repo propio): es este mismo módulo empaquetado con login, biblioteca de archivos, Docker y guías; funciona con cualquier stack (Java, Next.js…). Se despliega una copia por proyecto. Un arreglo del módulo aquí se porta allá (y al revés).
+
+La copia manual de abajo solo aplica a proyectos Node/TypeScript que quieran integrarlo en su propio código:
 1. Copia `services/publisher/`, `database/schema/publisher.schema.ts`, `api/routes/publisher.routes.ts` y, en el frontend, `types/publisher.ts`, `pages/admin/PublisherPage.tsx` y `components/organisms/publisher/`.
 2. Registra: `initPublisherSchema` en la migración, `registerPublisherRoutes` en las rutas de admin, `startPublisherJob()` al arrancar y la sección en el menú.
 3. Reescribe `publisher-media.ts` (`resolveMedia`, `approvedAssets`, `postFromAsset`, `generateAssets`) con el generador y el almacenamiento del proyecto. Quita de `publisher.routes.ts` lo que no use.
