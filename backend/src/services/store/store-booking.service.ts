@@ -132,6 +132,10 @@ export const staffRepo = {
     })();
     return true;
   },
+  /** Ids of the services this person is limited to (empty = does every service). */
+  serviceIds(staffId: number): number[] {
+    return (db.prepare("SELECT product_id FROM store_staff_services WHERE staff_id = ?").all(staffId) as { product_id: number }[]).map((r) => r.product_id);
+  },
   hours(staffId: number): StaffHour[] {
     return db.prepare('SELECT * FROM store_staff_hours WHERE staff_id = ? ORDER BY weekday, start_time').all(staffId) as StaffHour[];
   },

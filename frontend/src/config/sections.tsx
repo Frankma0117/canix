@@ -38,6 +38,7 @@ import { StickersPage } from '../pages/admin/StickersPage.tsx';
 import { StoresAdminPage } from '../pages/admin/StoresAdminPage.tsx';
 import { StoreOrdersPage } from '../pages/store/StoreOrdersPage.tsx';
 import { StoreCatalogPage } from '../pages/store/StoreCatalogPage.tsx';
+import { StoreBookingPage } from '../pages/store/StoreBookingPage.tsx';
 import { StoreChatsPage } from '../pages/store/StoreChatsPage.tsx';
 import { StoreHomePage } from '../pages/store/StoreHomePage.tsx';
 import { StoreBotPage } from '../pages/store/StoreBotPage.tsx';
@@ -106,6 +107,7 @@ const SECTIONS: SectionDef[] = [
   // Módulo Negocio: lo que ve el administrador de un negocio (y el administrador de Canix al entrar a soportarlo).
   { id: 'store-home', description: 'Cómo va el negocio hoy y qué falta por configurar.', label: 'Resumen', module: 'business', group: 'Operación', icon: LayoutDashboard, perms: ['store.manage'], render: () => <StoreHomePage /> },
   { id: 'store-orders', description: 'Pedidos que tus clientes confirmaron por WhatsApp, para confirmar y enviar.', label: 'Pedidos', module: 'business', group: 'Operación', icon: ShoppingBag, perms: ['store.manage'], render: () => <StoreOrdersPage /> },
+  { id: 'store-bookings', description: 'Las citas que tus clientes agendaron por WhatsApp, tu equipo, los servicios y lo que el asistente sabe del negocio.', label: 'Citas', module: 'business', group: 'Operación', icon: CalendarDays, perms: ['store.manage'], render: () => <StoreBookingPage /> },
   { id: 'store-chats', description: 'Los chats del WhatsApp del negocio y los clientes que esperan a una persona.', label: 'Conversaciones', module: 'business', group: 'Operación', icon: MessagesSquare, perms: ['store.manage'], render: () => <StoreChatsPage /> },
   { id: 'store-products', description: 'Productos con precio, foto y categorías.', label: 'Productos', module: 'business', group: 'Catálogo', icon: Tag, perms: ['store.manage'], render: () => <StoreCatalogPage view="products" /> },
   { id: 'store-promos', description: 'Promociones del día y por fechas.', label: 'Promociones', module: 'business', group: 'Catálogo', icon: BadgePercent, perms: ['store.manage'], render: () => <StoreCatalogPage view="promotions" /> },

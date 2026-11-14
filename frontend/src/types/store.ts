@@ -198,3 +198,42 @@ export interface StoreMember {
   notify: boolean;
   hasPassword: boolean;
 }
+
+
+// ---- Citas (negocios de servicios)
+export interface BookingService {
+  id: number;
+  name: string;
+  description: string | null;
+  price: number;
+  duration_min: number;
+}
+export interface StaffHour {
+  weekday: number;
+  start_time: string;
+  end_time: string;
+}
+export interface StaffMember {
+  id: number;
+  name: string;
+  specialty: string | null;
+  active: number;
+  hours: StaffHour[];
+  service_ids: number[];
+}
+export interface BookingAppointment {
+  id: number;
+  start_at: string;
+  end_at: string;
+  status: 'confirmed' | 'cancelled' | 'completed' | 'no_show';
+  notes: string | null;
+  service_name: string;
+  staff_name: string;
+  customer_name: string | null;
+  customer_phone: string | null;
+}
+export interface KnowledgeEntry {
+  id: number;
+  title: string;
+  content: string;
+}

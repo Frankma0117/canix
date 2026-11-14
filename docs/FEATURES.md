@@ -245,5 +245,5 @@ is a service; people (`store_staff`) have weekly hours and the services they do 
 checks free slots, books, reschedules and cancels, answers from the business' knowledge base (`store_knowledge`)
 and reminds the customer 3 hours before. The business' people get a WhatsApp notice for every new or cancelled
 appointment. Code: `backend/src/services/store/store-booking*.ts`, schema `database/schema/store-booking.schema.ts`,
-API `/api/stores/:storeId/booking/*` (services, staff, appointments, knowledge). Panel screens for staff, agenda and
-knowledge are still pending (API only for now).
+API `/api/stores/:storeId/booking/*` (services, staff, appointments, knowledge). Panel section "Citas" (agenda, equipo con horarios,
+servicios y conocimiento) is in `frontend/src/pages/store/StoreBookingPage.tsx`.

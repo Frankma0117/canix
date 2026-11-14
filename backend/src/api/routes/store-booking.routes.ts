@@ -55,7 +55,7 @@ export function registerStoreBookingRoutes(app: Express): void {
     '/api/stores/:storeId/booking/staff',
     h((req, res) => {
       const store = storeOf(req);
-      res.json({ staff: staffRepo.list(store.id).map((s) => ({ ...s, hours: staffRepo.hours(s.id) })) });
+      res.json({ staff: staffRepo.list(store.id).map((s) => ({ ...s, hours: staffRepo.hours(s.id), service_ids: staffRepo.serviceIds(s.id) })) });
     }),
   );
 
