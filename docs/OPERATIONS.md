@@ -61,3 +61,9 @@ limited. The code enforces most of the precautions; the rest are operating habit
 
 Logs are tagged by area: `[BOT] [WA] [LLM] [TOOL] [SCHEDULER] [FASHION] [PROMPT] [CHOICES] [AUTH]
 [ACCESS] [CALLS] [TTS] [STT] [DEDUP] [SEO] [DEMO] [API]`.
+
+## Backups and health check (install once on the server)
+- `scripts/backup.sh`: daily SQLite copy + `auth_info` into `data/backups/` (7 days). Cron line in the script header.
+- `scripts/healthcheck.sh`: every 5 minutes; set `HEALTHCHECK_PING_URL` in `.env` to a free healthchecks.io check so
+  you get an email/WhatsApp when pings stop (service down or crash loop).
+- Install both in `crontab -e` as `manuel` (no sudo needed). Test: `bash scripts/backup.sh && ls data/backups`.

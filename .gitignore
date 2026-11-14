@@ -36,3 +36,7 @@ muestras-voz/
 *.log
 npm-debug.log*
 .DS_Store
+
+# Backups written by scripts/backup.sh (contain the WhatsApp session)
+data/backups/
+data/*.log
