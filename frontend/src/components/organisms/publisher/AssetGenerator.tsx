@@ -21,7 +21,7 @@ const chip = (on: boolean) =>
 const usd = (cents: number) => `USD ${(cents / 100).toFixed(2)}`;
 
 /** Makes an image or a video from a description with the project's providers; the result joins the material to publish. */
-export function AssetGenerator({ api, onChanged }: { api: Api; onChanged: () => void }) {
+export function AssetGenerator({ api, onChanged, onPrepare }: { api: Api; onChanged: () => void; onPrepare: (assetId: string) => void }) {
   const toast = useToast();
   const [info, setInfo] = useState<(GenerationStatus & { assets: GeneratedAsset[] }) | null>(null);
   const [media, setMedia] = useState<'image' | 'video'>('image');
@@ -134,6 +134,11 @@ export function AssetGenerator({ api, onChanged }: { api: Api; onChanged: () => 
                   {a.status === 'working' ? 'Creando…' : a.status === 'error' ? a.detail || 'Falló.' : a.simulated ? 'Lista (muestra gratis)' : `Lista · ${usd(a.costCents)}`}
                 </p>
               </div>
+              {a.status === 'ready' && (
+                <Button size="sm" variant="soft" onClick={() => onPrepare(`g${a.id}`)}>
+                  Publicar
+                </Button>
+              )}
               {a.status !== 'working' && (
                 <button type="button" onClick={() => void remove(a.id)} className="grid size-9 place-items-center rounded-lg text-gray-dark transition-colors hover:bg-red-50 hover:text-red-600" aria-label="Eliminar">
                   <Trash2 size={16} />

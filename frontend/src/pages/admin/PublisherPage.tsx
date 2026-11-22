@@ -225,7 +225,7 @@ export function PublisherPage() {
               </div>
             )}
           </section>
-          <AssetGenerator api={api} onChanged={() => void load()} />
+          <AssetGenerator api={api} onChanged={() => void load()} onPrepare={(id) => void prepare(id)} />
           <MediaGenerator api={api} cap={data.generation.cap} used={data.generation.used} textAi={data.generation.textAi} onCreated={() => void load()} />
         </div>
       )}
