@@ -69,6 +69,10 @@ export const promoModel = {
     db.prepare(`UPDATE promo_items SET title = ?, caption = ?, updated_at = datetime('now') WHERE id = ?`).run(title, caption, id);
   },
 
+  setVoice(id: number, voice: string): void {
+    db.prepare(`UPDATE promo_items SET voice = ? WHERE id = ?`).run(voice, id);
+  },
+
   delete(id: number): void {
     db.prepare('DELETE FROM promo_items WHERE id = ?').run(id);
   },

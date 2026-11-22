@@ -11,6 +11,8 @@ import { MUSIC, featureByKey } from './promo-catalog.js';
 import { IMAGE_RULES, VIDEO_RULES, cleanImage, cleanVideo, imagePrompt, imageTemplate, videoPrompt, videoTemplate, type ImageCopy, type VideoScript } from './promo-copy.js';
 import * as render from './promo-render.js';
 import { deleteFiles, putFile, readFile } from './promo-storage.js';
+import { createHash } from 'node:crypto';
+import { qaVideo } from './promo-qa.js';
 
 /**
  * Builds one piece of advertising material (runs inside promo-worker.ts):
@@ -21,6 +23,9 @@ import { deleteFiles, putFile, readFile } from './promo-storage.js';
  */
 
 export const DEFAULT_VOICE = 'M5';
+
+/** Key of a narration clip in content.voiceCache: same voice and same text → same recording. */
+export const voiceHash = (voiceId: string, say: string) => createHash('sha1').update(`${voiceId}|${say}`).digest('hex').slice(0, 16);
 
 const progress = (id: number, msg: string) => promoModel.setStatus(id, 'working', msg);
 
@@ -57,7 +62,25 @@ export async function build(id: number): Promise<void> {
 
 // ---------- video ----------
 
+const CHANGE_RULES = `${VIDEO_RULES}
+
+Ahora NO escribes un guion nuevo: recibes el guion actual en JSON y un cambio pedido por el administrador. Devuelve el MISMO JSON ({title, caption, scenes}) con solo lo que el cambio exige; deja igual todo lo demás, en especial las escenas que no se mencionan.`;
+
 async function videoScript(item: PromoItem): Promise<VideoScript> {
+  const change = item.content.change;
+  if (change && item.content.scenes?.length) {
+    const current: VideoScript = { title: item.title, caption: item.caption, scenes: item.content.scenes };
+    progress(item.id, 'Aplicando tus cambios al guion…');
+    try {
+      return cleanVideo(await askModel(item.created_by, CHANGE_RULES, `GUION ACTUAL:
+${JSON.stringify(current)}
+
+CAMBIO PEDIDO: ${change}`), current);
+    } catch (err) {
+      console.log('[PROMO] Change request failed (%s); keeping the script', (err as Error).message);
+      return current;
+    }
+  }
   if (item.content.scenes?.length) return { title: item.title, caption: item.caption, scenes: item.content.scenes };
   const avoid = promoModel.recentTitles('video', item.kind, item.feature);
   const fallback = videoTemplate(item.kind, item.feature, avoid.length);
@@ -119,7 +142,9 @@ async function music(work: string): Promise<string | null> {
 
 async function buildVideo(item: PromoItem, work: string): Promise<void> {
   const script = await videoScript(item);
-  promoModel.setContent(item.id, item.title || script.title, item.caption || script.caption, { scenes: script.scenes });
+  const kept = item.content;
+  const voiceCache: Record<string, string> = { ...(kept.voiceCache ?? {}) };
+  promoModel.setContent(item.id, item.title || script.title, item.caption || script.caption, { ...kept, change: undefined, scenes: script.scenes, voiceCache });
   const voice = VOICES.find((v) => v.key === (item.voice || DEFAULT_VOICE)) ?? VOICES[0];
   const feature = featureByKey(item.feature);
 
@@ -133,12 +158,19 @@ async function buildVideo(item: PromoItem, work: string): Promise<void> {
     progress(item.id, `Grabando la voz (${i + 1} de ${script.scenes.length})…`);
     const lead = i === 0 ? 0.5 : 0.35;
     let said = scene.say.length / 14;
-    const mp3 = isFishConfigured() ? await fishTts(scene.say, voice.id) : null;
+    // A narration already recorded for this exact voice + text is reused (a redraw only pays for what changed).
+    const hash = voiceHash(voice.id, scene.say);
+    let mp3: Buffer | null = voiceCache[hash] ? await readFile(voiceCache[hash]) : null;
+    const reused = !!mp3;
+    if (!mp3 && isFishConfigured()) {
+      mp3 = await fishTts(scene.say, voice.id);
+      if (mp3) voiceCache[hash] = await putFile(item.id, `voice-${hash}.mp3`, mp3, 'audio/mpeg');
+    }
     if (mp3) {
       const path = render.writeTemp(work, `say-${i}.mp3`, mp3);
       said = (await render.durationOf(path)) || said;
       clips.push([path, t + lead]);
-      if (item.created_by) aiUsageModel.log(item.created_by, 'voice.fish.promo', env.audio.fish.model, scene.say.length, 0);
+      if (item.created_by && !reused) aiUsageModel.log(item.created_by, 'voice.fish.promo', env.audio.fish.model, scene.say.length, 0);
     }
     let dur = Math.max(2.6, lead + said + 0.55);
     let chat: ReturnType<typeof chatTiming>['lines'] | undefined;
@@ -158,6 +190,9 @@ async function buildVideo(item: PromoItem, work: string): Promise<void> {
     t += dur;
   }
   const total = +t.toFixed(3);
+  const qa = qaVideo(timeline, total);
+  const current = promoModel.get(item.id)!;
+  promoModel.setContent(item.id, current.title, current.caption, { ...current.content, scenes: script.scenes, voiceCache, qa, stage: { total, host: host(), feature: feature ? { name: feature.name, emoji: feature.emoji, sticker: feature.sticker } : null, scenes: timeline } });
 
   // 2. soundtrack
   progress(item.id, 'Mezclando el sonido…');
@@ -219,7 +254,13 @@ async function buildImage(item: PromoItem): Promise<void> {
 /** Saves the new files and removes the previous ones of the same item (a redraw). */
 async function replaceFiles(item: PromoItem, files: Record<string, PromoFile>): Promise<void> {
   const fresh = promoModel.get(item.id);
-  const old = Object.values(fresh?.files ?? {}).flatMap((f) => [f.file, f.poster].filter((x): x is string => !!x));
+  const refs = (m?: Record<string, PromoFile>) => Object.values(m ?? {}).flatMap((f) => [f.file, f.poster].filter((x): x is string => !!x));
+  let old = refs(fresh?.files);
+  // Videos keep the version before this one (to compare); the one before that goes away.
+  if (fresh && item.media === 'video' && Object.keys(fresh.files).length) {
+    old = refs(fresh.content.prev);
+    promoModel.setContent(item.id, fresh.title, fresh.caption, { ...fresh.content, prev: fresh.files });
+  }
   promoModel.setResult(item.id, files);
   await deleteFiles(item.id, old);
 }

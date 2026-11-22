@@ -9,8 +9,9 @@ import { env } from '../../config/env.js';
 import type { PromoItem, PromoKind, PromoMedia } from '../../entities/promo.entity.js';
 import { AccessError } from '../../models/permissions.model.js';
 import { FEATURES, FEATURE_KEYS, IMAGE_FORMATS, IMAGE_LAYOUTS, KINDS, MUSIC, VIDEO_FORMATS } from './promo-catalog.js';
-import { DEFAULT_VOICE } from './promo-build.js';
+import { DEFAULT_VOICE, voiceHash } from './promo-build.js';
 import { canRender } from './promo-render.js';
+import { cleanSay } from './promo-qa.js';
 import { deleteItemFiles, publicUrl, usesSpaces } from './promo-storage.js';
 
 /**
@@ -61,6 +62,15 @@ export function resumePromoQueue(): void {
 
 // ---------- reading ----------
 
+/** What the live preview plays: the narration already recorded for each scene (null when the text changed) and the music. */
+function previewAudio(p: PromoItem) {
+  const voice = VOICES.find((v) => v.key === (p.voice || DEFAULT_VOICE)) ?? VOICES[0];
+  const cache = p.content.voiceCache ?? {};
+  const scenes = (p.content.scenes ?? []).map((s) => (cache[voiceHash(voice.id, s.say)] ? publicUrl(cache[voiceHash(voice.id, s.say)]) : null));
+  const musicRef = promoModel.getSetting(`music:${promoModel.getSetting('music') ?? 'moderna'}`);
+  return { scenes, music: musicRef ? publicUrl(musicRef) : null };
+}
+
 function view(p: PromoItem) {
   const feature = FEATURES.find((f) => f.key === p.feature);
   return {
@@ -76,8 +86,10 @@ function view(p: PromoItem) {
     idea: p.idea,
     title: p.title,
     caption: p.caption,
-    content: p.content,
+    content: { ...p.content, voiceCache: undefined, prev: undefined },
+    prev: Object.fromEntries(Object.entries(p.content.prev ?? {}).map(([fmt, f]) => [fmt, { url: publicUrl(f.file), poster: publicUrl(f.poster), seconds: f.seconds ?? null }])),
     voice: p.voice,
+    audio: p.media === 'video' ? previewAudio(p) : null,
     files: Object.fromEntries(Object.entries(p.files).map(([fmt, f]) => [fmt, { url: publicUrl(f.file), poster: publicUrl(f.poster), seconds: f.seconds ?? null }])),
     createdAt: `${p.created_at.replace(' ', 'T')}Z`,
   };
@@ -93,11 +105,18 @@ export async function promoStatus() {
     storage: usesSpaces() ? 'spaces' : 'local',
     voices: VOICES.map(({ key, name, gender, style }) => ({ key, name, gender, style })),
     voiceKey: promoModel.getSetting('voice') ?? DEFAULT_VOICE,
+    recommended: RECOMMENDED_VOICES,
     musicOptions: [...MUSIC.map(({ key, name }) => ({ key, name })), { key: 'none', name: 'Sin música' }],
     musicKey: promoModel.getSetting('music') ?? 'moderna',
     features: FEATURES.map(({ key, name, emoji }) => ({ key, name, emoji })),
   };
 }
+
+/** Voices that match the house line (the guide's narrators): a clear warm female narrator and an agile male announcer. */
+const RECOMMENDED_VOICES = [
+  { role: 'Narradora clara y cálida (línea de la guía)', keys: ['M5', 'M3', 'M8', 'M6'] },
+  { role: 'Locutor ágil y cercano', keys: ['H14', 'H4', 'H12', 'H19'] },
+];
 
 export function listPromo() {
   return promoModel.list().map(view);
@@ -184,6 +203,46 @@ export function redrawImage(id: number, changes: { headline?: string; sub?: stri
     cta: clip(changes.cta, 32, c.cta),
     bullets: bullets?.length === 3 ? bullets : c.bullets,
   });
+  promoModel.setStatus(id, 'pending', 'En cola');
+  enqueue(id);
+  return view(load(id));
+}
+
+const SHOT_EDITABLE = ['hook', 'chat', 'features', 'steps', 'screen', 'cta', 'end'];
+
+/**
+ * Videos: the administrator edits the text of the scenes (what shows and what the narrator says) and/or
+ * asks for a change in plain words; the video is recorded again. Only the scenes whose text changed pay
+ * for a new narration (promo-build.ts keeps the clips by hash).
+ */
+export function redrawVideo(id: number, changes: { scenes?: { text?: string; say?: string; items?: string[] }[]; instruction?: string; voice?: string }) {
+  const item = load(id);
+  if (item.media !== 'video') throw new AccessError('Solo los videos se vuelven a grabar.');
+  if (['pending', 'working'].includes(item.status)) throw new AccessError('Se está creando: espera a que termine.');
+  const scenes = item.content.scenes;
+  if (!scenes?.length) throw new AccessError('Este video no tiene guion que corregir.');
+  const instruction = (changes.instruction ?? '').trim().slice(0, 600);
+  if (changes.scenes && changes.scenes.length !== scenes.length) throw new AccessError('El guion cambió: recarga e inténtalo de nuevo.');
+  const next = scenes.map((s, i) => {
+    const c = changes.scenes?.[i];
+    if (!c || !SHOT_EDITABLE.includes(s.shot)) return s;
+    const items = c.items?.map((x) => x.trim().slice(0, 40)).filter(Boolean);
+    return {
+      ...s,
+      text: (c.text ?? s.text).trim().slice(0, 80) || s.text,
+      say: cleanSay((c.say ?? s.say).slice(0, 400)) || s.say,
+      ...(s.items && items && items.length >= 3 ? { items } : {}),
+    };
+  });
+  const edited = JSON.stringify(next) !== JSON.stringify(scenes);
+  if (!edited && !instruction && !changes.voice) throw new AccessError('No hay nada que cambiar.');
+  if (changes.voice !== undefined) {
+    if (!VOICES.some((v) => v.key === changes.voice)) throw new AccessError('Esa voz no existe.');
+    if (changes.voice !== item.voice) promoModel.setVoice(id, changes.voice);
+  }
+  const note = [edited ? 'Texto de escenas corregido' : '', instruction, changes.voice && changes.voice !== item.voice ? `Voz: ${changes.voice}` : ''].filter(Boolean).join(' · ');
+  const revisions = [...(item.content.revisions ?? []), { at: new Date().toISOString(), note }].slice(-20);
+  promoModel.setContent(id, item.title, item.caption, { ...item.content, scenes: next, revisions, change: instruction || undefined, qa: undefined });
   promoModel.setStatus(id, 'pending', 'En cola');
   enqueue(id);
   return view(load(id));

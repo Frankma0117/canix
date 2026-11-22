@@ -13,15 +13,17 @@ import { uploadErrorMessage } from '../../services/files/uploads.service.js';
  */
 
 /** Standard defensive headers (no external libs). CSP allows only same-origin code. */
-export function securityHeaders(_req: Request, res: Response, next: NextFunction): void {
+export function securityHeaders(req: Request, res: Response, next: NextFunction): void {
+  // The stage of the advertising videos is shown inside the admin portal (live preview); nothing else may be framed.
+  const framable = req.path === '/promo/stage.html';
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Frame-Options', framable ? 'SAMEORIGIN' : 'DENY');
   res.setHeader('Referrer-Policy', 'same-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   res.setHeader(
     'Content-Security-Policy',
     "default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self'; " +
-      "connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+      `connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; frame-ancestors ${framable ? "'self'" : "'none'"}; base-uri 'self'; form-action 'self'`,
   );
   next();
 }

@@ -24,8 +24,25 @@ export interface PromoScene {
   note?: string;
 }
 
+/** A change the administrator asked for after seeing a version (kept as the piece's history). */
+export interface PromoRevision {
+  at: string;
+  note: string;
+}
+
 export interface VideoContent {
   scenes: (PromoScene & { start?: number; dur?: number })[];
+  /** Narration clips already paid for, by hash(voice + text): a redraw only records the scenes that changed. */
+  voiceCache?: Record<string, string>;
+  /** Automatic quality warnings of the last render (see promo-qa.ts). */
+  qa?: { level: 'warn' | 'error'; msg: string }[];
+  /** What the stage needs to draw the video (timeline included): lets the portal preview edits without recording. */
+  stage?: { total: number; host: string; feature: unknown; scenes: object[] };
+  revisions?: PromoRevision[];
+  /** A change asked in plain words, applied to the script by the worker on the next redraw. */
+  change?: string;
+  /** Files of the version before the last redraw, to compare them. */
+  prev?: Record<string, PromoFile>;
 }
 
 export interface ImageContent {

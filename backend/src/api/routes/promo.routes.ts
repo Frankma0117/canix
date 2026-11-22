@@ -1,5 +1,5 @@
 import express, { type Express } from 'express';
-import { createPromo, deletePromo, listPromo, promoStatus, redrawImage, reviewPromo, saveSettings, updatePromoTexts, resumePromoQueue } from '../../services/promo/promo.service.js';
+import { createPromo, deletePromo, listPromo, promoStatus, redrawImage, redrawVideo, reviewPromo, saveSettings, updatePromoTexts, resumePromoQueue } from '../../services/promo/promo.service.js';
 import { LOCAL_DIR } from '../../services/promo/promo-storage.js';
 import { h, int, str, strArr, userId } from '../http-helpers.js';
 
@@ -59,6 +59,16 @@ export function registerPromoRoutes(app: Express): void {
         }),
       ),
     ),
+  );
+
+  app.post(
+    '/api/admin/promo/:id/revise',
+    h((req, res) => {
+      const scenes = Array.isArray(req.body?.scenes)
+        ? (req.body.scenes as Record<string, unknown>[]).map((s) => ({ text: str(s?.text, 80), say: str(s?.say, 400), items: Array.isArray(s?.items) ? strArr(s.items) : undefined }))
+        : undefined;
+      res.json(redrawVideo(Number(req.params.id), { scenes, instruction: str(req.body?.instruction, 600), voice: str(req.body?.voice, 10) }));
+    }),
   );
 
   app.delete(

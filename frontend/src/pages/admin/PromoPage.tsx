@@ -103,13 +103,22 @@ export function PromoPage() {
       {!st && <Skeleton className="h-64" />}
       {st && media === 'video' && (
         <Card className="mb-6 p-5 sm:p-6">
-          <h2 className="font-display text-lg font-extrabold text-ink dark:text-white">Voz y música de todos los videos</h2>
-          <p className="mb-4 mt-1 text-sm text-gray-dark">Todos los videos usan la misma voz para que la marca suene siempre igual. La música va suave, por debajo de la voz.</p>
+          <h2 className="font-display text-lg font-extrabold text-ink dark:text-white">Voz por defecto y música de todos los videos</h2>
+          <p className="mb-4 mt-1 text-sm text-gray-dark">Los videos nuevos usan esta voz para que la marca suene siempre igual (en cada video puedes cambiarla al corregirlo). Las recomendadas siguen la línea de la guía: narradora clara y cálida, y locutor ágil. La música va suave, por debajo de la voz.</p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <Label htmlFor="promo-voice">Voz {!st.voice && <span className="font-normal text-gray-dark">(falta FISH_AUDIO_API_KEY: sin voz, solo subtítulos)</span>}</Label>
+              <Label htmlFor="promo-voice">Voz por defecto {!st.voice && <span className="font-normal text-gray-dark">(falta FISH_AUDIO_API_KEY: sin voz, solo subtítulos)</span>}</Label>
               <div className="flex gap-2">
                 <Select id="promo-voice" value={voice} onChange={(e) => setVoice(e.target.value)}>
+                  {st.recommended.map((r) => (
+                    <optgroup key={r.role} label={`★ ${r.role}`}>
+                      {r.keys.map((k) => st.voices.find((v) => v.key === k)).filter((v) => !!v).map((v) => (
+                        <option key={`r-${v!.key}`} value={v!.key}>
+                          {v!.name} · {v!.style}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
                   {(['female', 'male'] as const).map((g) => (
                     <optgroup key={g} label={g === 'female' ? 'Mujer' : 'Hombre'}>
                       {st.voices
@@ -159,7 +168,7 @@ export function PromoPage() {
             </h2>
             <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
               {list.map((i) => (
-                <PromoCard key={`${i.id}-${i.status}-${Object.values(i.files)[0]?.url ?? ''}`} api={api} item={i} onChange={() => void load()} />
+                <PromoCard key={`${i.id}-${i.status}-${Object.values(i.files)[0]?.url ?? ''}`} api={api} item={i} voices={st?.voices ?? []} defaultVoice={st?.voiceKey ?? ''} onChange={() => void load()} />
               ))}
             </div>
           </section>

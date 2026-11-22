@@ -23,7 +23,10 @@ export interface PromoItem {
   title: string;
   caption: string;
   content: {
-    scenes?: { shot: string; text: string; say: string }[];
+    scenes?: { shot: string; text: string; say: string; items?: string[] }[];
+    stage?: { total: number; host: string; feature: unknown; scenes: Record<string, unknown>[] };
+    qa?: { level: 'warn' | 'error'; msg: string }[];
+    revisions?: { at: string; note: string }[];
     headline?: string;
     sub?: string;
     bullets?: string[];
@@ -31,7 +34,10 @@ export interface PromoItem {
     chat?: PromoChatLine[];
   };
   voice: string | null;
+  audio?: { scenes: (string | null)[]; music: string | null } | null;
   files: Record<string, { url: string; poster: string; seconds: number | null }>;
+  /** Videos: the version before the last redraw. */
+  prev?: Record<string, { url: string; poster: string; seconds: number | null }>;
   createdAt: string;
 }
 
@@ -43,6 +49,7 @@ export interface PromoStatusInfo {
   storage: 'spaces' | 'local';
   voices: { key: string; name: string; gender: 'male' | 'female'; style: string }[];
   voiceKey: string;
+  recommended: { role: string; keys: string[] }[];
   musicOptions: { key: string; name: string }[];
   musicKey: string;
   features: { key: string; name: string; emoji: string }[];

@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { Check, Copy, Download, RefreshCw, Trash2, X } from 'lucide-react';
+import { Check, Copy, Download, History, RefreshCw, Trash2, Wand2, X } from 'lucide-react';
 import type { Api } from '../../../services/api.ts';
 import { errMsg } from '../../../services/api.ts';
 import type { PromoItem } from '../../../types/promo.ts';
 import { Card } from '../../atoms/Card.tsx';
 import { Badge, type Tone } from '../../atoms/Badge.tsx';
 import { Button } from '../../atoms/Button.tsx';
-import { Input, Label, Textarea } from '../../atoms/Input.tsx';
+import { Input, Label, Select, Textarea } from '../../atoms/Input.tsx';
+import { StagePreview } from './StagePreview.tsx';
 import { useToast } from '../../molecules/Toast.tsx';
 
 const KIND: Record<string, string> = { ad: '📣 Anuncio', howto: '🧭 Cómo funciona', feature: '⭐ Función' };
@@ -22,13 +23,22 @@ const STATUS: Record<string, [string, Tone]> = {
 };
 
 /** One video or image: preview by format, review, texts to post, downloads and (images) text corrections. */
-export function PromoCard({ api, item, onChange }: { api: Api; item: PromoItem; onChange: () => void }) {
+export function PromoCard({ api, item, voices, defaultVoice, onChange }: { api: Api; item: PromoItem; voices: { key: string; name: string; gender: string; style: string }[]; defaultVoice: string; onChange: () => void }) {
   const toast = useToast();
   const formats = item.formats.filter((f) => item.files[f]);
   const [fmt, setFmt] = useState(formats[0]);
   const [title, setTitle] = useState(item.title);
   const [caption, setCaption] = useState(item.caption);
   const [copy, setCopy] = useState({ headline: item.content.headline ?? '', sub: item.content.sub ?? '', cta: item.content.cta ?? '', bullets: item.content.bullets ?? [] });
+  const [scenes, setScenes] = useState(() => (item.content.scenes ?? []).map((s) => ({ text: s.text, say: s.say })));
+  const [ask, setAsk] = useState('');
+  const [showPrev, setShowPrev] = useState(false);
+  const [askDelete, setAskDelete] = useState(false);
+  const [sound, setSound] = useState(true);
+  const [voiceKey, setVoiceKey] = useState(item.voice ?? defaultVoice);
+  const [live, setLive] = useState<{ text: string; say: string }[] | null>(null);
+  const prevFile = fmt ? item.prev?.[fmt] : undefined;
+  const qa = item.content.qa ?? [];
   const busy = item.status === 'pending' || item.status === 'working';
   const file = fmt ? item.files[fmt] : undefined;
   const [label, tone] = STATUS[item.status];
@@ -136,16 +146,112 @@ export function PromoCard({ api, item, onChange }: { api: Api; item: PromoItem; 
             </div>
           </div>
 
+          {item.media === 'video' && qa.length > 0 && (
+            <ul className="space-y-1 rounded-xl bg-warning/10 px-3 py-2 text-xs text-gray-dark">
+              {qa.map((q, i) => (
+                <li key={i}>
+                  {q.level === 'error' ? '⛔' : '⚠️'} {q.msg}
+                </li>
+              ))}
+            </ul>
+          )}
+
           {item.media === 'video' && item.content.scenes && (
             <details className="text-sm">
-              <summary className="cursor-pointer font-semibold text-ink dark:text-white">Ver el guion</summary>
-              <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-gray-dark">
-                {item.content.scenes.map((s, i) => (
+              <summary className="cursor-pointer font-semibold text-ink dark:text-white">✏️ Corregir el guion y volver a grabar</summary>
+              <div className="mt-3 grid gap-3">
+                <div className="rounded-xl bg-gray-medium/40 p-3">
+                  <Label htmlFor={`a-${item.id}`}>Pide un cambio con tus palabras</Label>
+                  <Textarea id={`a-${item.id}`} rows={2} maxLength={600} placeholder="Ej.: el gancho más corto y que la escena 3 hable del recordatorio por voz" value={ask} onChange={(e) => setAsk(e.target.value)} />
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="soft"
+                      disabled={!ask.trim()}
+                      onClick={() => run(async () => { await api.post(`/api/admin/promo/${item.id}/revise`, { instruction: ask }); setAsk(''); }, 'Aplicando el cambio y grabando de nuevo…')}
+                    >
+                      <Wand2 size={14} /> Aplicar y volver a grabar
+                    </Button>
+                    <span className="text-xs text-gray-dark">Usa un poco de IA de texto; la voz solo se paga en lo que cambie.</span>
+                  </div>
+                </div>
+                {item.content.stage && (
+                  <div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => setLive(scenes.map((x) => ({ ...x })))}>
+                        ▶ {live ? 'Actualizar' : 'Ver'} la vista previa con mis textos (con la voz ya grabada)
+                      </Button>
+                      {live && (
+                        <>
+                          <Button size="sm" variant="ghost" onClick={() => setSound(!sound)}>
+                            {sound ? '🔊 Con voz y música' : '🔇 Sin sonido'}
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setLive(null)}>
+                            Ocultar
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                    {live && <StagePreview stage={item.content.stage} format={fmt === 'landscape' ? 'landscape' : 'vertical'} texts={live} audio={item.audio} original={(item.content.scenes ?? []).map((x) => x.say)} sound={sound} />}
+                  </div>
+                )}
+                {voices.length > 0 && (
+                  <div>
+                    <Label htmlFor={`v-${item.id}`}>Voz de este video</Label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Select id={`v-${item.id}`} value={voiceKey} onChange={(e) => setVoiceKey(e.target.value)}>
+                        {voices.map((v) => (
+                          <option key={v.key} value={v.key}>
+                            {v.name} · {v.style}
+                            {v.key === defaultVoice ? ' (por defecto)' : ''}
+                          </option>
+                        ))}
+                      </Select>
+                      <Button size="sm" variant="soft" disabled={voiceKey === (item.voice ?? defaultVoice)} onClick={() => run(() => api.post(`/api/admin/promo/${item.id}/revise`, { voice: voiceKey }), 'Grabando con la nueva voz…')}>
+                        Cambiar la voz y volver a grabar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {scenes.map((s, i) => (
+                  <div key={i} className="grid gap-1.5">
+                    <Label>
+                      Escena {i + 1} · {item.content.scenes?.[i].shot}
+                    </Label>
+                    <Input maxLength={80} value={s.text} aria-label="Texto en pantalla" onChange={(e) => setScenes(scenes.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} />
+                    <Textarea rows={2} maxLength={400} value={s.say} aria-label="Lo que dice la voz" onChange={(e) => setScenes(scenes.map((x, j) => (j === i ? { ...x, say: e.target.value } : x)))} />
+                  </div>
+                ))}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button size="sm" variant="soft" onClick={() => run(() => api.post(`/api/admin/promo/${item.id}/revise`, { scenes }), 'Grabando de nuevo…')}>
+                    <RefreshCw size={14} /> Guardar textos y volver a grabar
+                  </Button>
+                  <span className="text-xs text-gray-dark">No gasta IA de texto; solo regraba las escenas que cambiaron.</span>
+                </div>
+              </div>
+            </details>
+          )}
+
+          {item.media === 'video' && (prevFile || (item.content.revisions?.length ?? 0) > 0) && (
+            <details className="text-sm">
+              <summary className="cursor-pointer font-semibold text-ink dark:text-white">
+                <History size={14} className="mr-1 inline" /> Versiones ({(item.content.revisions?.length ?? 0) + 1})
+              </summary>
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-gray-dark">
+                {(item.content.revisions ?? []).map((r, i) => (
                   <li key={i}>
-                    <b className="text-ink dark:text-white">{s.text}</b> — {s.say}
+                    {new Date(r.at).toLocaleString('es-CO')} — {r.note}
                   </li>
                 ))}
               </ol>
+              {prevFile && (
+                <div className="mt-2">
+                  <Button size="sm" variant="ghost" onClick={() => setShowPrev(!showPrev)}>
+                    {showPrev ? 'Ocultar la versión anterior' : 'Ver la versión anterior'}
+                  </Button>
+                  {showPrev && <video key={prevFile.url} className="mx-auto mt-2 block max-h-[420px] rounded-xl" src={prevFile.url} poster={prevFile.poster} controls preload="metadata" playsInline />}
+                </div>
+              )}
             </details>
           )}
 
@@ -192,18 +298,22 @@ export function PromoCard({ api, item, onChange }: { api: Api; item: PromoItem; 
         </>
       )}
 
-      {!busy && (
-        <Button
-          size="sm"
-          variant="ghost"
-          className="self-start"
-          onClick={() => {
-            if (confirm('¿Eliminar para siempre? Se borra en todos sus formatos.')) void run(() => api.del(`/api/admin/promo/${item.id}`));
-          }}
-        >
-          <Trash2 size={14} /> Eliminar
-        </Button>
-      )}
+      {!busy &&
+        (askDelete ? (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-gray-dark">¿Eliminar para siempre, en todos sus formatos?</span>
+            <Button size="sm" variant="secondary" onClick={() => void run(() => api.del(`/api/admin/promo/${item.id}`))}>
+              <Trash2 size={14} /> Sí, eliminar
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setAskDelete(false)}>
+              Cancelar
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" variant="ghost" className="self-start" onClick={() => setAskDelete(true)}>
+            <Trash2 size={14} /> Eliminar
+          </Button>
+        ))}
     </Card>
   );
 }

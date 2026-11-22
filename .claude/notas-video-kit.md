@@ -8,6 +8,11 @@ Plan base: estrategia TomaPedidos (conocimiento-videos-Tomapedidos) adaptada. Mo
 - `promo.service.ts` `redrawVideo` + ruta `POST /api/admin/promo/:id/revise` ({scenes[{text,say,items}], instruction, voice}); historial `content.revisions`.
 - `PromoCard.tsx`: editor de guion por escena, "pedir cambio con tus palabras", avisos de QA, versiones y ver versión anterior.
 
+## Hecho 2026-11-22 (voz)
+- Canix: vista previa con la voz ya grabada (solo escenas sin editar) y música; voz por defecto con grupo «★ recomendadas» (narradora M5/M3/M8/M6, locutor H14/H4/H12/H19) en PromoPage; cambio de voz por video (`/revise {voice}`) en PromoCard. typecheck OK.
+- Brindix (`platform/videos.component.ts`): ★ recomendadas primero y «Usar esta voz siempre» (guardada en localStorage del navegador, no compartida; defecto M5). SIN compilar (no hay node_modules local): correr `ng build` antes de desplegar.
+- Aula: ya tenía voz por defecto guardada + escuchar (`pages/admin/videos.js`); falta ★ recomendadas y vista previa con voz.
+
 ## Falta (en este orden)
 1. Probar en local: crear un video, editar una escena, pedir un cambio; revisar. Luego `/code-review low`, commit y deploy (skill deploy-canix). `confirm()` del botón Eliminar en PromoCard viola la regla «sin confirm()»: cambiar por diálogo propio.
 2. HECHO (sin probar en navegador): `StagePreview.tsx` (iframe de stage.html, `content.stage` guardado al grabar; cabeceras frame de `/promo/stage.html` relajadas en security.middleware). Los videos ya creados no tienen `content.stage` hasta regrabarlos.
