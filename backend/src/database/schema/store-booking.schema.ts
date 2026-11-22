@@ -77,5 +77,14 @@ export function initStoreBookingSchema(db: Database.Database): void {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_store_knowledge_store ON store_knowledge(store_id);
+
+    -- WhatsApp notices about a new appointment, so a 👎 from the business cancels it.
+    CREATE TABLE IF NOT EXISTS store_appointment_notices (
+      wa_message_id TEXT PRIMARY KEY,
+      store_id INTEGER NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+      appointment_id INTEGER NOT NULL REFERENCES store_appointments(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `);
 }

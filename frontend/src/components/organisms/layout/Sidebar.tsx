@@ -50,7 +50,7 @@ export function Sidebar({
   const groups = [...new Set(items.map((s) => s.group))];
   const [closed, setClosed] = useState<string[]>(readClosed);
   const current = MODULES.find((m) => m.id === module);
-  const subtitle = modules.length > 1 ? (current?.hint ?? 'Canix') : module === 'business' ? 'Asistente de pedidos' : user?.role === 'admin' ? 'Panel de administración' : 'Tu asistente personal';
+  const subtitle = modules.length > 1 ? (current?.hint ?? 'Canix') : module === 'business' ? 'Asistente de tu negocio' : user?.role === 'admin' ? 'Panel de administración' : 'Tu asistente personal';
 
   useEffect(() => {
     try {

@@ -10,6 +10,7 @@ import { money } from './store-pricing.js';
 import { internalNote, notifyMembers, sendToCustomer } from './store-outbox.js';
 import { applyNoticeReaction, attachPaymentProof, orderAwaitingProof, orderLabel } from './store-orders.service.js';
 import { cartPreview, runStoreAgent } from './store-agent.js';
+import { appointmentOfNotice, cancelAppointmentByBusiness } from './store-booking.service.js';
 import { setMainSession, setStoreSessionHandlers, storeSession } from './store-sessions.js';
 import type { PaymentProofReading, Store, StoreCustomer } from '../../entities/index.js';
 
@@ -317,7 +318,15 @@ const NEGATIVE = ['👎', '❌', '🚫'];
  */
 export async function handleStoreNoticeReaction(wa: WaManager, jid: string, targetId: string, emoji: string): Promise<boolean> {
   const notice = storeNoticesModel.byMessageId(targetId);
-  if (!notice) return false;
+  if (!notice) {
+    const appt = appointmentOfNotice(targetId);
+    if (!appt) return false;
+    if (NEGATIVE.some((e) => emoji.startsWith(e))) {
+      const cancelled = await cancelAppointmentByBusiness(appt.store_id, appt.appointment_id);
+      await wa.sendText(jid, cancelled ? '❌ Cita cancelada. Ya le avisé al cliente.' : 'Esa cita ya no estaba activa.').catch(() => undefined);
+    }
+    return true;
+  }
   const positive = POSITIVE.some((e) => emoji.startsWith(e));
   if (!positive && !NEGATIVE.some((e) => emoji.startsWith(e))) return true;
   const result = await applyNoticeReaction(notice, positive);

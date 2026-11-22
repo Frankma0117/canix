@@ -1,7 +1,7 @@
 import { db } from '../../database/connection.js';
 import { addDays, addMinutes, nowLocal, parseWall, todayLocal } from '../../shared/utils/datetime.js';
 import { formatWhen } from '../scheduling/slots.js';
-import { notifyMembers } from './store-outbox.js';
+import { notifyMembers, sendToCustomer } from './store-outbox.js';
 import type { Store, StoreCustomer } from '../../entities/index.js';
 
 /**
@@ -257,7 +257,9 @@ export async function bookAppointment(
   await notifyMembers(
     store,
     `🗓️ *Nueva cita* · ${store.name}\n${appointment.service_name} con ${appointment.staff_name}\n${formatWhen(appointment.start_at)}\n` +
-      `👤 ${customer.name ?? 'Cliente'}${customer.phone ? ` · +${customer.phone}` : ''}${input.notes ? `\nNota: ${input.notes}` : ''}`,
+      `👤 ${customer.name ?? 'Cliente'}${customer.phone ? ` · +${customer.phone}` : ''}${input.notes ? `\nNota: ${input.notes}` : ''}\n\n_Ya está confirmada. Reacciona 👎 a este mensaje si debes cancelarla._`,
+    undefined,
+    id,
   );
   return { ok: true, appointment };
 }
@@ -279,6 +281,28 @@ export async function cancelAppointment(store: Store, customer: StoreCustomer, a
     `❌ *Cita cancelada* · ${store.name}\n${appt.service_name} con ${appt.staff_name}, ${formatWhen(appt.start_at)}\n👤 ${customer.name ?? 'Cliente'}${reason ? `\nMotivo: ${reason}` : ''}`,
   );
   return { ...appt, status: 'cancelled' };
+}
+
+/** The business cancels (👎 on the notice): the customer is told. Null when it is no longer active. */
+export async function cancelAppointmentByBusiness(storeId: number, appointmentId: number): Promise<Appointment | null> {
+  const appt = db.prepare(`${APPT_SELECT} WHERE a.id = ? AND a.store_id = ? AND a.status = 'confirmed'`).get(appointmentId, storeId) as Appointment | undefined;
+  if (!appt) return null;
+  db.prepare("UPDATE store_appointments SET status = 'cancelled', cancel_reason = 'Cancelada por el negocio', updated_at = ? WHERE id = ?").run(nowLocal(), appt.id);
+  const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(storeId) as Store | undefined;
+  const customer = db.prepare('SELECT * FROM store_customers WHERE id = ?').get(appt.customer_id) as StoreCustomer | undefined;
+  if (store && customer) {
+    await sendToCustomer(customer, {
+      role: 'bot',
+      text: `Lo sentimos: *${store.name}* tuvo que cancelar tu cita de ${appt.service_name} (${formatWhen(appt.start_at)}). Escríbeme y te busco otro horario.`,
+    }).catch((err) => console.error('[STORE-BOOKING] Cancel notice failed:', (err as Error).message));
+  }
+  return { ...appt, status: 'cancelled' };
+}
+
+export function appointmentOfNotice(messageId: string): { store_id: number; appointment_id: number } | undefined {
+  return db.prepare('SELECT store_id, appointment_id FROM store_appointment_notices WHERE wa_message_id = ?').get(messageId) as
+    | { store_id: number; appointment_id: number }
+    | undefined;
 }
 
 export async function rescheduleAppointment(store: Store, customer: StoreCustomer, appointmentId: number, newStartAt: string): Promise<BookResult> {

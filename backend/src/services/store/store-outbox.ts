@@ -1,3 +1,5 @@
+import { db } from '../../database/connection.js';
+import { nowLocal } from '../../shared/utils/datetime.js';
 import { storeMessagesModel, storeNoticesModel, storesModel, type AdminNotice } from '../../models/store.model.js';
 import { usersModel } from '../../models/users.model.js';
 import { getMainSession, storeSession } from './store-sessions.js';
@@ -46,7 +48,12 @@ export function internalNote(customer: StoreCustomer, text: string): void {
  * asking for a person). Sent from the store's own number, or from Canix's when that one is not
  * connected. With `notice`, the sent message is remembered so a 👍 / 👎 on it acts on the order.
  */
-export async function notifyMembers(store: Store, text: string, notice?: Pick<AdminNotice, 'order_id' | 'action'>): Promise<void> {
+export async function notifyMembers(
+  store: Store,
+  text: string,
+  notice?: Pick<AdminNotice, 'order_id' | 'action'>,
+  appointmentId?: number,
+): Promise<void> {
   const members = storesModel.members(store.id).filter((m) => m.notify);
   for (const member of members) {
     const user = usersModel.getById(member.id);
@@ -60,6 +67,15 @@ export async function notifyMembers(store: Store, text: string, notice?: Pick<Ad
     try {
       const id = await wa.sendTextWithId(user.jid, text);
       if (id && notice) storeNoticesModel.add({ wa_message_id: id, store_id: store.id, user_id: user.id, ...notice });
+      if (id && appointmentId) {
+        db.prepare('INSERT OR REPLACE INTO store_appointment_notices (wa_message_id, store_id, appointment_id, user_id, created_at) VALUES (?, ?, ?, ?, ?)').run(
+          id,
+          store.id,
+          appointmentId,
+          user.id,
+          nowLocal(),
+        );
+      }
     } catch (err) {
       console.error('[STORE] Could not notify member #%d of store #%d:', user.id, store.id, (err as Error).message);
     }

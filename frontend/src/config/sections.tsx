@@ -55,7 +55,7 @@ export interface ModuleDef {
 
 export const MODULES: ModuleDef[] = [
   { id: 'personal', label: 'Mi Canix', hint: 'Tu asistente personal', icon: Home },
-  { id: 'business', label: 'Negocios', hint: 'Asistente de pedidos', icon: Store },
+  { id: 'business', label: 'Negocios', hint: 'Pedidos y citas', icon: Store },
   { id: 'platform', label: 'Plataforma', hint: 'Administración de Canix', icon: ShieldCheck },
 ];
 

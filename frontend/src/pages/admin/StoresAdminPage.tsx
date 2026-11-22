@@ -66,6 +66,17 @@ export function StoresAdminPage() {
     }
   }
 
+  async function switchKind(store: Store) {
+    const next = store.kind === 'services' ? 'sales' : 'services';
+    try {
+      await api.patch(`/api/stores/${store.id}`, { kind: next });
+      toast.success(`${store.name} ahora es un negocio de ${next === 'services' ? 'servicios (citas)' : 'ventas (pedidos)'}.`);
+      await reload();
+    } catch (err) {
+      setError(errMsg(err));
+    }
+  }
+
   const open = (store: Store, section: string) => {
     rememberStore(store.id);
     goTo(section);
@@ -151,6 +162,9 @@ export function StoresAdminPage() {
                     <div className="flex items-center justify-end gap-1">
                       <Button size="sm" variant="ghost" onClick={() => open(s, 'store-team')}>
                         Equipo
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => void switchKind(s)}>
+                        {s.kind === 'services' ? 'Pasar a ventas' : 'Pasar a servicios'}
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => void toggle(s)}>
                         {s.active ? 'Desactivar' : 'Activar'}
