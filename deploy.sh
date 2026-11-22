@@ -211,6 +211,7 @@ fi
 # A failure here only leaves that section off (the portal says so); the bot is deployed anyway.
 step "Recording browser (Videos y publicidad)"
 bash ./deploy/ubuntu-10-setup-promo.sh || echo "WARNING: the recording browser failed to install - 'Videos y publicidad' stays off."
+bash ./deploy/ubuntu-11-setup-video-studio.sh || echo "WARNING: video taller permissions not applied - Taller tab stays off."
 
 # --- 7.5 Ownership for the service user (systemd only) ----------------------------
 # Under systemd the bot runs as the dedicated "canix" user, but everything above ran as whoever

@@ -22,5 +22,5 @@ if ! grep -q '^VIDEO_TALLER_DIR=' "$APP_DIR/.env" 2>/dev/null; then
   echo "VIDEO_TALLER_DIR=$VIDEOS/taller" >> "$APP_DIR/.env"
   echo "VIDEO_TALLER_DIR agregado al .env"
 fi
-systemctl restart canix
+# (restart is done by deploy.sh)
 echo "Taller de video: listo para el usuario canix."
