@@ -249,3 +249,10 @@ and reminds the customer 3 hours before. The business' people get a WhatsApp not
 appointment. Code: `backend/src/services/store/store-booking*.ts`, schema `database/schema/store-booking.schema.ts`,
 API `/api/stores/:storeId/booking/*` (services, staff, appointments, knowledge). Panel section "Citas" (agenda, equipo con horarios,
 servicios y conocimiento) is in `frontend/src/pages/store/StoreBookingPage.tsx`.
+
+## Video studio (admin > Videos y publicidad > Taller)
+- Remotion videos with message callouts (numbered boxes over the screenshots) and the full-body mascot, driven by a JSON `VideoSpec` (`backend/src/services/video-studio/spec.ts`, same contract as `taller/src/lib/spec.ts` on the server).
+- The admin edits scenes, callouts (click the preview to place them), mascot pose/side and formats (9:16, 16:9, 1:1); "Generar" renders in `/opt/videos/taller` (one at a time, nice/ionice, 1 thread); "Aprobar" uploads the mp4 to Spaces and deletes it from the server.
+- API (admin): `/api/admin/video-studio` GET/POST, PUT/DELETE `/:id`, POST `/:id/render`, POST `/:id/review {approve}`, GET `/:id/file`, GET `/asset/*`.
+- Server setup: run once `sudo deploy/ubuntu-11-setup-video-studio.sh` (ACL for user `canix` on `/opt/videos` + `VIDEO_TALLER_DIR` in `.env`).
+- Other projects (Brindix, cania-web, maniksero-web, aula-interactiva): copy `spec.ts`, the service, routes, schema and `VideoStudio.tsx`, and point `VIDEO_TALLER_DIR` to the same taller; each project uses its own `brand` and `public/proyectos/<project>/` assets.

@@ -4,6 +4,7 @@ import { useApi, errMsg } from '../../services/api.ts';
 import type { PromoMedia, PromoResponse } from '../../types/promo.ts';
 import { Page } from '../../components/templates/Page.tsx';
 import { Notice } from '../../components/molecules/Notice.tsx';
+import { VideoStudio } from '../../components/organisms/promo/VideoStudio.tsx';
 import { Tabs } from '../../components/molecules/Tabs.tsx';
 import { EmptyState } from '../../components/molecules/EmptyState.tsx';
 import { useToast } from '../../components/molecules/Toast.tsx';
@@ -30,7 +31,9 @@ export function PromoPage() {
   const api = useApi();
   const toast = useToast();
   const [data, setData] = useState<PromoResponse | null>(null);
-  const [media, setMedia] = useState<PromoMedia>('video');
+  const [tab, setTab] = useState<PromoMedia | 'studio'>('video');
+  const studio = tab === 'studio';
+  const media: PromoMedia = tab === 'image' ? 'image' : 'video';
   const [error, setError] = useState<string | null>(null);
   const [voice, setVoice] = useState('');
   const [music, setMusic] = useState('');
@@ -91,17 +94,19 @@ export function PromoPage() {
       )}
       {st && st.storage === 'local' && <Notice tone="info">Los archivos se guardan en el disco del servidor porque DigitalOcean Spaces no está configurado.</Notice>}
 
-      <Tabs<PromoMedia>
+      <Tabs<PromoMedia | 'studio'>
         tabs={[
           { id: 'video', label: '🎬 Videos', count: count('video') },
           { id: 'image', label: '🖼️ Imágenes', count: count('image') },
+          { id: 'studio', label: '🎞️ Taller' },
         ]}
-        active={media}
-        onChange={setMedia}
+        active={tab}
+        onChange={setTab}
       />
 
-      {!st && <Skeleton className="h-64" />}
-      {st && media === 'video' && (
+      {studio && <VideoStudio api={api} />}
+      {!studio && !st && <Skeleton className="h-64" />}
+      {!studio && st && media === 'video' && (
         <Card className="mb-6 p-5 sm:p-6">
           <h2 className="font-display text-lg font-extrabold text-ink dark:text-white">Voz por defecto y música de todos los videos</h2>
           <p className="mb-4 mt-1 text-sm text-gray-dark">Los videos nuevos usan esta voz para que la marca suene siempre igual (en cada video puedes cambiarla al corregirlo). Las recomendadas siguen la línea de la guía: narradora clara y cálida, y locutor ágil. La música va suave, por debajo de la voz.</p>
@@ -153,12 +158,12 @@ export function PromoPage() {
           </Button>
         </Card>
       )}
-      {st && <PromoCreator key={media} api={api} media={media} status={st} onCreated={() => void load()} />}
+      {!studio && st && <PromoCreator key={media} api={api} media={media} status={st} onCreated={() => void load()} />}
 
-      {data && items.length === 0 && (
+      {!studio && data && items.length === 0 && (
         <EmptyState sticker="idea" title={media === 'video' ? 'Todavía no hay videos' : 'Todavía no hay imágenes'} description="Elige qué quieres mostrar y tócale crear. Aparecen aquí para que los revises." />
       )}
-      {GROUPS.map((g) => {
+      {!studio && GROUPS.map((g) => {
         const list = items.filter((i) => g.match.includes(i.status));
         if (!list.length) return null;
         return (

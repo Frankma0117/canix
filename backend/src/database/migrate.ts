@@ -7,6 +7,7 @@ import { initAccessSchema } from './schema/access.schema.js';
 import { initSchedulingSchema } from './schema/scheduling.schema.js';
 import { initGrowthSchema } from './schema/growth.schema.js';
 import { initPromoSchema } from './schema/promo.schema.js';
+import { initVideoStudioSchema } from './schema/video-studio.schema.js';
 import { initStoreSchema } from './schema/store.schema.js';
 import { initStoreBookingSchema } from './schema/store-booking.schema.js';
 import { initPublisherSchema } from './schema/publisher.schema.js';
@@ -27,6 +28,7 @@ export function initSchema(): void {
   initSchedulingSchema(db);
   initGrowthSchema(db);
   initPromoSchema(db);
+  initVideoStudioSchema(db);
   initStoreSchema(db);
   initStoreBookingSchema(db);
   initPublisherSchema(db);
