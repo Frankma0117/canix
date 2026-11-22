@@ -5,6 +5,7 @@ import {
   connect, connectionsView, disconnect, getBrand, load, postView, providersView, removePost, retry, runDue, saveBrand, schedule, suggestSeo, unschedule, updatePost,
 } from '../../services/publisher/publisher.service.js';
 import { approveRun, automationOverview, createSchedule, deleteSchedule, runNow, saveTimeZone, setScheduleEnabled, skipRun, updateSchedule, type ScheduleBody } from '../../services/publisher/automation/automation.service.js';
+import { chooseProviders, deleteAsset, failInterruptedAssets, generateImage, generateVideo, generationStatus, listAssets, setCostCapCents } from '../../services/publisher/generation/generation.service.js';
 import { beginOAuth, finishOAuth } from '../../services/publisher/publisher-oauth.js';
 import { publisherStore } from '../../services/publisher/publisher.store.js';
 import { PLATFORMS } from '../../services/publisher/publisher.types.js';
@@ -18,6 +19,7 @@ import { h, int, intArr, str, strArr, userId } from '../http-helpers.js';
 export function registerPublisherRoutes(app: Express): void {
   const view = (id: number) => postView(load(id), resolveMedia);
   resumeStudioQueue();
+  failInterruptedAssets();
 
   app.get(
     '/api/admin/publisher',
@@ -29,7 +31,7 @@ export function registerPublisherRoutes(app: Express): void {
         platforms: PLATFORMS,
         posts: publisherStore.listPosts().map((p) => postView(p, resolveMedia)),
         assets: approvedAssets(),
-        generation: { cap: generationCap(), used: usedThisMonth(), textAi: !!env.ai.apiKey },
+        generation: { cap: generationCap(), used: usedThisMonth(), textAi: !!env.ai.apiKey, ...generationStatus() },
         awaiting: automationOverview().awaiting,
       }),
     ),
@@ -55,10 +57,20 @@ export function registerPublisherRoutes(app: Express): void {
   app.put(
     '/api/admin/publisher/settings',
     h((req, res) => {
-      setGenerationCap(Number(req.body?.cap));
-      res.json({ cap: generationCap(), used: usedThisMonth() });
+      if (req.body?.cap !== undefined) setGenerationCap(Number(req.body.cap));
+      // The spending cap arrives in dollars; it is stored in cents.
+      if (req.body?.costCapUsd !== undefined) setCostCapCents(Math.round(Number(req.body.costCapUsd) * 100));
+      if (req.body?.imageProvider !== undefined || req.body?.videoProvider !== undefined) chooseProviders({ image: str(req.body?.imageProvider, 20), video: str(req.body?.videoProvider, 20) });
+      res.json({ cap: generationCap(), used: usedThisMonth(), ...generationStatus() });
     }),
   );
+
+  // Images and videos made by the project's providers (simulated ones cost nothing). They answer at once
+  // with a «working» piece; the panel reads the list until it is «ready».
+  app.get('/api/admin/publisher/generation', h((_req, res) => res.json({ ...generationStatus(), assets: listAssets() })));
+  app.post('/api/admin/publisher/generation/image', h((req, res) => res.json(generateImage(userId(req), req.body ?? {}))));
+  app.post('/api/admin/publisher/generation/video', h((req, res) => res.json(generateVideo(userId(req), req.body ?? {}))));
+  app.delete('/api/admin/publisher/generation/:id', h(async (req, res) => { await deleteAsset(Number(req.params.id)); res.json({ ok: true }); }));
 
   app.post('/api/admin/publisher/connections/:platform', h(async (req, res) => res.json(await connect(String(req.params.platform), str(req.body?.provider, 20) ?? 'mock', str(req.body?.account, 80) ?? ''))));
   // «Conectar con…»: returns the platform's login page (the panel navigates to it).

@@ -62,12 +62,31 @@ export interface PublisherPost {
 
 export interface PublisherAsset {
   id: string;
-  source: 'promo' | 'studio';
+  source: 'promo' | 'studio' | 'generated';
   media: 'video' | 'image';
   title: string;
   caption: string;
   url: string;
   poster: string;
+}
+
+export interface GenerationProvider { key: string; label: string; simulated: boolean; configured: boolean; envVars: string[]; active: boolean }
+export interface GenerationStatus {
+  image: GenerationProvider[];
+  video: GenerationProvider[];
+  maxVideoSeconds: number;
+  usage: { costCapCents: number; spentCents: number };
+}
+export interface GeneratedAsset {
+  id: number;
+  media: 'image' | 'video';
+  provider: string;
+  simulated: boolean;
+  title: string;
+  status: 'working' | 'ready' | 'error';
+  detail: string;
+  url: string;
+  costCents: number;
 }
 
 export interface PublisherResponse {

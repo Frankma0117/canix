@@ -12,6 +12,7 @@ import { Button } from '../../components/atoms/Button.tsx';
 import { Skeleton } from '../../components/atoms/Skeleton.tsx';
 import { BrandForm } from '../../components/organisms/publisher/BrandForm.tsx';
 import { ConnectionsPanel } from '../../components/organisms/publisher/ConnectionsPanel.tsx';
+import { AssetGenerator } from '../../components/organisms/publisher/AssetGenerator.tsx';
 import { MediaGenerator } from '../../components/organisms/publisher/MediaGenerator.tsx';
 import { AutomationPanel } from '../../components/organisms/publisher/AutomationPanel.tsx';
 import { StudioPanel } from '../../components/organisms/publisher/StudioPanel.tsx';
@@ -224,6 +225,7 @@ export function PublisherPage() {
               </div>
             )}
           </section>
+          <AssetGenerator api={api} onChanged={() => void load()} />
           <MediaGenerator api={api} cap={data.generation.cap} used={data.generation.used} textAi={data.generation.textAi} onCreated={() => void load()} />
         </div>
       )}

@@ -10,6 +10,7 @@ import type { MediaAccess } from './publisher.types.js';
 import { createPost, type NewPost } from './publisher.service.js';
 import { publisherStore } from './publisher.store.js';
 import { normalizeHashtags } from './publisher-seo.js';
+import { getAsset, paidAssetsThisMonth, readyAssets } from './generation/generation.service.js';
 
 /**
  * The only file of the publisher that knows where the media comes from. In Canix it comes from the
@@ -54,14 +55,20 @@ export function approvedAssets() {
     .approved()
     .filter((d) => d.kind !== 'logo' && d.kind !== 'profile' && d.kind !== 'cover')
     .map((d) => ({ id: `d${d.id}`, source: 'studio' as const, media: 'image' as const, title: d.title, caption: d.caption, url: resolveMedia(d.file_ref), poster: resolveMedia(d.file_ref) }));
-  return [...designs, ...promo];
+  const generated = readyAssets().map((a) => ({ id: `g${a.id}`, source: 'generated' as const, media: a.media, title: a.title, caption: a.caption, url: resolveMedia(a.file_ref), poster: resolveMedia(a.poster_ref || (a.media === 'image' ? a.file_ref : '')) }));
+  return [...generated, ...designs, ...promo];
 }
 
 export function postFromAsset(userId: number | null, assetId: string, extra: { keywords?: string[]; hashtags?: string[] } = {}) {
-  const m = /^([pd])(\d+)$/.exec(assetId);
+  const m = /^([pdg])(\d+)$/.exec(assetId);
   if (!m) throw new AccessError('Elige el video o la imagen que quieres publicar.');
   const id = Number(m[2]);
   const common = { keywords: extra.keywords ?? [], hashtags: normalizeHashtags(extra.hashtags ?? [], 30) };
+  if (m[1] === 'g') {
+    const a = getAsset(id);
+    if (!a || a.status !== 'ready' || !a.file_ref) throw new AccessError('Esa pieza todavía no está lista.');
+    return createPost(userId, { mediaType: a.media, mediaRef: a.file_ref, thumbnailRef: a.poster_ref || (a.media === 'image' ? a.file_ref : ''), title: a.title || 'Sin título', description: a.caption, ...common });
+  }
   if (m[1] === 'd') {
     const d = studioStore.get(id);
     if (!d || d.status !== 'approved' || !d.file_ref) throw new AccessError('Ese diseño todavía no está aprobado.');
@@ -115,4 +122,4 @@ export function ensureBudget(wanted: number): void {
   if (used + wanted > cap) throw new AccessError(`Con esto pasarías el tope de ${cap} piezas al mes (llevas ${used}). Súbelo en los ajustes si lo necesitas.`);
 }
 
-export const usedThisMonth = (): number => generatedThisMonth() + studioStore.aiThisMonth();
+export const usedThisMonth = (): number => generatedThisMonth() + studioStore.aiThisMonth() + paidAssetsThisMonth();

@@ -150,6 +150,28 @@ export function initPublisherSchema(db: Database.Database): void {
       UNIQUE (schedule_id, publish_at)
     );
     CREATE INDEX IF NOT EXISTS idx_publisher_runs_status ON publisher_runs(status, publish_at);
+
+    -- Generated material (services/publisher/generation/): images and videos made by an image/video
+    -- provider with the brand profile. Each row is also the usage/cost log (cost_cents, simulated).
+    CREATE TABLE IF NOT EXISTS publisher_assets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      media TEXT NOT NULL CHECK (media IN ('image', 'video')),
+      provider TEXT NOT NULL,
+      simulated INTEGER NOT NULL DEFAULT 0,       -- 1 = test provider, no real cost
+      prompt TEXT NOT NULL DEFAULT '',
+      aspect TEXT NOT NULL DEFAULT 'square',      -- square | portrait | landscape
+      seconds INTEGER NOT NULL DEFAULT 0,         -- videos only
+      title TEXT NOT NULL DEFAULT '',
+      caption TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'working' CHECK (status IN ('working', 'ready', 'error')),
+      detail TEXT NOT NULL DEFAULT '',
+      file_ref TEXT NOT NULL DEFAULT '',
+      poster_ref TEXT NOT NULL DEFAULT '',
+      cost_cents INTEGER NOT NULL DEFAULT 0,      -- estimated cost of the call, in USD cents
+      created_by INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_publisher_assets_created ON publisher_assets(created_at);
   `);
 
   // Databases created before Meta/TikTok existed: the connection also keeps the page / account id.

@@ -15,14 +15,12 @@ export interface ArtProvider {
   paint(prompt: string, aspect: FormatSpec['art'], colors: Colors): Promise<Buffer>;
 }
 
-const falProvider: ArtProvider = {
-  key: 'fal',
-  label: 'IA de imagen (FLUX · fal.ai)',
-  async paint(prompt, aspect) {
+/** One call to fal.ai with the given key (the studio uses the project's FAL_KEY; the generation module may use its own). */
+export async function falPaint(apiKey: string, prompt: string, aspect: FormatSpec['art']): Promise<Buffer> {
     const model = process.env.STUDIO_IMAGE_MODEL?.trim() || 'fal-ai/flux/dev';
     const res = await fetch(`https://fal.run/${model}`, {
       method: 'POST',
-      headers: { Authorization: `Key ${env.fal.apiKey}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Key ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt, image_size: aspect, num_images: 1, enable_safety_checker: true, output_format: 'jpeg' }),
       signal: AbortSignal.timeout(120_000),
     });
@@ -33,7 +31,12 @@ const falProvider: ArtProvider = {
     const img = await fetch(url, { signal: AbortSignal.timeout(60_000) });
     if (!img.ok) throw new Error('No se pudo descargar la imagen generada.');
     return Buffer.from(await img.arrayBuffer());
-  },
+}
+
+const falProvider: ArtProvider = {
+  key: 'fal',
+  label: 'IA de imagen (FLUX · fal.ai)',
+  paint: (prompt, aspect) => falPaint(env.fal.apiKey, prompt, aspect),
 };
 
 // ---------- a plain PNG gradient, no dependencies ----------
