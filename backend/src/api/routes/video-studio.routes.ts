@@ -10,7 +10,7 @@ export function registerVideoStudioRoutes(app: Express): void {
   const id = (req: Request) => int(req.params.id) ?? 0;
 
   app.get(base, h((_req, res) => res.json({ items: studio.list(), available: studio.available(), template: canixTemplate(), assets: studio.assets() })));
-  app.get(`${base}/asset/*`, h((req, res) => void res.sendFile(studio.assetFile(String((req.params as Record<string, string>)[0] ?? '')))));
+  app.get(`${base}/asset/*rel`, h((req, res) => void res.sendFile(studio.assetFile([(req.params as Record<string, string | string[]>).rel ?? ''].flat().join('/')))));
   app.post(base, h((req, res) => res.json({ items: studio.create(userId(req), str(req.body?.title, 90) ?? '', req.body?.spec) })));
   app.put(`${base}/:id`, h((req, res) => res.json({ items: studio.update(id(req), str(req.body?.title, 90) ?? '', req.body?.spec) })));
   app.delete(

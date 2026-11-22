@@ -6,7 +6,7 @@ const clone = () => JSON.parse(JSON.stringify(canixTemplate())) as ReturnType<ty
 const rejects = (mutate: (s: ReturnType<typeof canixTemplate>) => void, why: string) => {
   const s = clone();
   mutate(s);
-  assert.throws(() => parseSpec(s), undefined, why);
+  assert.throws(() => parseSpec(s), /./, why);
 };
 
 assert.equal(parseSpec(canixTemplate()).scenes.length, canixTemplate().scenes.length, 'template is valid');
