@@ -13,6 +13,10 @@ Plan base: estrategia TomaPedidos (conocimiento-videos-Tomapedidos) adaptada. Mo
 - Brindix (`platform/videos.component.ts`): ★ recomendadas primero y «Usar esta voz siempre» (guardada en localStorage del navegador, no compartida; defecto M5). SIN compilar (no hay node_modules local): correr `ng build` antes de desplegar.
 - Aula: ya tenía voz por defecto guardada + escuchar (`pages/admin/videos.js`); falta ★ recomendadas y vista previa con voz.
 
+## Desplegado 2026-11-22
+- Canix: commit 53dc180, push y deploy OK (servicio activo, /promo/stage.html con SAMEORIGIN). Ojo: NO lanzar dos `deploy.sh` a la vez (ENOTEMPTY en node_modules); si el ssh se corta, esperar a que termine el del servidor.
+- Brindix: voces ★ + voz por defecto sobre origin/main (rama `voces-marca`, commit 1a3a509), compilado con `ng build` y desplegado. El checkout local de brindix está en la rama `publicador` (hay commits 29e0690 duplicado, ignorar).
+
 ## Falta (en este orden)
 1. Probar en local: crear un video, editar una escena, pedir un cambio; revisar. Luego `/code-review low`, commit y deploy (skill deploy-canix). `confirm()` del botón Eliminar en PromoCard viola la regla «sin confirm()»: cambiar por diálogo propio.
 2. HECHO (sin probar en navegador): `StagePreview.tsx` (iframe de stage.html, `content.stage` guardado al grabar; cabeceras frame de `/promo/stage.html` relajadas en security.middleware). Los videos ya creados no tienen `content.stage` hasta regrabarlos.
