@@ -7,14 +7,16 @@ export type Pose = (typeof POSES)[number];
 export type Format = (typeof FORMATS)[number];
 
 export interface Callout { x: number; y: number; text: string }
-export interface Scene { image: string; title: string; sub?: string; callouts?: Callout[]; mascot?: { pose: Pose; side?: 'left' | 'right' }; seconds?: number }
+export interface Scene { image: string; title: string; sub?: string; callouts?: Callout[]; mascot?: { pose: Pose; side?: 'left' | 'right' }; seconds?: number; say?: string }
 export interface Brand { name: string; from: string; mid: string; to: string; accent: string; bgFrom: string; bgTo: string; logo: string; mascot: string }
 export interface VideoSpec {
   brand: Brand;
   format: Format;
-  intro: { title: string; sub?: string; seconds?: number };
+  intro: { title: string; sub?: string; seconds?: number; say?: string };
   scenes: Scene[];
-  outro: { title: string; cta: string; seconds?: number };
+  outro: { title: string; cta: string; seconds?: number; say?: string };
+  /** Step-by-step guide: "Paso N de M" badge and progress bar on every scene. */
+  guide?: boolean;
 }
 
 const COLOR = /^#[0-9a-fA-F]{6}$/;
@@ -73,28 +75,40 @@ export function parseSpec(raw: unknown): VideoSpec {
       })),
       mascot: { pose, side: s?.mascot?.side === 'left' ? 'left' : 'right' },
       seconds: num(s?.seconds, 1.5, 15, 'Los segundos de la escena'),
+      say: text(s?.say, 300, `Lo que dice la mascota en la escena ${i + 1}`, false) || undefined,
     };
   });
   return {
     brand,
     format,
-    intro: { title: text(r.intro?.title, 50, 'El título de la intro'), sub: text(r.intro?.sub, 90, 'El subtítulo de la intro', false) || undefined, seconds: num(r.intro?.seconds, 1, 8, 'Los segundos de la intro') },
+    intro: { title: text(r.intro?.title, 50, 'El título de la intro'), sub: text(r.intro?.sub, 90, 'El subtítulo de la intro', false) || undefined, seconds: num(r.intro?.seconds, 1, 8, 'Los segundos de la intro'), say: text(r.intro?.say, 300, 'Lo que dice la mascota en la intro', false) || undefined },
     scenes,
-    outro: { title: text(r.outro?.title, 60, 'El título del cierre'), cta: text(r.outro?.cta, 60, 'El llamado a la acción'), seconds: num(r.outro?.seconds, 1, 8, 'Los segundos del cierre') },
+    outro: { title: text(r.outro?.title, 60, 'El título del cierre'), cta: text(r.outro?.cta, 60, 'El llamado a la acción'), seconds: num(r.outro?.seconds, 1, 8, 'Los segundos del cierre'), say: text(r.outro?.say, 300, 'Lo que dice la mascota en el cierre', false) || undefined },
+    guide: r.guide === true ? true : undefined,
   };
 }
 
-/** Starting point for a new Canix video (same story as the first promo). */
-export function canixTemplate(): VideoSpec {
-  const img = (n: string) => `proyectos/canix/imagenes/frontend_public_promo_screens_${n}.jpg`;
+/** Starting point for a new Canix video; `mobile` picks the phone screenshots (vertical/square) or the desktop ones. */
+export function canixTemplate(format: Format = '9x16', guide = false): VideoSpec {
+  const wide = format === '16x9';
+  const img = (n: string) => `proyectos/canix/imagenes/frontend_public_promo_screens_${wide ? '' : 'm-'}${n}.jpg`;
   return {
     brand: { name: 'Canix', from: '#2f8bff', mid: '#5b4cf5', to: '#8b3fe4', accent: '#5ff0ff', bgFrom: '#0d1030', bgTo: '#2a1566', logo: 'proyectos/canix/marca/frontend_public_logo-canix.png', mascot: 'canix' },
-    format: '9x16',
+    format,
     intro: { title: 'Canix', sub: 'Tu asistente en WhatsApp' },
     scenes: [
-      { image: img('m-home'), title: 'Todo en un solo lugar', sub: 'Escríbele a Canix por WhatsApp', callouts: [{ x: 50, y: 14, text: 'Tu día de un vistazo' }, { x: 50, y: 45, text: 'Tareas y recordatorios' }], mascot: { pose: 'wave', side: 'right' } },
-      { image: img('m-reminders'), title: 'Recordatorios que sí llegan', callouts: [{ x: 50, y: 25, text: 'Pídelos por mensaje o voz' }], mascot: { pose: 'point', side: 'right' } },
+      { image: img('home'), title: 'Todo en un solo lugar', sub: 'Escríbele a Canix por WhatsApp', callouts: [{ x: 50, y: 14, text: 'Tu día de un vistazo' }, { x: 50, y: 45, text: 'Tareas y recordatorios' }], mascot: { pose: 'wave', side: 'right' } },
+      { image: img('reminders'), title: 'Recordatorios que sí llegan', callouts: [{ x: 50, y: 25, text: 'Pídelos por mensaje o voz' }], mascot: { pose: 'point', side: 'right' } },
+      { image: img('agenda'), title: 'Tu agenda en orden', callouts: [{ x: 50, y: 30, text: 'Citas y eventos' }], mascot: { pose: 'point', side: 'left' } },
     ],
     outro: { title: 'Empieza hoy, gratis', cta: 'canix.cania.app' },
+    guide: guide || undefined,
   };
 }
+
+/** The three videos of one "recuadros" request: Reel, Instagram post and guided tutorial. */
+export const GROUP_KINDS = [
+  { kind: 'reel', format: '9x16', guide: true, title: 'Reel (vertical)' },
+  { kind: 'instagram', format: '1x1', guide: true, title: 'Instagram (cuadrado)' },
+  { kind: 'tutorial', format: '16x9', guide: true, title: 'Tutorial guiado (horizontal)' },
+] as const satisfies readonly { kind: string; format: Format; guide: boolean; title: string }[];

@@ -6,7 +6,7 @@ import { Notice } from '../../molecules/Notice.tsx';
 import { useToast } from '../../molecules/Toast.tsx';
 import { Card } from '../../atoms/Card.tsx';
 import { Button } from '../../atoms/Button.tsx';
-import { Input, Label, Select } from '../../atoms/Input.tsx';
+import { Input, Label, Select, Textarea } from '../../atoms/Input.tsx';
 import { Skeleton } from '../../atoms/Skeleton.tsx';
 
 const BASE = '/api/admin/video-studio';
@@ -17,7 +17,11 @@ const POSES: { id: Pose; label: string }[] = [
   { id: 'idle', label: 'En reposo' },
   { id: 'none', label: 'Sin mascota' },
 ];
-const STATUS: Record<StudioVideo['status'], string> = { draft: 'Borrador', rendering: 'Generando…', review: 'Por revisar', approved: 'Aprobado', error: 'Con error' };
+const STATUS: Record<StudioVideo['status'], string> = { draft: 'Borrador', previewing: 'Grabando versión previa…', rendering: 'Generando versión final…', review: 'Versión previa lista', approved: 'Aprobado', error: 'Con error' };
+const KIND_LABEL: Record<string, string> = { reel: 'Reel (vertical)', instagram: 'Instagram (cuadrado)', tutorial: 'Tutorial guiado (horizontal)' };
+const KIND_ORDER = ['reel', 'instagram', 'tutorial'];
+const isBusy = (s: StudioVideo['status']) => s === 'previewing' || s === 'rendering';
+const SAY_HINT = 'Escribe aquí lo que dirá la mascota en esta parte. Más adelante se convertirá en voz.';
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 const pct = (v: string) => Math.min(100, Math.max(0, Number(v) || 0));
 
@@ -122,6 +126,10 @@ function SceneEditor({ api, scene, index, assets, onChange, onRemove }: { api: A
             </div>
           </div>
           <div>
+            <Label htmlFor={`${id}-say`}>Lo que dice la mascota</Label>
+            <Textarea id={`${id}-say`} rows={2} maxLength={300} value={scene.say ?? ''} placeholder={SAY_HINT} onChange={(e) => onChange({ ...scene, say: e.target.value })} />
+          </div>
+          <div>
             <Label>Recuadros con mensaje ({callouts.length}/5)</Label>
             <div className="grid gap-2">
               {callouts.map((c, i) => (
@@ -164,7 +172,7 @@ function Editor({ api, video, data, onSaved, onClose }: { api: Api; video: Studi
     try {
       const res = await api.put<{ items: StudioVideo[] }>(`${BASE}/${video.id}`, { title, spec });
       onSaved(res.items);
-      toast.success('Guardado. Genera el video para ver los cambios.');
+      toast.success('Guardado. Graba una versión previa para ver los cambios.');
       onClose();
     } catch (err) {
       toast.error(errMsg(err));
@@ -197,6 +205,10 @@ function Editor({ api, video, data, onSaved, onClose }: { api: Api; video: Studi
             <Label htmlFor="vs-is">Subtítulo de la intro</Label>
             <Input id="vs-is" value={spec.intro.sub ?? ''} maxLength={90} onChange={(e) => setSpec({ ...spec, intro: { ...spec.intro, sub: e.target.value } })} />
           </div>
+          <div className="sm:col-span-2">
+            <Label htmlFor="vs-isay">Lo que dice la mascota en la intro</Label>
+            <Textarea id="vs-isay" rows={2} maxLength={300} value={spec.intro.say ?? ''} placeholder={SAY_HINT} onChange={(e) => setSpec({ ...spec, intro: { ...spec.intro, say: e.target.value } })} />
+          </div>
           <div>
             <Label htmlFor="vs-ot">Título del cierre</Label>
             <Input id="vs-ot" value={spec.outro.title} maxLength={60} onChange={(e) => setSpec({ ...spec, outro: { ...spec.outro, title: e.target.value } })} />
@@ -205,6 +217,14 @@ function Editor({ api, video, data, onSaved, onClose }: { api: Api; video: Studi
             <Label htmlFor="vs-oc">Llamado a la acción</Label>
             <Input id="vs-oc" value={spec.outro.cta} maxLength={60} onChange={(e) => setSpec({ ...spec, outro: { ...spec.outro, cta: e.target.value } })} />
           </div>
+          <div className="sm:col-span-2">
+            <Label htmlFor="vs-osay">Lo que dice la mascota en el cierre</Label>
+            <Textarea id="vs-osay" rows={2} maxLength={300} value={spec.outro.say ?? ''} placeholder={SAY_HINT} onChange={(e) => setSpec({ ...spec, outro: { ...spec.outro, say: e.target.value } })} />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-ink dark:text-white sm:col-span-2">
+            <input type="checkbox" className="h-4 w-4 accent-primary" checked={spec.guide === true} onChange={(e) => setSpec({ ...spec, guide: e.target.checked })} />
+            Mostrar guía «Paso N de M» con barra de progreso en cada escena
+          </label>
         </div>
       </Card>
       {spec.scenes.map((s, i) => (
@@ -231,12 +251,13 @@ function VideoCard({ api, video, available, onItems, onEdit, onReload }: { api: 
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [src, setSrc] = useState('');
+  const thumb = useAsset(api, video.spec.scenes[0]?.image ?? video.spec.brand.logo);
   useEffect(() => {
     if (video.status === 'approved') return void setSrc(video.url);
     if (video.status !== 'review') return void setSrc('');
     let url = '';
     let alive = true;
-    api.fileUrl(`${BASE}/${video.id}/file`).then((u) => {
+    api.fileUrl(`${BASE}/${video.id}/preview`).then((u) => {
       url = u;
       if (alive) setSrc(u);
     }).catch(() => undefined);
@@ -244,7 +265,7 @@ function VideoCard({ api, video, available, onItems, onEdit, onReload }: { api: 
       alive = false;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [api, video.id, video.status, video.url]);
+  }, [api, video.id, video.status, video.url, video.updated_at]);
 
   async function run(fn: () => Promise<{ items: StudioVideo[] } | void>, ok?: string) {
     setBusy(true);
@@ -258,7 +279,9 @@ function VideoCard({ api, video, available, onItems, onEdit, onReload }: { api: 
       setBusy(false);
     }
   }
+  const post = (path: string) => api.post<{ items: StudioVideo[] }>(`${BASE}/${video.id}/${path}`);
   const vertical = video.spec.format === '9x16';
+  const working = isBusy(video.status);
 
   return (
     <Card className="p-4">
@@ -266,21 +289,26 @@ function VideoCard({ api, video, available, onItems, onEdit, onReload }: { api: 
         <div>
           <h3 className="font-display text-base font-extrabold text-ink dark:text-white">{video.title}</h3>
           <p className="text-xs text-gray-dark">
-            {video.spec.format.replace('x', ':')} · {video.spec.scenes.length} escenas · {video.spec.scenes.reduce((n, s) => n + (s.callouts?.length ?? 0), 0)} recuadros
+            {video.spec.format.replace('x', ':')} · {video.spec.scenes.length} escenas · {video.spec.scenes.reduce((n, s) => n + (s.callouts?.length ?? 0), 0)} recuadros{video.spec.guide ? ' · con guía' : ''}
           </p>
         </div>
-        <span className="rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold text-primary-dark dark:bg-primary/15 dark:text-white">{STATUS[video.status]}</span>
+        <span className="shrink-0 rounded-full bg-secondary px-2.5 py-1 text-xs font-semibold text-primary-dark dark:bg-primary/15 dark:text-white">{STATUS[video.status]}</span>
       </div>
-      {video.status === 'rendering' && <p className="my-3 text-sm text-gray-dark">{video.detail || 'Generando…'} Tarda unos minutos; puedes seguir usando el panel.</p>}
-      {video.detail && video.status !== 'rendering' && <p className={`my-2 text-sm ${video.status === 'error' ? 'text-error' : 'text-gray-dark'}`}>{video.detail}</p>}
-      {src && <video className={`my-3 w-full rounded-xl bg-black ${vertical ? 'max-h-[28rem] object-contain' : ''}`} src={src} controls playsInline preload="metadata" />}
+      {working && <p className="my-3 text-sm text-gray-dark">{video.detail || 'Generando…'} Tarda unos minutos; puedes seguir usando el panel.</p>}
+      {video.detail && !working && <p className={`my-2 text-sm ${video.status === 'error' ? 'text-error' : 'text-gray-dark'}`}>{video.detail}</p>}
+      {src ? (
+        <video className={`my-3 w-full rounded-xl bg-black ${vertical ? 'max-h-[28rem] object-contain' : ''}`} src={src} controls playsInline preload="metadata" />
+      ) : (
+        thumb && <img src={thumb} alt="" className="my-3 h-32 w-full rounded-xl bg-gray-medium/40 object-cover object-top dark:bg-white/5" />
+      )}
+      {video.status === 'review' && <p className="mb-2 text-xs text-gray-dark">Esta es la versión previa (baja calidad y sin sonido). Al aprobar se genera la final, que más adelante llevará voz y música.</p>}
       <div className="flex flex-wrap gap-2">
         {video.status === 'review' && (
           <>
-            <Button size="sm" loading={busy} onClick={() => run(() => api.post(`${BASE}/${video.id}/review`, { approve: true }), 'Aprobado: se guardó en DigitalOcean y se liberó el espacio del servidor.')}>
-              👍 Aprobar
+            <Button size="sm" loading={busy} disabled={!available} onClick={() => run(() => post('approve'), 'Se puso a generar la versión final; al terminar se guarda en DigitalOcean.')}>
+              👍 Aprobar y generar versión final
             </Button>
-            <Button size="sm" variant="secondary" disabled={busy} onClick={() => run(() => api.post(`${BASE}/${video.id}/review`, { approve: false }))}>
+            <Button size="sm" variant="secondary" disabled={busy} onClick={() => run(() => post('discard'))}>
               👎 Descartar
             </Button>
           </>
@@ -295,12 +323,12 @@ function VideoCard({ api, video, available, onItems, onEdit, onReload }: { api: 
             <Button size="sm" variant="soft" disabled={busy} onClick={onEdit}>
               Editar
             </Button>
-            <Button size="sm" variant="secondary" loading={busy} disabled={!available} onClick={() => run(async () => { const r = await api.post<{ items: StudioVideo[] }>(`${BASE}/${video.id}/render`); onReload(); return r; }, 'Se puso a generar.')}>
-              {video.status === 'review' ? 'Generar de nuevo' : 'Generar video'}
+            <Button size="sm" variant="secondary" loading={busy} disabled={!available} onClick={() => run(async () => { const r = await post('preview'); onReload(); return r; }, 'Se puso a grabar la versión previa.')}>
+              {video.status === 'review' ? 'Grabar de nuevo la previa' : 'Grabar versión previa'}
             </Button>
           </>
         )}
-        {video.status !== 'rendering' && (
+        {!working && (
           <Button size="sm" variant="ghost" disabled={busy} aria-label="Eliminar el video" onClick={() => run(async () => { await api.del(`${BASE}/${video.id}`); onReload(); }, 'Eliminado.')}>
             <Trash2 size={14} />
           </Button>
@@ -327,7 +355,7 @@ export function VideoStudio({ api }: { api: Api }) {
       const res = await api.get<StudioResponse>(BASE);
       setData(res);
       window.clearTimeout(timer.current);
-      if (res.items.some((i) => i.status === 'rendering')) timer.current = window.setTimeout(() => void load(), 5000);
+      if (res.items.some((i) => isBusy(i.status))) timer.current = window.setTimeout(() => void load(), 5000);
     } catch (err) {
       setError(errMsg(err));
     }
@@ -339,7 +367,7 @@ export function VideoStudio({ api }: { api: Api }) {
 
   const setItems = (items: StudioVideo[]) => {
     setData((d) => (d ? { ...d, items } : d));
-    if (items.some((i) => i.status === 'rendering')) void load();
+    if (items.some((i) => isBusy(i.status))) void load();
   };
 
   async function create() {
@@ -352,27 +380,54 @@ export function VideoStudio({ api }: { api: Api }) {
     }
   }
 
+  async function createGroup() {
+    try {
+      const res = await api.post<{ items: StudioVideo[] }>(`${BASE}/group`, { title: '' });
+      setItems(res.items);
+      toast.success('Se crearon 3 borradores: Reel, Instagram y Tutorial guiado.');
+    } catch (err) {
+      toast.error(errMsg(err));
+    }
+  }
+
   if (error) return <Notice tone="error">{error}</Notice>;
   if (!data) return <Skeleton className="h-64" />;
   const current = data.items.find((i) => i.id === editing);
+  const groups = new Map<string, StudioVideo[]>();
+  for (const v of data.items) if (v.group_id) groups.set(v.group_id, [...(groups.get(v.group_id) ?? []), v]);
+  const singles = data.items.filter((v) => !v.group_id);
+  const card = (v: StudioVideo) => <VideoCard key={v.id} api={api} video={v} available={data.available} onItems={setItems} onEdit={() => setEditing(v.id)} onReload={() => void load()} />;
 
   return (
     <>
       {!data.available && <Notice tone="warning">El taller de video no está instalado en este servidor (falta VIDEO_TALLER_DIR). Puedes preparar los guiones, pero no generarlos aquí.</Notice>}
-      <p className="mb-4 text-sm text-gray-dark">Videos con recuadros que explican cada parte y la mascota de cuerpo completo. Editas los textos y dónde apunta cada recuadro, generas el video y lo apruebas: al aprobarlo se guarda en DigitalOcean y se borra del servidor.</p>
+      <p className="mb-4 text-sm text-gray-dark">Videos con recuadros que explican cada parte y la mascota de cuerpo completo. Editas los textos, grabas una versión previa (rápida y sin sonido), la apruebas y se genera la final: se guarda en DigitalOcean y se borra del servidor.</p>
       {current ? (
         <Editor key={current.id} api={api} video={current} data={data} onSaved={setItems} onClose={() => setEditing(null)} />
       ) : (
         <>
-          <Button className="mb-4" onClick={create}>
-            <Plus size={15} /> Nuevo video desde la plantilla
-          </Button>
-          {data.items.length === 0 && <p className="text-sm text-gray-dark">Todavía no hay videos del taller. Crea uno desde la plantilla de Canix.</p>}
-          <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {data.items.map((v) => (
-              <VideoCard key={v.id} api={api} video={v} available={data.available} onItems={setItems} onEdit={() => setEditing(v.id)} onReload={() => void load()} />
-            ))}
+          <div className="mb-5 flex flex-wrap items-center gap-3">
+            <Button onClick={createGroup}>
+              <Plus size={15} /> Crear 3 videos
+            </Button>
+            <Button variant="soft" onClick={create}>
+              Un solo video desde la plantilla
+            </Button>
           </div>
+          <p className="-mt-3 mb-5 text-xs text-gray-dark">Se crean 3 videos: Reel (vertical), Instagram (cuadrado) y Tutorial guiado (horizontal).</p>
+          {data.items.length === 0 && <p className="text-sm text-gray-dark">Todavía no hay videos del taller. Crea los 3 videos desde la plantilla de Canix.</p>}
+          {[...groups.entries()].map(([gid, vids]) => (
+            <section key={gid} className="mb-8" aria-label="Grupo de 3 videos">
+              <h3 className="mb-3 font-display text-sm font-extrabold uppercase tracking-wide text-gray-dark">
+                Grupo · {new Date(vids[0].created_at.replace(' ', 'T') + 'Z').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
+              </h3>
+              <div className="grid items-start gap-4 md:grid-cols-3">
+                {[...vids].sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind)).map(card)}
+              </div>
+              <p className="mt-2 text-xs text-gray-dark">{vids.map((v) => KIND_LABEL[v.kind] ?? v.title).join(' · ')}</p>
+            </section>
+          ))}
+          {singles.length > 0 && <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">{singles.map(card)}</div>}
         </>
       )}
     </>

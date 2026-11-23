@@ -14,17 +14,21 @@ export interface Scene {
   callouts?: Callout[];
   mascot?: { pose: Pose; side?: 'left' | 'right' };
   seconds?: number;
+  /** What the mascot says in this scene (voice comes in a later phase). */
+  say?: string;
 }
 
 export interface VideoSpec {
   brand: { name: string; from: string; mid: string; to: string; accent: string; bgFrom: string; bgTo: string; logo: string; mascot: string };
   format: Format;
-  intro: { title: string; sub?: string; seconds?: number };
+  intro: { title: string; sub?: string; seconds?: number; say?: string };
   scenes: Scene[];
-  outro: { title: string; cta: string; seconds?: number };
+  outro: { title: string; cta: string; seconds?: number; say?: string };
+  /** "Paso N de M" badge and progress bar on each scene. */
+  guide?: boolean;
 }
 
-export type VideoStatus = 'draft' | 'rendering' | 'review' | 'approved' | 'error';
+export type VideoStatus = 'draft' | 'previewing' | 'rendering' | 'review' | 'approved' | 'error';
 
 export interface StudioVideo {
   id: number;
@@ -33,6 +37,9 @@ export interface StudioVideo {
   status: VideoStatus;
   detail: string;
   url: string;
+  has_preview: boolean;
+  group_id: string | null;
+  kind: string;
   created_at: string;
   updated_at: string;
 }

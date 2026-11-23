@@ -20,7 +20,9 @@ export function registerVideoStudioRoutes(app: Express): void {
       res.json({ ok: true });
     }),
   );
-  app.post(`${base}/:id/render`, h((req, res) => res.json({ items: studio.render(id(req)) })));
-  app.post(`${base}/:id/review`, h(async (req, res) => res.json({ items: await studio.review(id(req), req.body?.approve === true) })));
-  app.get(`${base}/:id/file`, h((req, res) => void res.sendFile(studio.reviewFile(id(req)))));
+  app.post(`${base}/group`, h((req, res) => res.json({ items: studio.createGroup(userId(req), str(req.body?.title, 60) ?? '') })));
+  app.post(`${base}/:id/preview`, h((req, res) => res.json({ items: studio.preview(id(req)) })));
+  app.get(`${base}/:id/preview`, h((req, res) => void res.sendFile(studio.previewFile(id(req)))));
+  app.post(`${base}/:id/approve`, h((req, res) => res.json({ items: studio.approve(id(req)) })));
+  app.post(`${base}/:id/discard`, h((req, res) => res.json({ items: studio.discard(id(req)) })));
 }
