@@ -56,8 +56,6 @@
 
     <main id="contenido">
       <section data-section="habitos_hero" class="relative overflow-hidden pb-16 pt-28 sm:pt-36">
-        <div class="dot-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]"></div>
-        <div class="pointer-events-none absolute -right-32 top-20 h-[26rem] w-[26rem] rounded-full bg-[#2f8bff]/20 blur-3xl"></div>
         <div class="relative mx-auto grid max-w-7xl items-center gap-10 px-4 sm:px-6 lg:grid-cols-[1.3fr_0.7fr]">
           <div>
             <nav aria-label="Ruta" class="crumbs"><a href="/">Canix</a><span aria-hidden="true">›</span><span>Rutinas y hábitos</span></nav>
@@ -68,11 +66,11 @@
               Leer, entrenar, tomar agua, meditar, estudiar inglés: dile a Canix qué hábito quieres construir y él te lo recuerda, registra lo que cumples, cuida tu racha y te celebra los avances.
             </p>
             <div class="mt-8 flex flex-wrap gap-3">
-              <a href="/#demo" data-track="habitos_demo" class="brand-gradient inline-flex items-center gap-2 rounded-2xl px-6 py-3.5 text-base font-bold text-white shadow-[0_14px_30px_-12px_rgba(75,92,246,0.9)] transition hover:-translate-y-0.5 hover:brightness-110">Probar gratis {{DEMO_HOURS}} horas</a>
-              <a href="{{CONTACT_URL}}" target="_blank" rel="noopener" data-track="contact_habitos" class="inline-flex items-center gap-2 rounded-2xl border border-gray-medium bg-white px-6 py-3.5 text-base font-bold text-ink transition hover:-translate-y-0.5 hover:border-primary/40 dark:border-white/15 dark:bg-white/5 dark:text-white">Quiero adquirirlo</a>
+              <a href="/#demo" data-track="habitos_demo" class="btn btn-primary">Probar gratis {{DEMO_HOURS}} horas</a>
+              <a href="{{CONTACT_URL}}" target="_blank" rel="noopener" data-track="contact_habitos" class="btn btn-ghost">Quiero adquirirlo</a>
             </div>
           </div>
-          <img src="/stickers/rutina.webp" alt="Canix, el robot asistente, haciendo su rutina" width="300" height="300" class="mx-auto h-64 w-64 animate-float drop-shadow-[0_30px_40px_rgba(27,33,96,0.3)] sm:h-72 sm:w-72" />
+          <img src="/stickers/rutina.webp" alt="Canix, el robot asistente, haciendo su rutina" width="300" height="300" class="mx-auto h-64 w-64 animate-float  sm:h-72 sm:w-72" />
         </div>
       </section>
 
@@ -128,7 +126,7 @@
           <p class="mx-auto mt-4 max-w-xl text-lg text-ink/70 dark:text-white/70">Crea tu demo gratis y arma tu primera rutina en un mensaje.</p>
           <div class="mt-8 flex flex-wrap justify-center gap-3">
             <a href="/#demo" data-track="habitos_demo_final" class="brand-gradient inline-flex rounded-2xl px-7 py-4 font-bold text-white transition hover:-translate-y-0.5">Probar gratis</a>
-            <a href="{{CONTACT_URL}}" target="_blank" rel="noopener" data-track="contact_habitos_final" class="inline-flex rounded-2xl border border-gray-medium bg-white px-7 py-4 font-bold transition hover:-translate-y-0.5 dark:border-white/15 dark:bg-white/5">Hablar con nosotros</a>
+            <a href="{{CONTACT_URL}}" target="_blank" rel="noopener" data-track="contact_habitos_final" class="btn btn-ghost">Hablar con nosotros</a>
           </div>
         </div>
       </section>

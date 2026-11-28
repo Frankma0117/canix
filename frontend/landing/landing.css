@@ -1,4 +1,48 @@
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&display=swap');
 @import '../src/index.css';
+
+/* ===== Identidad de la landing (solo sitio público; el portal conserva la suya) =====
+   Papel cálido + tinta + mango + sol. Sin gradientes ni violeta. Re-tematiza las utilidades
+   existentes (navy, primary, gray-light...) redefiniendo sus tokens. */
+:root {
+  --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+  --color-primary: #d9431a;
+  --color-primary-dark: #a93212;
+  --color-secondary: #fde6d3;
+  --color-accent: #f5b800;
+  --color-cyan: #19c9de;
+  --color-navy: #1a1510;
+  --color-ink: #2b241b;
+  --color-gray-light: #f4ecdc;
+  --color-gray-medium: #d8cdb6;
+  --color-gray-dark: #6b6050;
+  --gradient-brand: #d9431a;
+  --gradient-soft: #fde6d3;
+  --surface: #fffaf0;
+  --shadow-soft: 3px 3px 0 0 rgb(26 21 16 / 0.9);
+  --shadow-lift: 6px 6px 0 0 rgb(26 21 16 / 0.9);
+}
+html.dark {
+  --color-primary: #ff7a4d;
+  --color-primary-dark: #ff9b78;
+  --color-secondary: #2a2118;
+  --gradient-brand: #ff7a4d;
+  --surface: #1f1912;
+  --shadow-soft: 3px 3px 0 0 rgb(245 184 0 / 0.55);
+  --shadow-lift: 6px 6px 0 0 rgb(245 184 0 / 0.6);
+}
+body { background-color: var(--color-gray-light); }
+html.dark body { background-color: #14100b; }
+.font-display, h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.02em; }
+.brand-gradient { background: var(--color-primary); }
+.soft-gradient { background: var(--color-secondary); }
+/* Antes un gradiente de texto: ahora un subrayado de marcador amarillo. */
+.text-gradient {
+  background: linear-gradient(transparent 62%, var(--color-accent) 62% 92%, transparent 92%);
+  -webkit-background-clip: border-box; background-clip: border-box; color: inherit;
+}
+.dot-grid { background-image: none; }
+
 
 /* Landing-only building blocks (same tokens as the portal: see src/index.css). */
 html {
@@ -30,15 +74,15 @@ html {
 
 .bubble-me,
 .bubble-bot {
-  @apply max-w-[85%] rounded-2xl px-3 py-2 shadow-sm;
+  @apply max-w-[85%] rounded-2xl px-4 py-2.5;
   opacity: 0;
   animation: pop-in 0.4s ease-out forwards;
 }
 .bubble-me {
-  @apply ml-auto rounded-tr-sm bg-[#d9fdd3];
+  @apply ml-auto rounded-tr-sm border-2 border-navy bg-accent;
 }
 .bubble-bot {
-  @apply rounded-tl-sm bg-white;
+  @apply rounded-tl-sm border-2 border-navy bg-white;
 }
 .chat > :nth-child(1) { animation-delay: 0.3s; }
 .chat > :nth-child(2) { animation-delay: 1.1s; }
@@ -46,15 +90,33 @@ html {
 .chat > :nth-child(4) { animation-delay: 2.8s; }
 .chat > :nth-child(5) { animation-delay: 3.7s; }
 .chat > :nth-child(6) { animation-delay: 4.5s; }
+.chat > :nth-child(7) { animation-delay: 5.3s; }
+.chat > :nth-child(8) { animation-delay: 6.1s; }
+@media (prefers-reduced-motion: reduce) { .bubble-me, .bubble-bot { opacity: 1; animation: none; } }
+
+/* Botones: bloque plano con sombra dura que se hunde al pulsar. */
+.btn { @apply inline-flex items-center gap-2 rounded-lg border-2 border-navy px-6 py-3.5 text-base font-extrabold transition-all duration-150; box-shadow: 3px 3px 0 0 var(--color-navy); }
+.btn:hover { transform: translate(-1px,-1px); box-shadow: 5px 5px 0 0 var(--color-navy); }
+.btn:active { transform: translate(3px,3px); box-shadow: 0 0 0 0 var(--color-navy); }
+.btn-primary { @apply bg-primary text-white; }
+.btn-ghost { @apply bg-white text-navy; }
+html.dark .btn { border-color: #f5b800; box-shadow: 3px 3px 0 0 #f5b800; }
+html.dark .btn-ghost { background: transparent; color: #fff; }
+
+/* Hero: el chat es la página. */
+.hero-chat { @apply rounded-2xl border-2 border-navy bg-white; box-shadow: 8px 8px 0 0 var(--color-navy); }
+.hero-chat .bar { @apply flex items-center gap-3 rounded-t-[0.85rem] border-b-2 border-navy bg-navy px-5 py-3 text-white; }
+.hero-chat .chat { background: #fffaf0; @apply space-y-3 rounded-b-2xl px-5 py-6 text-[15px] leading-snug text-navy sm:text-base; }
+.led { @apply inline-block h-2.5 w-2.5 rounded-full bg-cyan; box-shadow: 0 0 10px var(--color-cyan); }
 
 .feature {
-  @apply rounded-3xl border border-gray-medium/70 bg-white p-6 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-lift dark:border-white/10 dark:bg-[var(--surface)];
+  @apply rounded-xl border-2 border-navy bg-white p-6 shadow-soft transition-all duration-200 hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-lift dark:border-white/20 dark:bg-[var(--surface)];
 }
-.feature img {
-  @apply mb-3 h-20 w-20 transition-transform duration-300;
-}
-.feature:hover img {
-  transform: rotate(-6deg) scale(1.08);
+.features-grid { counter-reset: f; }
+.feature { counter-increment: f; }
+.feature::before {
+  content: counter(f, decimal-leading-zero);
+  @apply mb-3 block font-display text-sm font-extrabold text-primary;
 }
 .feature h3 {
   @apply font-display text-xl font-extrabold text-navy dark:text-white;
@@ -63,18 +125,19 @@ html {
   @apply mt-2 text-[15px] leading-relaxed text-ink/70 dark:text-white/70;
 }
 .tag {
-  @apply ml-1 inline-flex rounded-full bg-gradient-to-r from-amber-100 to-orange-100 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:from-amber-500/15 dark:to-orange-500/15 dark:text-amber-200;
+  @apply ml-1 inline-flex rounded-md bg-accent px-2 py-0.5 text-[11px] font-bold text-navy;
 }
 
 .mode {
-  @apply flex flex-col items-center gap-1.5 rounded-2xl border border-gray-medium/70 bg-white px-3 py-5 text-3xl shadow-soft transition hover:-translate-y-0.5 hover:border-primary/30 dark:border-white/10 dark:bg-[var(--surface)];
+  @apply flex flex-col items-start gap-1 rounded-xl border-2 border-navy bg-white px-4 py-5 text-base shadow-soft transition hover:-translate-y-0.5 dark:border-white/20 dark:bg-[var(--surface)];
 }
+.mode b { @apply font-display text-sm font-extrabold text-primary; }
 .mode span {
   @apply font-display text-base font-extrabold text-navy dark:text-white;
 }
 
 .pro {
-  @apply flex items-start gap-2.5 rounded-2xl bg-white/12 p-3.5 text-[15px] font-semibold backdrop-blur;
+  @apply flex items-start gap-2.5 rounded-lg border-2 border-white/30 p-3.5 text-[15px] font-semibold;
 }
 .pro::before {
   content: '✓';
@@ -82,7 +145,7 @@ html {
 }
 
 .panel {
-  @apply rounded-3xl border border-gray-medium/70 bg-white p-7 shadow-soft dark:border-white/10 dark:bg-[var(--surface)];
+  @apply rounded-xl border-2 border-navy bg-white p-7 shadow-soft dark:border-white/20 dark:bg-[var(--surface)];
 }
 .panel h3 {
   @apply font-display text-xl font-extrabold text-navy dark:text-white;
@@ -92,7 +155,7 @@ html {
 }
 
 .plan {
-  @apply relative flex flex-col rounded-3xl border border-gray-medium/70 bg-white p-8 shadow-soft dark:border-white/10 dark:bg-[var(--surface)];
+  @apply relative flex flex-col rounded-xl border-2 border-navy bg-white p-8 shadow-soft dark:border-white/20 dark:bg-[var(--surface)];
 }
 .plan h3 {
   @apply font-display text-2xl font-black text-navy dark:text-white;
@@ -111,11 +174,11 @@ html {
   @apply font-black text-success;
 }
 .plan-featured {
-  @apply border-2 border-primary/50 shadow-lift lg:-translate-y-3;
+  @apply bg-accent shadow-lift lg:-translate-y-3;
 }
 .plan-badge {
   background: var(--gradient-brand);
-  @apply absolute -top-3 left-8 rounded-full px-3 py-1 text-xs font-bold text-white;
+  @apply absolute -top-3 left-8 rounded-md bg-navy px-3 py-1 text-xs font-bold text-white;
 }
 .plan-btn {
   @apply block rounded-2xl border border-gray-medium px-5 py-3 text-center font-bold text-ink transition hover:border-primary/50 hover:text-primary-dark dark:border-white/15 dark:text-white;
@@ -131,11 +194,11 @@ html {
 }
 
 .field {
-  @apply w-full rounded-xl border border-gray-medium bg-white px-3.5 py-3 text-[15px] text-ink outline-none transition placeholder:text-gray-dark/60 focus:border-primary focus:ring-4 focus:ring-primary/15 dark:border-white/10 dark:bg-white/5 dark:text-white;
+  @apply w-full rounded-lg border-2 border-navy/70 bg-white px-3.5 py-3 text-[15px] text-ink outline-none transition placeholder:text-gray-dark/60 focus:border-primary focus:ring-4 focus:ring-primary/15 dark:border-white/10 dark:bg-white/5 dark:text-white;
 }
 
 .faq {
-  @apply rounded-2xl border border-gray-medium/70 bg-white px-5 py-4 shadow-soft dark:border-white/10 dark:bg-[var(--surface)];
+  @apply rounded-xl border-2 border-navy bg-white px-5 py-4 dark:border-white/20 dark:bg-[var(--surface)];
 }
 .faq summary {
   @apply flex cursor-pointer list-none items-center justify-between gap-4 font-display text-lg font-extrabold text-navy dark:text-white;
@@ -155,7 +218,7 @@ html {
 }
 
 .demo-dialog {
-  @apply m-auto w-[min(92vw,440px)] rounded-3xl border-0 bg-white p-7 shadow-2xl dark:bg-[#1a1f45] dark:text-white;
+  @apply m-auto w-[min(92vw,440px)] rounded-xl border-2 border-navy bg-white p-7 shadow-2xl dark:bg-[#1a1f45] dark:text-white;
 }
 .demo-dialog[open] {
   animation: pop-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2);
@@ -197,7 +260,7 @@ html {
   @apply text-ink dark:text-white;
 }
 .example {
-  @apply rounded-2xl rounded-tr-sm bg-[#d9fdd3] px-4 py-2.5 text-[15px] text-[#111b21] shadow-sm;
+  @apply rounded-2xl rounded-tr-sm border-2 border-navy bg-accent px-4 py-2.5 text-[15px] text-navy;
 }
 .crumbs {
   @apply flex flex-wrap items-center gap-1.5 text-sm text-ink/55 dark:text-white/55;

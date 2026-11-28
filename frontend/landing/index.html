@@ -90,52 +90,38 @@
     <main id="contenido">
       <!-- ============ HERO ============ -->
       <section id="inicio" data-section="hero" class="relative overflow-hidden pb-20 pt-28 sm:pt-36">
-        <div class="dot-grid pointer-events-none absolute inset-0 [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]"></div>
-        <div class="pointer-events-none absolute -left-40 top-10 h-[28rem] w-[28rem] rounded-full bg-[#2f8bff]/20 blur-3xl"></div>
-        <div class="pointer-events-none absolute -right-32 top-40 h-[26rem] w-[26rem] rounded-full bg-[#8b3fe4]/20 blur-3xl"></div>
-        <div class="relative mx-auto grid max-w-7xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-[1.1fr_0.9fr]">
+        <div class="relative mx-auto grid max-w-7xl items-center gap-14 px-4 sm:px-6 lg:grid-cols-[0.9fr_1.1fr]">
           <div class="reveal">
-            <p class="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-white/80 px-3.5 py-1.5 text-xs font-bold text-primary-dark shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-white">
-              <span class="h-2 w-2 animate-pulse rounded-full bg-success"></span> Funciona dentro de WhatsApp · sin instalar nada
+            <p class="inline-flex items-center gap-2 rounded-md border-2 border-navy bg-white px-3 py-1.5 text-xs font-extrabold uppercase tracking-wider text-navy dark:border-white/30 dark:bg-white/5 dark:text-white">
+              <span class="led"></span> Vive dentro de tu WhatsApp
             </p>
-            <h1 class="mt-5 font-display text-4xl font-black leading-[1.05] tracking-tight text-navy sm:text-6xl dark:text-white">
-              Tu asistente personal con IA, <span class="text-gradient">en tu WhatsApp</span>.
+            <h1 class="mt-6 font-display text-5xl font-extrabold leading-[0.98] text-navy sm:text-7xl dark:text-white">
+              Tu WhatsApp, <span class="text-gradient">con memoria</span>.
             </h1>
-            <p class="mt-5 max-w-xl text-lg leading-relaxed text-ink/75 dark:text-white/75">
-              <strong class="text-ink dark:text-white">Canix</strong> te recuerda lo importante, sostiene tus rutinas, organiza tus tareas, guarda tus notas y agenda las citas de tus clientes.
-              Le escribes —o le mandas un audio— como a un amigo, y él se encarga.
+            <p class="mt-6 max-w-lg text-lg leading-relaxed text-ink/80 dark:text-white/75">
+              <strong class="text-navy dark:text-white">Canix</strong> es el asistente con IA que se acuerda por ti: dile qué no olvidar, qué rutina sostener o qué cita agendar, por texto o por audio, y te escribe a la hora exacta. Sin instalar nada.
             </p>
-            <div class="mt-8 flex flex-wrap gap-3">
-              <a href="#demo" data-track="hero_demo" class="brand-gradient inline-flex items-center gap-2 rounded-2xl px-6 py-3.5 text-base font-bold text-white shadow-[0_14px_30px_-12px_rgba(75,92,246,0.9)] transition hover:-translate-y-0.5 hover:brightness-110">
-                Probar gratis {{DEMO_HOURS}} horas
-                <svg aria-hidden="true" viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-              </a>
-              <a href="{{CONTACT_URL}}" target="_blank" rel="noopener" data-track="contact_hero" class="inline-flex items-center gap-2 rounded-2xl border border-gray-medium bg-white px-6 py-3.5 text-base font-bold text-ink transition hover:-translate-y-0.5 hover:border-primary/40 dark:border-white/15 dark:bg-white/5 dark:text-white">
-                Quiero adquirirlo
-              </a>
+            <div class="mt-8 flex flex-wrap gap-x-4 gap-y-5">
+              <a href="#demo" data-track="hero_demo" class="btn btn-primary">Probar gratis {{DEMO_HOURS}} horas</a>
+              <a href="{{CONTACT_URL}}" target="_blank" rel="noopener" data-track="contact_hero" class="btn btn-ghost">Quiero adquirirlo</a>
             </div>
-            <dl class="mt-10 grid max-w-lg grid-cols-3 gap-4">
-              <div><dt class="text-xs font-semibold text-gray-dark">Funciona en</dt><dd class="font-display text-xl font-black text-navy dark:text-white">WhatsApp + Web</dd></div>
-              <div><dt class="text-xs font-semibold text-gray-dark">Le hablas con</dt><dd class="font-display text-xl font-black text-navy dark:text-white">Texto o audio</dd></div>
-              <div><dt class="text-xs font-semibold text-gray-dark">Disponible</dt><dd class="font-display text-xl font-black text-navy dark:text-white">24/7</dd></div>
-            </dl>
+            <p class="mt-8 text-sm font-bold text-ink/70 dark:text-white/70">Hecho en Colombia · Entiende audios · Portal web incluido</p>
           </div>
 
-          <!-- Phone mock with a live-looking conversation -->
-          <div class="reveal relative mx-auto w-full max-w-sm">
-            <img src="/stickers/hola.webp" alt="Canix, el robot asistente, saludando" width="150" height="150" class="absolute -left-16 -top-12 z-10 hidden h-36 w-36 animate-float drop-shadow-[0_20px_25px_rgba(27,33,96,0.25)] sm:block" />
-            <div class="relative rounded-[2.6rem] border-[10px] border-navy bg-[#efeae2] shadow-[0_40px_80px_-30px_rgba(27,33,96,0.55)] dark:border-[#1e2560]">
-              <div class="flex items-center gap-3 rounded-t-[1.9rem] bg-[#075e54] px-4 py-3 text-white">
+          <div class="reveal relative mx-auto w-full max-w-xl pt-20 lg:pt-16">
+            <img src="/stickers/hola.webp" alt="Canix, el robot asistente, saludando" width="220" height="220" class="absolute -top-4 right-0 z-10 h-36 w-36 animate-float sm:h-44 sm:w-44 lg:-right-10 lg:-top-8" />
+            <div class="hero-chat">
+              <div class="bar">
                 <img src="/favicon.svg" alt="" width="36" height="36" class="h-9 w-9 rounded-full bg-white p-0.5" />
-                <div><p class="text-sm font-bold leading-tight">Canix</p><p class="text-[11px] text-white/75">en línea</p></div>
+                <div><p class="text-sm font-extrabold leading-tight">Canix</p><p class="text-[11px] text-white/70"><span class="led mr-1.5"></span>en línea</p></div>
               </div>
-              <div class="chat space-y-2.5 px-3 py-4 text-[13px] leading-snug text-[#111b21]">
-                <p class="bubble-me">Recuérdame la cita con el odontólogo el jueves a las 3pm 🦷</p>
-                <p class="bubble-bot">¡Listo! 📅 Te aviso el <b>jueves 3:00 p. m.</b> ¿Quieres que además te llame por teléfono, ya que es importante?</p>
-                <p class="bubble-me">🎤 Nota de voz · 0:04</p>
-                <p class="bubble-bot">Perfecto, también te llamo a esa hora ☎️</p>
+              <div class="chat pt-10">
+                <p class="bubble-me">Recuérdame la cita con el odontólogo el jueves a las 3pm</p>
+                <p class="bubble-bot">Listo. Te aviso el <b>jueves 3:00 p. m.</b> ¿Quieres que además te llame, ya que es importante?</p>
+                <p class="bubble-me">Nota de voz · 0:04</p>
+                <p class="bubble-bot">Perfecto, también te llamo a esa hora.</p>
                 <p class="bubble-me">¿Qué tengo hoy?</p>
-                <p class="bubble-bot">☀️ Hoy: <b>leer 20 min</b> (racha de 6 días 🔥), pagar el internet y la lista del mercado (4 cosas pendientes).</p>
+                <p class="bubble-bot">Hoy: <b>leer 20 min</b> (racha de 6 días), pagar el internet y la lista del mercado: 4 cosas pendientes.</p>
               </div>
             </div>
           </div>
@@ -143,13 +129,13 @@
       </section>
 
       <!-- ============ STRIP ============ -->
-      <section aria-label="Lo esencial" class="border-y border-gray-medium/60 bg-gray-light/70 py-6 dark:border-white/10 dark:bg-white/[0.03]">
-        <ul class="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-10 gap-y-3 px-4 text-sm font-bold text-ink/70 dark:text-white/70">
-          <li>✅ Sin descargar apps</li>
-          <li>🎙️ Entiende audios</li>
-          <li>🧠 Inteligencia artificial en español</li>
-          <li>🔒 Cada persona con su espacio privado</li>
-          <li>🌐 Portal web incluido</li>
+      <section aria-label="Lo esencial" class="border-y-2 border-navy bg-navy py-4 text-white">
+        <ul class="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-8 gap-y-2 px-4 text-sm font-extrabold uppercase tracking-wider">
+          <li>Sin descargar apps</li><li class="text-accent" aria-hidden="true">/</li>
+          <li>Entiende audios</li><li class="text-accent" aria-hidden="true">/</li>
+          <li>IA en español</li><li class="text-accent" aria-hidden="true">/</li>
+          <li>Tu espacio es privado</li><li class="text-accent" aria-hidden="true">/</li>
+          <li>Portal web incluido</li>
         </ul>
       </section>
 
@@ -162,18 +148,18 @@
             <p class="mt-4 text-lg text-ink/70 dark:text-white/70">Nada de menús complicados ni formularios: le dices lo que necesitas con tus palabras y Canix lo entiende.</p>
           </div>
           <ol class="mt-14 grid gap-6 md:grid-cols-3">
-            <li class="reveal relative rounded-3xl border border-gray-medium/70 bg-white p-7 shadow-soft dark:border-white/10 dark:bg-[var(--surface)]">
-              <span class="brand-gradient flex h-12 w-12 items-center justify-center rounded-2xl font-display text-xl font-black text-white">1</span>
+            <li class="panel reveal relative">
+              <span class="flex h-12 w-12 items-center justify-center rounded-lg border-2 border-navy bg-accent font-display text-xl font-extrabold text-navy">1</span>
               <h3 class="mt-5 font-display text-xl font-extrabold text-navy dark:text-white">Le escribes o le hablas</h3>
               <p class="mt-2 text-ink/70 dark:text-white/70">“Recuérdame pagar el arriendo el 5 de cada mes”, “crea la rutina de tomar agua cada 2 horas”, o simplemente un audio.</p>
             </li>
-            <li class="reveal relative rounded-3xl border border-gray-medium/70 bg-white p-7 shadow-soft dark:border-white/10 dark:bg-[var(--surface)]">
-              <span class="brand-gradient flex h-12 w-12 items-center justify-center rounded-2xl font-display text-xl font-black text-white">2</span>
+            <li class="panel reveal relative">
+              <span class="flex h-12 w-12 items-center justify-center rounded-lg border-2 border-navy bg-accent font-display text-xl font-extrabold text-navy">2</span>
               <h3 class="mt-5 font-display text-xl font-extrabold text-navy dark:text-white">Canix lo organiza</h3>
               <p class="mt-2 text-ink/70 dark:text-white/70">Entiende fechas, horas, repeticiones y prioridades; si le falta un dato, te pregunta en vez de inventar.</p>
             </li>
-            <li class="reveal relative rounded-3xl border border-gray-medium/70 bg-white p-7 shadow-soft dark:border-white/10 dark:bg-[var(--surface)]">
-              <span class="brand-gradient flex h-12 w-12 items-center justify-center rounded-2xl font-display text-xl font-black text-white">3</span>
+            <li class="panel reveal relative">
+              <span class="flex h-12 w-12 items-center justify-center rounded-lg border-2 border-navy bg-accent font-display text-xl font-extrabold text-navy">3</span>
               <h3 class="mt-5 font-display text-xl font-extrabold text-navy dark:text-white">Te avisa a tiempo</h3>
               <p class="mt-2 text-ink/70 dark:text-white/70">Te escribe a la hora exacta, te motiva a cumplir tus rutinas y, si es urgente, hasta te puede llamar por teléfono.</p>
             </li>
@@ -190,64 +176,52 @@
             <p class="mt-4 text-lg text-ink/70 dark:text-white/70">Un solo asistente para tu día, tus hábitos, tu información y tu negocio.</p>
           </div>
 
-          <div class="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div class="features-grid mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             <article class="feature reveal">
-              <img src="/stickers/agendado.webp" alt="" width="88" height="88" loading="lazy" />
               <h3>Recordatorios inteligentes</h3>
               <p>Puntuales (“en 20 minutos”), recurrentes (cada día, semana, mes o año), flexibles en una franja horaria y por intervalos. Pausas, ediciones y cancelaciones con una frase. <a href="/recordatorios-por-whatsapp" class="more-link">Cómo funcionan los recordatorios →</a></p>
             </article>
             <article class="feature reveal">
-              <img src="/stickers/evento.webp" alt="" width="88" height="88" loading="lazy" />
               <h3>Fechas importantes</h3>
               <p>Cumpleaños, aniversarios, pagos o vencimientos con aviso previo días antes, para que nada te agarre por sorpresa.</p>
             </article>
             <article class="feature reveal">
-              <img src="/stickers/rutina.webp" alt="" width="88" height="88" loading="lazy" />
               <h3>Rutinas y hábitos</h3>
               <p>Rutinas con hora fija, chequeo diario, rachas e historial de progreso. Agrega ejercicios a cada rutina y recibe motivación cuando cumples. <a href="/rutinas-y-habitos" class="more-link">Ver rutinas y hábitos →</a></p>
             </article>
             <article class="feature reveal">
-              <img src="/stickers/tareas.webp" alt="" width="88" height="88" loading="lazy" />
               <h3>Tareas y listas</h3>
               <p>Pendientes de hoy, cosas “para después” y listas para ir marcando: el mercado, películas por ver, libros, ideas…</p>
             </article>
             <article class="feature reveal">
-              <img src="/stickers/nota.webp" alt="" width="88" height="88" loading="lazy" />
               <h3>Notas y links</h3>
               <p>Guarda información importante y búscala después. Organiza tus links por categorías y pídele “uno al azar” cuando quieras inspiración.</p>
             </article>
             <article class="feature reveal">
-              <img src="/stickers/mensaje.webp" alt="" width="88" height="88" loading="lazy" />
               <h3>Contactos y mensajes</h3>
               <p>Guarda contactos (o compártelos desde WhatsApp) y pídele a Canix que les escriba por ti: “dile a Ana que llego en 10 minutos”.</p>
             </article>
             <article class="feature reveal">
-              <img src="/stickers/listo.webp" alt="" width="88" height="88" loading="lazy" />
               <h3>Comidas y recetas</h3>
               <p>Planea desayuno, almuerzo, cena y onces de la semana, y guarda tus recetas con ingredientes y preparación.</p>
             </article>
             <article class="feature reveal">
-              <img src="/stickers/premio.webp" alt="" width="88" height="88" loading="lazy" />
               <h3>Premios y castigos</h3>
               <p>Ponte tus propias recompensas y consecuencias ligadas a tus rutinas. La motivación también se organiza.</p>
             </article>
             <article class="feature reveal">
-              <img src="/stickers/progreso.webp" alt="" width="88" height="88" loading="lazy" />
               <h3>Agenda del día y reporte semanal</h3>
               <p>Pregúntale “¿qué tengo hoy?” y recibe todo ordenado por hora. Cada semana, un resumen de lo que lograste.</p>
             </article>
             <article class="feature reveal">
-              <img src="/stickers/llamada.webp" alt="" width="88" height="88" loading="lazy" />
               <h3>Llamadas telefónicas</h3>
               <p>Para lo que no puedes olvidar: Canix te llama de verdad como recordatorio, o como alarma para despertarte. <span class="tag">Extra</span></p>
             </article>
             <article class="feature reveal">
-              <img src="/stickers/hola.webp" alt="" width="88" height="88" loading="lazy" />
               <h3>Voz: le hablas y te habla</h3>
               <p>Entiende tus notas de voz y te responde con audio. Con voz natural, suena humana, con voz de hombre o de mujer según prefieras. <span class="tag">Voz natural: extra</span></p>
             </article>
             <article class="feature reveal">
-              <img src="/stickers/enfoque.webp" alt="" width="88" height="88" loading="lazy" />
               <h3>Modo Fashion</h3>
               <p>Tu armario digital: fotografía tus prendas, organízalas y recibe recomendaciones de outfits para cada ocasión.</p>
             </article>
@@ -267,26 +241,25 @@
             <p class="mt-4 text-ink/70 dark:text-white/70">Y en cualquier momento, <b>/menu</b> te muestra todo lo que tienes habilitado.</p>
           </div>
           <ul class="reveal grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <li class="mode">🔁<span>Rutinas</span></li>
-            <li class="mode">✅<span>Tareas</span></li>
-            <li class="mode">📝<span>Notas</span></li>
-            <li class="mode">👥<span>Contactos</span></li>
-            <li class="mode">🍽️<span>Comidas</span></li>
-            <li class="mode">🏆<span>Premios</span></li>
-            <li class="mode">📊<span>Resúmenes</span></li>
-            <li class="mode">👗<span>Fashion</span></li>
-            <li class="mode">📅<span>Agenda</span></li>
+            <li class="mode"><b>/01</b><span>Rutinas</span></li>
+            <li class="mode"><b>/02</b><span>Tareas</span></li>
+            <li class="mode"><b>/03</b><span>Notas</span></li>
+            <li class="mode"><b>/04</b><span>Contactos</span></li>
+            <li class="mode"><b>/05</b><span>Comidas</span></li>
+            <li class="mode"><b>/06</b><span>Premios</span></li>
+            <li class="mode"><b>/07</b><span>Resúmenes</span></li>
+            <li class="mode"><b>/08</b><span>Fashion</span></li>
+            <li class="mode"><b>/09</b><span>Agenda</span></li>
           </ul>
         </div>
       </section>
 
       <!-- ============ PROFESSIONALS ============ -->
       <section id="profesionales" data-section="profesionales" class="relative overflow-hidden py-24">
-        <div class="brand-gradient absolute inset-0"></div>
-        <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.16)_1px,transparent_1px)] [background-size:22px_22px]"></div>
-        <div class="relative mx-auto grid max-w-7xl items-center gap-12 px-4 text-white sm:px-6 lg:grid-cols-[1fr_0.8fr]">
+        <div class="absolute inset-0 bg-navy"></div>
+                <div class="relative mx-auto grid max-w-7xl items-center gap-12 px-4 text-white sm:px-6 lg:grid-cols-[1fr_0.8fr]">
           <div class="reveal">
-            <p class="text-sm font-black uppercase tracking-[0.18em] text-white/80">Para profesionales</p>
+            <p class="text-sm font-black uppercase tracking-[0.18em] text-accent">Para profesionales</p>
             <h2 class="mt-2 font-display text-3xl font-black sm:text-5xl">Tu agenda de citas, atendida por WhatsApp</h2>
             <p class="mt-4 text-lg text-white/85">Psicólogos, médicos, coaches, entrenadores, estéticas y cualquier profesional que agende citas: Canix se convierte en tu recepcionista.</p>
             <ul class="mt-8 grid gap-3 sm:grid-cols-2">
@@ -297,8 +270,8 @@
               <li class="pro">Bloqueas vacaciones, festivos o tiempo personal</li>
               <li class="pro">Calendario web con todas tus citas y clientes</li>
             </ul>
-            <a href="{{CONTACT_URL}}" target="_blank" rel="noopener" data-track="contact_pro" class="mt-8 inline-flex items-center gap-2 rounded-2xl bg-white px-6 py-3.5 font-bold text-primary-dark shadow-xl transition hover:-translate-y-0.5">Quiero Canix para mi consultorio</a>
-            <a href="/agenda-de-citas-por-whatsapp" data-track="pro_more" class="ml-2 mt-8 inline-flex items-center gap-2 rounded-2xl border border-white/40 px-6 py-3.5 font-bold text-white transition hover:bg-white/10">Ver cómo funciona la agenda</a>
+            <a href="{{CONTACT_URL}}" target="_blank" rel="noopener" data-track="contact_pro" class="btn btn-ghost mt-8">Quiero Canix para mi consultorio</a>
+            <a href="/agenda-de-citas-por-whatsapp" data-track="pro_more" class="btn mt-8 border-white text-white" style="box-shadow:3px 3px 0 0 #fff">Ver cómo funciona la agenda</a>
           </div>
           <div class="reveal flex justify-center">
             <img src="/stickers/evento.webp" alt="Canix confirmando un evento en la agenda" width="300" height="300" loading="lazy" class="h-72 w-72 animate-float drop-shadow-[0_30px_40px_rgba(10,12,50,0.45)]" />
@@ -386,9 +359,8 @@
       <!-- ============ DEMO ============ -->
       <section id="demo" data-section="demo" class="py-24">
         <div class="mx-auto max-w-6xl px-4 sm:px-6">
-          <div class="reveal relative overflow-hidden rounded-[2.5rem] border border-gray-medium/70 bg-white shadow-lift dark:border-white/10 dark:bg-[var(--surface)]">
+          <div class="reveal relative overflow-hidden rounded-2xl border-2 border-navy bg-white shadow-lift dark:border-white/10 dark:bg-[var(--surface)]">
             <div class="soft-gradient pointer-events-none absolute inset-0"></div>
-            <div class="dot-grid pointer-events-none absolute inset-0 opacity-60"></div>
             <div class="relative grid items-center gap-10 p-8 sm:p-12 lg:grid-cols-2">
               <div>
                 <p class="text-sm font-black uppercase tracking-[0.18em] text-primary">Demo gratis</p>
@@ -400,7 +372,7 @@
                   <li class="flex gap-3"><span class="step">3</span>¡Listo! Tu cuenta se activa al instante y Canix te saluda.</li>
                 </ol>
               </div>
-              <form class="rounded-3xl bg-white p-6 shadow-soft sm:p-8 dark:bg-white/5" data-demo-form novalidate>
+              <form class="rounded-xl border-2 border-navy bg-white p-6 sm:p-8 dark:bg-white/5" data-demo-form novalidate>
                 <img src="/stickers/vamos.webp" alt="" width="96" height="96" loading="lazy" class="mx-auto -mt-2 mb-2 h-24 w-24" />
                 <label for="demo-name" class="mb-1.5 block text-sm font-bold">Tu nombre</label>
                 <input id="demo-name" name="name" required minlength="2" maxlength="60" autocomplete="given-name" placeholder="Ej. Laura" class="field" />
@@ -415,7 +387,7 @@
                 </select>
                 <input type="text" name="website" tabindex="-1" autocomplete="off" class="hidden" aria-hidden="true" />
                 <p class="mt-3 hidden rounded-xl bg-error/10 px-3 py-2 text-sm text-red-700" data-demo-error></p>
-                <button type="submit" class="brand-gradient mt-5 w-full rounded-2xl px-6 py-3.5 text-base font-bold text-white shadow-[0_14px_30px_-12px_rgba(75,92,246,0.9)] transition hover:brightness-110 disabled:opacity-60" data-demo-submit>
+                <button type="submit" class="btn btn-primary mt-5 w-full justify-center" data-demo-submit>
                   Crear mi demo gratis
                 </button>
                 <p class="mt-3 text-center text-xs text-gray-dark">Usaremos tu WhatsApp solo para tu cuenta de prueba. Al pedir la demo aceptas la <a href="/privacidad" class="underline hover:text-primary">política de privacidad</a> y los <a href="/terminos" class="underline hover:text-primary">términos</a>.</p>
@@ -428,9 +400,9 @@
       <!-- ============ SECURITY ============ -->
       <section id="seguridad" data-section="seguridad" class="pb-24">
         <div class="mx-auto grid max-w-7xl gap-5 px-4 sm:px-6 md:grid-cols-3">
-          <div class="panel reveal"><h3>🔒 Tu información es tuya</h3><p>Cada persona tiene un espacio separado. Nadie más ve tus recordatorios, notas ni citas.</p></div>
-          <div class="panel reveal"><h3>🛡️ Acceso controlado</h3><p>Portal con contraseña personal, bloqueo por intentos fallidos y permisos que solo asigna el administrador.</p></div>
-          <div class="panel reveal"><h3>🤝 Hecho para Latinoamérica</h3><p>Habla español natural, entiende la hora de Colombia y se adapta a cómo escribes tú.</p></div>
+          <div class="panel reveal"><h3>Tu información es tuya</h3><p>Cada persona tiene un espacio separado. Nadie más ve tus recordatorios, notas ni citas.</p></div>
+          <div class="panel reveal"><h3>Acceso controlado</h3><p>Portal con contraseña personal, bloqueo por intentos fallidos y permisos que solo asigna el administrador.</p></div>
+          <div class="panel reveal"><h3>Hecho en Colombia</h3><p>Habla español como se habla aquí, entiende la hora de Colombia y se adapta a cómo escribes tú.</p></div>
         </div>
       </section>
 
@@ -459,8 +431,8 @@
           <h2 class="reveal mt-4 font-display text-3xl font-black text-navy sm:text-5xl dark:text-white">¿Listo para tener tu propio asistente?</h2>
           <p class="reveal mx-auto mt-4 max-w-xl text-lg text-ink/70 dark:text-white/70">Escríbenos y te ayudamos a elegir el plan, o empieza ya con la demo gratis.</p>
           <div class="reveal mt-8 flex flex-wrap justify-center gap-3">
-            <a href="{{CONTACT_URL}}" target="_blank" rel="noopener" data-track="contact_final" class="brand-gradient inline-flex items-center gap-2 rounded-2xl px-7 py-4 text-base font-bold text-white shadow-[0_14px_30px_-12px_rgba(75,92,246,0.9)] transition hover:-translate-y-0.5">Contáctanos por WhatsApp</a>
-            <a href="#demo" data-track="final_demo" class="inline-flex items-center gap-2 rounded-2xl border border-gray-medium bg-white px-7 py-4 text-base font-bold transition hover:-translate-y-0.5 dark:border-white/15 dark:bg-white/5">Probar gratis</a>
+            <a href="{{CONTACT_URL}}" target="_blank" rel="noopener" data-track="contact_final" class="btn btn-primary">Contáctanos por WhatsApp</a>
+            <a href="#demo" data-track="final_demo" class="btn btn-ghost">Probar gratis</a>
           </div>
         </div>
       </section>
